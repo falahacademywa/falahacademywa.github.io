@@ -96,6 +96,8 @@ function initNavbar() {
       navLinks.classList.toggle('open');
       hamburger.classList.toggle('open');
     });
+
+    // Close menu when any link is clicked
     navLinks.querySelectorAll('a').forEach(link => {
       link.addEventListener('click', () => {
         navLinks.classList.remove('open');

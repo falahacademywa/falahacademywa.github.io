@@ -696,9 +696,9 @@ html, body {
     position: static; opacity: 1; visibility: visible;
     transform: none; box-shadow: none;
     border: none; background: rgba(255,255,255,0.05);
-    border-radius: 0;
+    border-radius: 0; max-height: none; overflow: visible;
   }
-  .nav-dropdown-item { color: #a0b4d8; padding: 8px 24px; font-size: 0.95rem; }
+  .nav-dropdown-item { color: #a0b4d8; padding: 8px 24px; font-size: 0.95rem; display: block; }
   .nav-dropdown-item:hover { color: white; background: rgba(255,255,255,0.08); }
 }
 
@@ -967,7 +967,7 @@ html, body {
   }
   .summer-details { justify-content: center; }
   .summer-title { font-size: 1.5rem; }
-  .nav-summer { display: none; } /* show in hamburger menu only on mobile */
+  .nav-summer { display: flex; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color: white !important; border-radius: 8px !important; padding: 10px 20px !important; width: 100%; justify-content: center; font-size: 1rem !important; }
 }
 
 /* Summer weeks grid responsive */
@@ -1052,3 +1052,16 @@ body.popup-open { overflow: hidden; }
 .popup-form-page.active { display: block; }
 .summer-form-page { display: none; }
 .summer-form-page.active { display: block; }
+
+/* ---- SUMMER POPUP MOBILE FIXES ---- */
+@media (max-width: 768px) {
+  .popup-modal { max-height: 95vh; border-radius: 12px; }
+  .popup-steps { gap: 0; }
+  .popup-connector { width: 30px; }
+  .popup-step-label { font-size: 9px; }
+  .summer-banner { padding: 2rem 1rem; }
+  .summer-banner-inner > div:last-child { display: none; } /* hide stats card on mobile */
+  .popup-body { padding: 1rem; }
+  .form-grid-3 { grid-template-columns: 1fr !important; }
+  .form-grid-2 { grid-template-columns: 1fr !important; }
+}

@@ -12,17 +12,29 @@
   </style>
 </head>
 <body>
+  <!-- DEV ENVIRONMENT BANNER -->
+  <div style="background:#ff6b35;color:white;text-align:center;padding:8px;font-size:13px;font-weight:600;position:sticky;top:0;z-index:9999;">
+    ⚠️ TEST ENVIRONMENT — This is the development site. Not for public use. Live site: <a href="https://falahacademywa.org" style="color:white;text-decoration:underline;">falahacademywa.org</a>
+  </div>
   <div id="announcement-banner"><span class="banner-text"></span><span class="banner-arrow">→</span><button class="banner-close">✕</button></div>
   <nav class="navbar">
     <a href="index.html" class="nav-logo"><img src="images/logo.jpg" alt="Falah Academy Logo" loading="lazy" /><div class="nav-brand"><span class="nav-brand-name">Falah Academy</span><span class="nav-brand-tagline">Kent's First Full-Time Islamic School</span></div></a>
-    <div class="nav-links"><a href="index.html" class="nav-link">Home</a><a href="about.html" class="nav-link">About Us</a><a href="programs.html" class="nav-link">Programs</a><div class="nav-dropdown">
+        <div class="nav-links">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="about.html" class="nav-link">About Us</a>
+      <a href="programs.html" class="nav-link">Programs</a>
+      <div class="nav-dropdown">
         <a href="admissions.html" class="nav-link nav-dropdown-toggle">Admissions ▾</a>
         <div class="nav-dropdown-menu">
-          <a href="admissions.html#enroll" class="nav-dropdown-item">Admission Form</a>
+          <a href="#" onclick="openAdmissionPopup();return false;" class="nav-dropdown-item">Admission Form</a>
           <a href="calendar.html" class="nav-dropdown-item">Academic Calendar</a>
         </div>
-      </div><a href="events.html" class="nav-link">Events</a><a href="contact.html" class="nav-link">Contact</a><a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a>
-      <a href="#" onclick="openSummerPopup();return false;" class="nav-link nav-summer">☀️ Summer Program</a></div>
+      </div>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="contact.html" class="nav-link">Contact</a>
+      <a href="#" onclick="openSummerPopup();return false;" class="nav-link nav-summer">☀️ Summer Program</a>
+      <a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a>
+    </div>
     <div class="hamburger"><span></span><span></span><span></span></div>
   </nav>
 
@@ -278,12 +290,5 @@
       </div>
     </div>
   </div>
-  <script>
-    window.addEventListener('load', function() {
-      if (window.location.hash === '#summer-enroll') {
-        setTimeout(function() { openSummerPopup(); }, 400);
-      }
-    });
-  </script>
 </body>
 </html>
