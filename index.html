@@ -512,5 +512,23 @@
       </div>
     </div>
   </div>
+  <script>
+    window.addEventListener('load', function() {
+      if (window.location.hash === '#summer-enroll') {
+        setTimeout(function() { if(typeof openSummerPopup==='function') openSummerPopup(); }, 400);
+      }
+      if (window.location.hash === '#enroll') {
+        setTimeout(function() { if(typeof openAdmissionPopup==='function') openAdmissionPopup(); }, 400);
+      }
+    });
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash === '#summer-enroll') {
+        if(typeof openSummerPopup==='function') openSummerPopup();
+      }
+      if (window.location.hash === '#enroll') {
+        if(typeof openAdmissionPopup==='function') openAdmissionPopup();
+      }
+    });
+  </script>
 </body>
 </html>
