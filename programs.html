@@ -6,8 +6,16 @@
   <meta name="description" content="Falah Academy offers a dual curriculum combining Islamic studies with accredited academics through MESBA, Red Comet, and iCode Renton." />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+  <style>
+    .summer-form-page { display: none; }
+    .summer-form-page.active { display: block; }
+  </style>
 </head>
 <body>
+  <!-- DEV ENVIRONMENT BANNER -->
+  <div style="background:#ff6b35;color:white;text-align:center;padding:8px;font-size:13px;font-weight:600;position:sticky;top:0;z-index:9999;">
+    ⚠️ TEST ENVIRONMENT — This is the development site. Not for public use. Live site: <a href="https://falahacademywa.org" style="color:white;text-decoration:underline;">falahacademywa.org</a>
+  </div>
   <div id="announcement-banner"><span class="banner-text"></span><span class="banner-arrow">→</span><button class="banner-close">✕</button></div>
   <nav class="navbar">
     <a href="index.html" class="nav-logo"><img src="images/logo.jpg" alt="Falah Academy Logo" loading="lazy" /><div class="nav-brand"><span class="nav-brand-name">Falah Academy</span><span class="nav-brand-tagline">Kent's First Full-Time Islamic School</span></div></a>
@@ -17,13 +25,13 @@
           <a href="admissions.html#enroll" class="nav-dropdown-item">Admission Form</a>
           <a href="calendar.html" class="nav-dropdown-item">Academic Calendar</a>
         </div>
-      </div><a href="events.html" class="nav-link">Events</a><a href="contact.html" class="nav-link">Contact</a><a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a></div>
+      </div><a href="events.html" class="nav-link">Events</a><a href="contact.html" class="nav-link">Contact</a><a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a>
+      <a href="#" onclick="openSummerPopup();return false;" class="nav-link nav-summer">☀️ Summer Program</a></div>
     <div class="hamburger"><span></span><span></span><span></span></div>
   </nav>
 
-  <div class="page-hero" style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center;padding:3rem 2rem;">
-    <div class="page-hero-content" style="max-width:none;"><h1>Our Programs</h1><p>A dual curriculum combining Islamic education with accredited academics and STEM.</p></div>
-    <div style="border-radius:12px;overflow:hidden;height:200px;border:2px solid rgba(255,255,255,0.12);"><img src="images/hero-quran.jpg" alt="Open Quran — Seeking Knowledge" style="width:100%;height:100%;object-fit:cover;" loading="lazy" /></div>
+  <div class="page-hero">
+    <div class="page-hero-content"><h1>Our Programs</h1><p>A dual curriculum combining Islamic education with accredited academics and STEM.</p></div>
   </div>
 
   <!-- AYAH BANNER -->
@@ -43,6 +51,65 @@
         <div class="grade-card"><div class="grade-name">Pre-Kindergarten</div><div class="grade-age">Age 4</div><span class="grade-badge">Admissions Open</span></div>
         <div class="grade-card"><div class="grade-name">Kindergarten</div><div class="grade-age">Age 5</div><span class="grade-badge">Admissions Open</span></div>
         <div class="grade-card"><div class="grade-name">Grade 1</div><div class="grade-age">Age 6</div><span class="grade-badge new">New This Year</span></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- SUMMER PROGRAM SECTION -->
+  <section style="background:linear-gradient(135deg,#1a2f5e 0%,#2b5cb8 50%,#1a2f5e 100%);padding:3rem 2rem;position:relative;overflow:hidden;" id="summer">
+    <div style="position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,0.02) 0px,rgba(255,255,255,0.02) 1px,transparent 1px,transparent 30px);"></div>
+    <div class="section-inner" style="position:relative;z-index:1;">
+      <div style="text-align:center;margin-bottom:2rem;">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.4);color:#fcd34d;font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;margin-bottom:0.8rem;letter-spacing:0.5px;text-transform:uppercase;">☀️ Registration Open Now</div>
+        <p class="section-title fade-in" style="color:white;margin-top:0.8rem;">Summer Program 2026</p>
+        <div class="section-divider fade-in" style="background:#fcd34d;margin:0.5rem auto 1rem;"></div>
+        <p style="color:#c0d4f0;font-size:0.95rem;max-width:600px;margin:0 auto 1.5rem;">A fun &amp; enriching Islamic program for ages 4–10. Learn Surahs, Duas, Sunnahs and inspiring Stories of the Prophets!</p>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin-bottom:1.5rem;">
+          <div style="display:flex;align-items:center;gap:6px;color:#a0c4ff;font-size:0.85rem;"><i class="ti ti-calendar" aria-hidden="true"></i> <strong style="color:white;">Jul 6 – Aug 13, 2026</strong></div>
+          <div style="display:flex;align-items:center;gap:6px;color:#a0c4ff;font-size:0.85rem;"><i class="ti ti-clock" aria-hidden="true"></i> <strong style="color:white;">9:00 AM – 12:00 PM</strong> · Mon–Thu</div>
+          <div style="display:flex;align-items:center;gap:6px;color:#a0c4ff;font-size:0.85rem;"><i class="ti ti-users" aria-hidden="true"></i> <strong style="color:white;">Ages 4–10</strong></div>
+          <div style="display:flex;align-items:center;gap:6px;color:#a0c4ff;font-size:0.85rem;"><i class="ti ti-currency-dollar" aria-hidden="true"></i> <strong style="color:white;">$200</strong> via Zelle</div>
+        </div>
+      </div>
+
+      <!-- 6 Weeks Grid -->
+      <div class="summer-weeks-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1rem;">
+          <p style="color:#fcd34d;font-weight:700;font-size:0.8rem;text-transform:uppercase;margin-bottom:0.6rem;">Week 1</p>
+          <p style="color:white;font-size:0.82rem;">📖 Surah Al-Humazah</p>
+          <p style="color:#a0c4ff;font-size:0.78rem;">Sunnah: Eating · Dua: Before &amp; After Eating · Story: Prophet Adam</p>
+        </div>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1rem;">
+          <p style="color:#fcd34d;font-weight:700;font-size:0.8rem;text-transform:uppercase;margin-bottom:0.6rem;">Week 2</p>
+          <p style="color:white;font-size:0.82rem;">📖 Surah Al-Fil</p>
+          <p style="color:#a0c4ff;font-size:0.78rem;">Sunnah: Entering Home · Dua: Entering Home · Story: Prophet Nuh</p>
+        </div>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1rem;">
+          <p style="color:#fcd34d;font-weight:700;font-size:0.8rem;text-transform:uppercase;margin-bottom:0.6rem;">Week 3</p>
+          <p style="color:white;font-size:0.82rem;">📖 Surah Quraysh</p>
+          <p style="color:#a0c4ff;font-size:0.78rem;">Sunnah: Entering Mosque · Dua: Entering Mosque · Story: Prophet Ibrahim</p>
+        </div>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1rem;">
+          <p style="color:#fcd34d;font-weight:700;font-size:0.8rem;text-transform:uppercase;margin-bottom:0.6rem;">Week 4</p>
+          <p style="color:white;font-size:0.82rem;">📖 Surah Al-Ma'un</p>
+          <p style="color:#a0c4ff;font-size:0.78rem;">Sunnah: Using Bathroom · Dua: Bathroom Duas · Story: Prophet Musa</p>
+        </div>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1rem;">
+          <p style="color:#fcd34d;font-weight:700;font-size:0.8rem;text-transform:uppercase;margin-bottom:0.6rem;">Week 5</p>
+          <p style="color:white;font-size:0.82rem;">📖 Surah Al-Kawthar</p>
+          <p style="color:#a0c4ff;font-size:0.78rem;">Sunnah: Sleeping · Dua: Sleeping Dua · Story: Prophet Esa</p>
+        </div>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1rem;">
+          <p style="color:#fcd34d;font-weight:700;font-size:0.8rem;text-transform:uppercase;margin-bottom:0.6rem;">Week 6</p>
+          <p style="color:white;font-size:0.82rem;">📖 Surah Al-Kafirun</p>
+          <p style="color:#a0c4ff;font-size:0.78rem;">Sunnah: Greeting with Salam · Dua: Salam &amp; Reply · Story: Prophet Muhammad ﷺ</p>
+        </div>
+      </div>
+
+      <div style="text-align:center;">
+        <button onclick="openSummerPopup()" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;padding:14px 36px;border-radius:8px;font-weight:600;font-size:1rem;border:none;cursor:pointer;transition:all 0.2s;">☀️ Enroll in Summer Program</button>
+        <p style="color:#a0c4ff;font-size:0.8rem;margin-top:0.8rem;">Fee: $200 via Zelle to <strong style="color:white;">falahacademywa@gmail.com</strong> · For other options <a href="contact.html" style="color:#fcd34d;">contact us</a></p>
       </div>
     </div>
   </section>
@@ -87,6 +154,8 @@
     </div>
   </section>
 
+
+
   <footer class="footer"><div class="footer-inner"><div class="footer-grid"><div><div class="footer-brand">Falah Academy</div><p class="footer-text">Empowering Minds, Enlightening Futures.<br>Kent's First Full-Time Islamic School.<br><br>📍 Al Huda Islamic Center<br>25650 101st Ave SE, Kent, WA 98030</p><div class="footer-social">
             <a href="https://chat.whatsapp.com/DERaJbJuJzDBLieC4ACPzM" target="_blank" rel="noopener" aria-label="WhatsApp Group"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
             <a href="https://www.facebook.com/FalahAcademyWA" target="_blank" rel="noopener" aria-label="Facebook Page"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
@@ -95,5 +164,234 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <script src="js/main.js"></script>
+  <script src="js/summer-popup.js"></script>
+
+  <!-- ==================== SUMMER PROGRAM POPUP ==================== -->
+  <div class="popup-overlay" id="summer-popup" role="dialog" aria-modal="true" aria-label="Summer Program Registration">
+    <div class="popup-modal">
+
+      <!-- Header -->
+      <div class="popup-header" style="background:linear-gradient(135deg,#d97706,#b45309);">
+        <div class="popup-header-left">
+          <img src="images/logo.jpg" alt="Falah Academy" />
+          <div>
+            <div class="popup-header-title">☀️ Summer Program Registration</div>
+            <div class="popup-header-sub">July 6 – August 13, 2026</div>
+          </div>
+        </div>
+        <button class="popup-close" onclick="closeSummerPopup()" aria-label="Close">✕</button>
+      </div>
+
+      <!-- Progress Steps -->
+      <div class="popup-progress">
+        <div class="popup-steps">
+          <div class="popup-step-wrap">
+            <div class="popup-step-circle active" id="sstep-1">1</div>
+            <div class="popup-step-label active" id="slabel-1">Student</div>
+          </div>
+          <div class="popup-connector" id="sconn-1"></div>
+          <div class="popup-step-wrap">
+            <div class="popup-step-circle" id="sstep-2">2</div>
+            <div class="popup-step-label" id="slabel-2">Parents</div>
+          </div>
+          <div class="popup-connector" id="sconn-2"></div>
+          <div class="popup-step-wrap">
+            <div class="popup-step-circle" id="sstep-3">3</div>
+            <div class="popup-step-label" id="slabel-3">Emergency</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Body -->
+      <div class="popup-body">
+        <form id="summer-form" novalidate>
+
+          <!-- STEP 1: Student -->
+          <div class="summer-form-page active" data-step="1">
+            <p class="popup-step-title"><i class="ti ti-user" aria-hidden="true"></i> Student Information</p>
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="s_student_first">First Name <span class="required">*</span></label>
+                <input type="text" id="s_student_first" class="form-input" required placeholder="First name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_student_middle">Middle Name</label>
+                <input type="text" id="s_student_middle" class="form-input" placeholder="Middle name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_student_last">Last Name <span class="required">*</span></label>
+                <input type="text" id="s_student_last" class="form-input" required placeholder="Last name" />
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Gender <span class="required">*</span></label>
+                <div class="form-radio-group">
+                  <label class="form-radio"><input type="radio" name="s_gender" value="Male" required /> Male</label>
+                  <label class="form-radio"><input type="radio" name="s_gender" value="Female" /> Female</label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_dob">Date of Birth <span class="required">*</span></label>
+                <input type="date" id="s_dob" class="form-input" required />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="s_street">Street Address <span class="required">*</span></label>
+              <input type="text" id="s_street" class="form-input" required placeholder="e.g. 123 Main Street" />
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="s_city">City <span class="required">*</span></label>
+                <input type="text" id="s_city" class="form-input" required placeholder="e.g. Kent" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_zipcode">ZIP Code <span class="required">*</span></label>
+                <input type="text" id="s_zipcode" class="form-input" required placeholder="e.g. 98030" maxlength="5" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="s_age">Age Group <span class="required">*</span></label>
+              <select id="s_age" class="form-select" required>
+                <option value="">Please select</option>
+                <option value="Age 4">Age 4</option>
+                <option value="Age 5">Age 5</option>
+                <option value="Age 6">Age 6</option>
+                <option value="Age 7">Age 7</option>
+                <option value="Age 8">Age 8</option>
+                <option value="Age 9">Age 9</option>
+                <option value="Age 10">Age 10</option>
+              </select>
+            </div>
+            <div class="popup-nav">
+              <span></span>
+              <button type="button" class="btn-primary" onclick="summerNext()">Next: Parent Info →</button>
+            </div>
+          </div>
+
+          <!-- STEP 2: Parents -->
+          <div class="summer-form-page" data-step="2">
+            <p class="popup-step-title"><i class="ti ti-users" aria-hidden="true"></i> Parent Information</p>
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="s_father_first">Father's First Name <span class="required">*</span></label>
+                <input type="text" id="s_father_first" class="form-input" required placeholder="First name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_father_middle">Father's Middle Name</label>
+                <input type="text" id="s_father_middle" class="form-input" placeholder="Middle name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_father_last">Father's Last Name <span class="required">*</span></label>
+                <input type="text" id="s_father_last" class="form-input" required placeholder="Last name" />
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="s_father_email">Father's Email <span class="required">*</span></label>
+                <input type="email" id="s_father_email" class="form-input" required placeholder="email@example.com" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_father_phone">Father's Phone <span class="required">*</span></label>
+                <input type="tel" id="s_father_phone" class="form-input" required placeholder="(000) 000-0000" />
+              </div>
+            </div>
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label class="form-label" for="s_mother_first">Mother's First Name <span class="required">*</span></label>
+                <input type="text" id="s_mother_first" class="form-input" required placeholder="First name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_mother_last">Mother's Last Name <span class="required">*</span></label>
+                <input type="text" id="s_mother_last" class="form-input" required placeholder="Last name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_mother_phone">Mother's Phone <span class="required">*</span></label>
+                <input type="tel" id="s_mother_phone" class="form-input" required placeholder="(000) 000-0000" />
+              </div>
+            </div>
+            <div class="popup-nav">
+              <button type="button" class="btn-outline-navy" onclick="summerPrev()">← Back</button>
+              <button type="button" class="btn-primary" onclick="summerNext()">Next: Emergency →</button>
+            </div>
+          </div>
+
+          <!-- STEP 3: Emergency + Additional -->
+          <div class="summer-form-page" data-step="3">
+            <p class="popup-step-title"><i class="ti ti-alert-circle" aria-hidden="true"></i> Emergency Contact</p>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="s_emg_name">Contact Full Name <span class="required">*</span></label>
+                <input type="text" id="s_emg_name" class="form-input" required placeholder="Full name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="s_emg_phone">Contact Phone <span class="required">*</span></label>
+                <input type="tel" id="s_emg_phone" class="form-input" required placeholder="(000) 000-0000" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="s_emg_rel">Relationship to Student <span class="required">*</span></label>
+              <select id="s_emg_rel" class="form-select" required>
+                <option value="">Please select</option>
+                <option value="Father">Father</option>
+                <option value="Mother">Mother</option>
+                <option value="Grandparent">Grandparent</option>
+                <option value="Uncle">Uncle</option>
+                <option value="Aunt">Aunt</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="s_heard">How did you hear about us?</label>
+              <select id="s_heard" class="form-select">
+                <option value="">Please select</option>
+                <option value="Google">Google</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Friend or Family">Friend or Family</option>
+                <option value="Masjid">Masjid</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="s_comments">Additional Comments</label>
+              <textarea id="s_comments" class="form-textarea" placeholder="Anything you'd like us to know..."></textarea>
+            </div>
+
+            <!-- Fee Info -->
+            <div style="background:#fffde7;border:1px solid #f59e0b;border-radius:8px;padding:1rem;margin-bottom:1rem;">
+              <p style="color:#92400e;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">💰 Program Fee: $200</p>
+              <p style="color:#92400e;font-size:0.8rem;">Pay via <strong>Zelle</strong> to <strong>falahacademywa@gmail.com</strong><br>For other payment options please <a href="contact.html" style="color:#d97706;">contact us</a>.</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-checkbox">
+                <input type="checkbox" id="s_agree" required />
+                I confirm that I am registering my child for the Falah Academy Summer Program 2026 and agree to the terms. We will not send any marketing emails.
+              </label>
+            </div>
+            <div class="popup-nav">
+              <button type="button" class="btn-outline-navy" onclick="summerPrev()">← Back</button>
+              <button type="submit" class="btn-primary" id="summer-submit-btn" onclick="submitSummerForm(event)">Submit Registration →</button>
+            </div>
+          </div>
+
+        </form>
+
+        <!-- Success -->
+        <div class="popup-success" id="summer-success">
+          <div class="popup-success-icon">🎉</div>
+          <h3 style="font-family:'Playfair Display',serif;color:#1a2f5e;font-size:1.5rem;margin-bottom:0.5rem;">JazakAllah Khair!</h3>
+          <p style="color:#5a6480;margin-bottom:1rem;">Your Summer Program registration has been submitted successfully!</p>
+          <div style="background:#fffde7;border:1px solid #f59e0b;border-radius:8px;padding:1rem;margin-bottom:1rem;text-align:left;">
+            <p style="color:#92400e;font-size:0.88rem;font-weight:600;margin-bottom:0.3rem;">💰 Next Step — Pay Program Fee</p>
+            <p style="color:#92400e;font-size:0.82rem;">Please send <strong>$200 via Zelle</strong> to:<br><strong>falahacademywa@gmail.com</strong><br><br>For other payment options please contact us at (301) 919-0106</p>
+          </div>
+          <p style="color:#5a6480;font-size:0.82rem;">Questions? <strong>falahacademywa@gmail.com</strong> · <strong>(301) 919-0106</strong></p>
+          <button onclick="closeSummerPopup()" class="btn-primary" style="margin-top:1.5rem;background:linear-gradient(135deg,#d97706,#b45309);">Close</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
 </body>
 </html>
