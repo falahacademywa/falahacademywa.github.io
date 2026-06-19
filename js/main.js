@@ -527,3 +527,45 @@ document.addEventListener('DOMContentLoaded', () => {
   initAdmissionForm();
   initAyaat();
 });
+
+// ============================================================
+// EVENT GALLERY LIGHTBOX
+// ============================================================
+var galleryImages = [];
+var lightboxIndex = 0;
+
+document.addEventListener('DOMContentLoaded', function() {
+  var items = document.querySelectorAll('.event-gallery-item img');
+  galleryImages = Array.from(items).map(function(img) { return img.src; });
+});
+
+window.openLightbox = function(index) {
+  lightboxIndex = index;
+  var lb = document.getElementById('event-lightbox');
+  var img = document.getElementById('lightbox-img');
+  if (!lb || !img || !galleryImages[index]) return;
+  img.src = galleryImages[index];
+  lb.classList.add('open');
+  document.body.style.overflow = 'hidden';
+};
+
+window.closeLightbox = function(e) {
+  if (e && e.target.tagName === 'IMG') return;
+  var lb = document.getElementById('event-lightbox');
+  if (lb) lb.classList.remove('open');
+  document.body.style.overflow = '';
+};
+
+window.lightboxNav = function(e, dir) {
+  e.stopPropagation();
+  lightboxIndex = (lightboxIndex + dir + galleryImages.length) % galleryImages.length;
+  document.getElementById('lightbox-img').src = galleryImages[lightboxIndex];
+};
+
+document.addEventListener('keydown', function(e) {
+  var lb = document.getElementById('event-lightbox');
+  if (!lb || !lb.classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') lightboxNav(e, -1);
+  if (e.key === 'ArrowRight') lightboxNav(e, 1);
+});

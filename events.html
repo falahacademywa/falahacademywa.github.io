@@ -12,6 +12,10 @@
   </style>
 </head>
 <body>
+  <!-- DEV ENVIRONMENT BANNER -->
+  <div style="background:#ff6b35;color:white;text-align:center;padding:8px;font-size:13px;font-weight:600;position:sticky;top:0;z-index:9999;">
+    ⚠️ TEST ENVIRONMENT — This is the development site. Not for public use. Live site: <a href="https://falahacademywa.org" style="color:white;text-decoration:underline;">falahacademywa.org</a>
+  </div>
   <div id="announcement-banner"><span class="banner-text"></span><span class="banner-arrow">→</span><button class="banner-close">✕</button></div>
   <nav class="navbar">
     <a href="index.html" class="nav-logo"><img src="images/logo.jpg" alt="Falah Academy Logo" loading="lazy" /><div class="nav-brand"><span class="nav-brand-name">Falah Academy</span><span class="nav-brand-tagline">Kent's First Full-Time Islamic School</span></div></a>
@@ -40,14 +44,69 @@
     <div class="section-inner">
       <p class="section-title fade-in">Upcoming Events</p>
       <div class="section-divider fade-in"></div>
-      <div class="event-placeholder fade-in">
-        <div class="event-icon"><i class="ti ti-calendar-event"></i></div>
-        <h3>Stay tuned for upcoming events</h3>
-        <p style="max-width:500px;margin:0 auto 1.5rem;">Events, open houses, orientations, and community announcements will be posted here. Check back soon or contact us to be added to our mailing list.</p>
-        <a href="contact.html" class="btn-primary">Contact Us to Stay Updated</a>
+
+      <div class="fade-in" style="background:white;border-radius:14px;box-shadow:0 4px 24px rgba(26,47,94,0.08);overflow:hidden;max-width:760px;margin:0 auto;">
+        <div style="background:linear-gradient(135deg,#1a2f5e,#2b5cb8);padding:1.8rem 2rem;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.6rem;flex-wrap:wrap;">
+            <span style="background:#f59e0b;color:white;font-size:0.72rem;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;text-transform:uppercase;">☀️ Summer Program</span>
+            <span style="color:#a0c4ff;font-size:0.85rem;">July 6, 2026</span>
+          </div>
+          <h3 style="font-family:'Playfair Display',serif;color:white;font-size:1.4rem;margin-bottom:0.4rem;">Start of Summer Program 2026</h3>
+          <p style="color:#c0d4f0;font-size:0.9rem;">6 weeks of Islamic learning — Surahs, Sunnahs, Duas &amp; Prophet Stories for Ages 4–10</p>
+        </div>
+        <div style="padding:1.5rem 2rem;">
+          <div style="display:flex;flex-wrap:wrap;gap:1.2rem;margin-bottom:1.2rem;">
+            <div style="color:#5a6480;font-size:0.88rem;"><i class="ti ti-calendar" aria-hidden="true"></i> <strong style="color:#1a2f5e;">Jul 6 – Aug 13, 2026</strong></div>
+            <div style="color:#5a6480;font-size:0.88rem;"><i class="ti ti-clock" aria-hidden="true"></i> <strong style="color:#1a2f5e;">9:00 AM – 12:00 PM</strong> · Mon–Thu</div>
+            <div style="color:#5a6480;font-size:0.88rem;"><i class="ti ti-users" aria-hidden="true"></i> <strong style="color:#1a2f5e;">Ages 4–10</strong></div>
+          </div>
+          <button onclick="openSummerPopup()" class="btn-summer">☀️ Enroll in Summer Program</button>
+        </div>
       </div>
+
     </div>
   </section>
+
+  <!-- ==================== PAST EVENTS ==================== -->
+  <section class="section section-alt">
+    <div class="section-inner">
+      <p class="section-title fade-in">Past Events</p>
+      <div class="section-divider fade-in"></div>
+
+      <div class="fade-in" style="background:white;border-radius:14px;box-shadow:0 4px 24px rgba(26,47,94,0.08);overflow:hidden;margin-bottom:2rem;">
+        <div style="padding:1.8rem 2rem 1.2rem;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.6rem;flex-wrap:wrap;">
+            <span style="background:#2b5cb8;color:white;font-size:0.72rem;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;text-transform:uppercase;">🎓 Graduation</span>
+            <span style="color:#5a6480;font-size:0.85rem;">June 17, 2026</span>
+          </div>
+          <h3 style="font-family:'Playfair Display',serif;color:#1a2f5e;font-size:1.4rem;margin-bottom:0.6rem;">First Graduation Ceremony</h3>
+          <p style="color:#5a6480;font-size:0.92rem;line-height:1.7;max-width:780px;">
+            Alhamdulillah! Falah Academy celebrated its very first graduation ceremony, marking a proud milestone for our school community. <strong>15 students</strong> from <strong>Pre-K and Kindergarten</strong> were honored with certificates of completion in front of family, teachers, and community members. The ceremony reflected on the students' growth in both Islamic studies and academics over the past year.
+          </p>
+        </div>
+
+        <!-- Photo Gallery Grid -->
+        <div style="padding:0 2rem 2rem;">
+          <div class="event-gallery-grid">
+            <div class="event-gallery-item" onclick="openLightbox(0)"><img src="images/graduation/graduation-01.jpg" alt="Falah Academy graduates with completion certificates" loading="lazy" /></div>
+            <div class="event-gallery-item" onclick="openLightbox(1)"><img src="images/graduation/graduation-02.jpg" alt="Falah Academy graduates group photo" loading="lazy" /></div>
+            <div class="event-gallery-item" onclick="openLightbox(2)"><img src="images/graduation/graduation-03.jpg" alt="Student receiving certificate from teacher" loading="lazy" /></div>
+            <div class="event-gallery-item" onclick="openLightbox(3)"><img src="images/graduation/graduation-04.jpg" alt="Student receiving certificate" loading="lazy" /></div>
+            <div class="event-gallery-item" onclick="openLightbox(4)"><img src="images/graduation/graduation-05.jpg" alt="Students seated together at ceremony" loading="lazy" /></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Lightbox for gallery -->
+  <div id="event-lightbox" class="event-lightbox" onclick="closeLightbox(event)">
+    <button class="lightbox-close" onclick="closeLightbox(event)" aria-label="Close">✕</button>
+    <button class="lightbox-nav lightbox-prev" onclick="lightboxNav(event,-1)" aria-label="Previous">‹</button>
+    <img id="lightbox-img" src="" alt="" />
+    <button class="lightbox-nav lightbox-next" onclick="lightboxNav(event,1)" aria-label="Next">›</button>
+  </div>
 
   <footer class="footer"><div class="footer-inner"><div class="footer-grid"><div><div class="footer-brand">Falah Academy</div><p class="footer-text">Empowering Minds, Enlightening Futures.<br>Kent's First Full-Time Islamic School.<br><br>📍 Al Huda Islamic Center<br>25650 101st Ave SE, Kent, WA 98030</p><div class="footer-social">
             <a href="https://chat.whatsapp.com/DERaJbJuJzDBLieC4ACPzM" target="_blank" rel="noopener" aria-label="WhatsApp Group"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
