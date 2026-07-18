@@ -862,124 +862,13 @@ html, body {
   .footer-copy, .footer-disc { font-size: 0.65rem !important; }
 }
 
-/* ---- SUMMER PROGRAM ---- */
-.nav-summer {
-  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-  color: white !important;
-  border-radius: 20px !important;
-  padding: 6px 14px !important;
-  font-weight: 600 !important;
-  font-size: 13px !important;
-  transition: all 0.2s !important;
-}
-.nav-summer:hover {
-  background: linear-gradient(135deg, #d97706, #b45309) !important;
-  color: white !important;
-  transform: translateY(-1px);
-}
 
-.summer-banner {
-  background: linear-gradient(135deg, #1a2f5e 0%, #2b5cb8 50%, #1a2f5e 100%);
-  padding: 3rem 2rem;
-  position: relative;
-  overflow: hidden;
-}
-.summer-banner::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 30px);
-}
-.summer-banner-inner {
-  max-width: 1100px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2rem;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-.summer-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(245,158,11,0.2);
-  border: 1px solid rgba(245,158,11,0.4);
-  color: #fcd34d;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 20px;
-  margin-bottom: 0.8rem;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-.summer-title {
-  font-family: 'Playfair Display', serif;
-  color: white;
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-  line-height: 1.2;
-}
-.summer-title span { color: #fcd34d; }
-.summer-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin: 1rem 0 1.5rem;
-}
-.summer-detail-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #a0c4ff;
-  font-size: 0.85rem;
-}
-.summer-detail-item strong { color: white; }
-.btn-summer {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-  padding: 12px 28px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.btn-summer:hover {
-  background: linear-gradient(135deg, #d97706, #b45309);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(245,158,11,0.4);
-  color: white;
+@media (max-width: 768px) {
 }
 
 @media (max-width: 768px) {
-  .summer-banner-inner {
-    grid-template-columns: 1fr;
-    text-align: center;
-  }
-  .summer-details { justify-content: center; }
-  .summer-title { font-size: 1.5rem; }
-  .nav-summer { display: flex; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color: white !important; border-radius: 8px !important; padding: 10px 20px !important; width: 100%; justify-content: center; font-size: 1rem !important; }
-}
-
-/* Summer weeks grid responsive */
-@media (max-width: 768px) {
-  .summer-weeks-grid {
-    grid-template-columns: 1fr !important;
-  }
 }
 @media (min-width: 480px) and (max-width: 768px) {
-  .summer-weeks-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
 }
 
 /* ---- POPUP MODAL (Global) ---- */
@@ -1050,17 +939,12 @@ html, body {
 body.popup-open { overflow: hidden; }
 .popup-form-page { display: none; }
 .popup-form-page.active { display: block; }
-.summer-form-page { display: none; }
-.summer-form-page.active { display: block; }
 
-/* ---- SUMMER POPUP MOBILE FIXES ---- */
 @media (max-width: 768px) {
   .popup-modal { max-height: 95vh; border-radius: 12px; }
   .popup-steps { gap: 0; }
   .popup-connector { width: 30px; }
   .popup-step-label { font-size: 9px; }
-  .summer-banner { padding: 2rem 1rem; }
-  .summer-banner-inner > div:last-child { display: none; } /* hide stats card on mobile */
   .popup-body { padding: 1rem; }
   .form-grid-3 { grid-template-columns: 1fr !important; }
   .form-grid-2 { grid-template-columns: 1fr !important; }

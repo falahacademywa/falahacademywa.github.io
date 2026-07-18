@@ -92,8 +92,6 @@
     body.popup-open { overflow: hidden; }
   </style>
   <style>
-    .summer-form-page { display: none; }
-    .summer-form-page.active { display: block; }
   </style>
 </head>
 <body>
@@ -127,7 +125,6 @@
       </div>
       <a href="events.html" class="nav-link">Events</a>
       <a href="contact.html" class="nav-link">Contact</a>
-      <a href="#" onclick="openSummerPopup();return false;" class="nav-link nav-summer">☀️ Summer Program</a>
       <a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a>
     </div>
     <div class="hamburger" aria-label="Open menu">
@@ -276,7 +273,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <script src="js/main.js"></script>
   <script src="js/popup.js"></script>
-  <script src="js/summer-popup.js"></script>
 
   <!-- ==================== ENROLLMENT POPUP ==================== -->
   <div class="popup-overlay" id="admission-popup" role="dialog" aria-modal="true" aria-label="Student Admission Form">
@@ -380,14 +376,14 @@
             <!-- DOCUMENT UPLOADS -->
             <div style="background:#f0f2f5;border-radius:10px;padding:1.2rem;margin-bottom:0.5rem;">
               <p style="font-family:'Playfair Display',serif;color:var(--navy);font-size:1rem;margin-bottom:0.3rem;">
-                <i class="ti ti-paperclip" aria-hidden="true"></i> Required Documents
+                <i class="ti ti-paperclip" aria-hidden="true"></i> Student Documents
               </p>
-              <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:1rem;">Please upload the following documents. Accepted formats: PDF, DOC, DOCX, JPG, PNG</p>
+              <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:1rem;">If you have them ready, you can upload the documents below (PDF, DOC, DOCX, JPG, PNG) — or check the box at the bottom to provide them later.</p>
 
               <!-- Birth Certificate -->
               <div class="form-group">
                 <label class="form-label" for="p_birth_cert">
-                  Birth Certificate <span class="required">*</span>
+                  Birth Certificate <span style="color:var(--text-muted);font-weight:400;">(optional — may be provided later)</span>
                 </label>
                 <div id="birth-cert-upload-area" style="border:2px dashed var(--border);border-radius:8px;padding:1rem;text-align:center;cursor:pointer;transition:all 0.2s;background:white;" onclick="document.getElementById('p_birth_cert').click()">
                   <div id="birth-cert-placeholder">
@@ -407,8 +403,18 @@
               <!-- Immunization Records -->
               <div class="form-group" style="margin-top:0.8rem;">
                 <label class="form-label" for="p_immunization">
-                  Immunization Records <span class="required">*</span>
+                  Immunization Records <span style="color:var(--text-muted);font-weight:400;">(optional — may be provided later)</span>
                 </label>
+                <details style="margin:0.2rem 0 0.6rem;">
+                  <summary style="cursor:pointer;color:var(--royal);font-size:0.82rem;font-weight:600;"><i class="ti ti-info-circle" aria-hidden="true"></i> How to obtain the immunization certificate</summary>
+                  <div style="background:#eef4ff;border-left:3px solid var(--royal);border-radius:0 8px 8px 0;padding:0.8rem 1rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text-muted);line-height:1.7;text-align:left;">
+                    You can get your child’s Certificate of Immunization Status (CIS) online in a few minutes:
+                    <ol style="margin:0.4rem 0 0 1.1rem;padding:0;">
+                      <li>Visit the <a href="https://doh.wa.gov/you-and-your-family/immunization/access-your-familys-immunization-information" target="_blank" rel="noopener" style="color:var(--royal);font-weight:600;">WA Department of Health — Access Your Family’s Immunization Information</a> page.</li>
+                      <li>Follow <strong>Option 1</strong>: sign up at MyIRmobile.com and complete the phone verification. You can then view, download, and print your child’s Certificate of Immunization Status (CIS).</li>
+                    </ol>
+                  </div>
+                </details>
                 <div id="immunization-upload-area" style="border:2px dashed var(--border);border-radius:8px;padding:1rem;text-align:center;cursor:pointer;transition:all 0.2s;background:white;" onclick="document.getElementById('p_immunization').click()">
                   <div id="immunization-placeholder">
                     <i class="ti ti-upload" style="font-size:1.5rem;color:var(--royal);" aria-hidden="true"></i>
@@ -422,6 +428,14 @@
                   </div>
                 </div>
                 <input type="file" id="p_immunization" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="display:none;" onchange="handleFileSelect(this, 'immunization')" />
+              </div>
+
+              <!-- Provide documents later -->
+              <div class="form-group" id="docs-later-group" style="margin-top:1rem;margin-bottom:0;">
+                <label class="form-checkbox" style="font-size:0.82rem;">
+                  <input type="checkbox" id="p_docs_later" />
+                  I don’t have the document(s) ready — I will provide the Birth Certificate and Immunization Records to Falah Academy before my child’s first day of school.
+                </label>
               </div>
             </div>
 
@@ -573,253 +587,17 @@
         if (window.location.hash === '#enroll') {
           openAdmissionPopup();
         }
-        if (window.location.hash === '#summer-enroll') {
-          openSummerPopup();
-        }
       });
     });
   </script>
 
-  <!-- ==================== SUMMER PROGRAM POPUP ==================== -->
-  <div class="popup-overlay" id="summer-popup" role="dialog" aria-modal="true" aria-label="Summer Program Registration">
-    <div class="popup-modal">
-
-      <!-- Header -->
-      <div class="popup-header" style="background:linear-gradient(135deg,#d97706,#b45309);">
-        <div class="popup-header-left">
-          <img src="images/logo.jpg" alt="Falah Academy" />
-          <div>
-            <div class="popup-header-title">☀️ Summer Program Registration</div>
-            <div class="popup-header-sub">June 29 – August 6, 2026</div>
-          </div>
-        </div>
-        <button class="popup-close" onclick="closeSummerPopup()" aria-label="Close">✕</button>
-      </div>
-
-      <!-- Progress Steps -->
-      <div class="popup-progress">
-        <div class="popup-steps">
-          <div class="popup-step-wrap">
-            <div class="popup-step-circle active" id="sstep-1">1</div>
-            <div class="popup-step-label active" id="slabel-1">Student</div>
-          </div>
-          <div class="popup-connector" id="sconn-1"></div>
-          <div class="popup-step-wrap">
-            <div class="popup-step-circle" id="sstep-2">2</div>
-            <div class="popup-step-label" id="slabel-2">Parents</div>
-          </div>
-          <div class="popup-connector" id="sconn-2"></div>
-          <div class="popup-step-wrap">
-            <div class="popup-step-circle" id="sstep-3">3</div>
-            <div class="popup-step-label" id="slabel-3">Emergency</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Form Body -->
-      <div class="popup-body">
-        <form id="summer-form" novalidate>
-
-          <!-- STEP 1: Student -->
-          <div class="summer-form-page active" data-step="1">
-            <p class="popup-step-title"><i class="ti ti-user" aria-hidden="true"></i> Student Information</p>
-            <div class="form-grid-3">
-              <div class="form-group">
-                <label class="form-label" for="s_student_first">First Name <span class="required">*</span></label>
-                <input type="text" id="s_student_first" class="form-input" required placeholder="First name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_student_middle">Middle Name</label>
-                <input type="text" id="s_student_middle" class="form-input" placeholder="Middle name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_student_last">Last Name <span class="required">*</span></label>
-                <input type="text" id="s_student_last" class="form-input" required placeholder="Last name" />
-              </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-group">
-                <label class="form-label">Gender <span class="required">*</span></label>
-                <div class="form-radio-group">
-                  <label class="form-radio"><input type="radio" name="s_gender" value="Male" required /> Male</label>
-                  <label class="form-radio"><input type="radio" name="s_gender" value="Female" /> Female</label>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_dob">Date of Birth <span class="required">*</span></label>
-                <input type="date" id="s_dob" class="form-input" required />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="s_street">Street Address <span class="required">*</span></label>
-              <input type="text" id="s_street" class="form-input" required placeholder="e.g. 123 Main Street" />
-            </div>
-            <div class="form-grid-2">
-              <div class="form-group">
-                <label class="form-label" for="s_city">City <span class="required">*</span></label>
-                <input type="text" id="s_city" class="form-input" required placeholder="e.g. Kent" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_zipcode">ZIP Code <span class="required">*</span></label>
-                <input type="text" id="s_zipcode" class="form-input" required placeholder="e.g. 98030" maxlength="5" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="s_age">Age Group <span class="required">*</span></label>
-              <select id="s_age" class="form-select" required>
-                <option value="">Please select</option>
-                <option value="Age 4">Age 4</option>
-                <option value="Age 5">Age 5</option>
-                <option value="Age 6">Age 6</option>
-                <option value="Age 7">Age 7</option>
-                <option value="Age 8">Age 8</option>
-                <option value="Age 9">Age 9</option>
-                <option value="Age 10">Age 10</option>
-              </select>
-            </div>
-            <div class="popup-nav">
-              <span></span>
-              <button type="button" class="btn-primary" onclick="summerNext()">Next: Parent Info →</button>
-            </div>
-          </div>
-
-          <!-- STEP 2: Parents -->
-          <div class="summer-form-page" data-step="2">
-            <p class="popup-step-title"><i class="ti ti-users" aria-hidden="true"></i> Parent Information</p>
-            <div class="form-grid-3">
-              <div class="form-group">
-                <label class="form-label" for="s_father_first">Father's First Name <span class="required">*</span></label>
-                <input type="text" id="s_father_first" class="form-input" required placeholder="First name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_father_middle">Father's Middle Name</label>
-                <input type="text" id="s_father_middle" class="form-input" placeholder="Middle name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_father_last">Father's Last Name <span class="required">*</span></label>
-                <input type="text" id="s_father_last" class="form-input" required placeholder="Last name" />
-              </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-group">
-                <label class="form-label" for="s_father_email">Father's Email <span class="required">*</span></label>
-                <input type="email" id="s_father_email" class="form-input" required placeholder="email@example.com" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_father_phone">Father's Phone <span class="required">*</span></label>
-                <input type="tel" id="s_father_phone" class="form-input" required placeholder="(000) 000-0000" />
-              </div>
-            </div>
-            <div class="form-grid-3">
-              <div class="form-group">
-                <label class="form-label" for="s_mother_first">Mother's First Name <span class="required">*</span></label>
-                <input type="text" id="s_mother_first" class="form-input" required placeholder="First name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_mother_last">Mother's Last Name <span class="required">*</span></label>
-                <input type="text" id="s_mother_last" class="form-input" required placeholder="Last name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_mother_phone">Mother's Phone <span class="required">*</span></label>
-                <input type="tel" id="s_mother_phone" class="form-input" required placeholder="(000) 000-0000" />
-              </div>
-            </div>
-            <div class="popup-nav">
-              <button type="button" class="btn-outline-navy" onclick="summerPrev()">← Back</button>
-              <button type="button" class="btn-primary" onclick="summerNext()">Next: Emergency →</button>
-            </div>
-          </div>
-
-          <!-- STEP 3: Emergency + Additional -->
-          <div class="summer-form-page" data-step="3">
-            <p class="popup-step-title"><i class="ti ti-alert-circle" aria-hidden="true"></i> Emergency Contact</p>
-            <div class="form-grid-2">
-              <div class="form-group">
-                <label class="form-label" for="s_emg_name">Contact Full Name <span class="required">*</span></label>
-                <input type="text" id="s_emg_name" class="form-input" required placeholder="Full name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="s_emg_phone">Contact Phone <span class="required">*</span></label>
-                <input type="tel" id="s_emg_phone" class="form-input" required placeholder="(000) 000-0000" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="s_emg_rel">Relationship to Student <span class="required">*</span></label>
-              <select id="s_emg_rel" class="form-select" required>
-                <option value="">Please select</option>
-                <option value="Father">Father</option>
-                <option value="Mother">Mother</option>
-                <option value="Grandparent">Grandparent</option>
-                <option value="Uncle">Uncle</option>
-                <option value="Aunt">Aunt</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="s_heard">How did you hear about us?</label>
-              <select id="s_heard" class="form-select">
-                <option value="">Please select</option>
-                <option value="Google">Google</option>
-                <option value="Facebook">Facebook</option>
-                <option value="Friend or Family">Friend or Family</option>
-                <option value="Masjid">Masjid</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="s_comments">Additional Comments</label>
-              <textarea id="s_comments" class="form-textarea" placeholder="Anything you'd like us to know..."></textarea>
-            </div>
-
-            <!-- Fee Info -->
-            <div style="background:#fffde7;border:1px solid #f59e0b;border-radius:8px;padding:1rem;margin-bottom:1rem;">
-              <p style="color:#92400e;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">💰 Program Fee: $200</p>
-              <p style="color:#92400e;font-size:0.8rem;">Pay via <strong>Zelle</strong> to <strong>falahacademywa@gmail.com</strong><br>For other payment options please <a href="contact.html" style="color:#d97706;">contact us</a>.</p>
-            </div>
-
-            <div class="form-group">
-              <label class="form-checkbox">
-                <input type="checkbox" id="s_agree" required />
-                I confirm that I am registering my child for the Falah Academy Summer Program 2026 and agree to the terms. We will not send any marketing emails.
-              </label>
-            </div>
-            <div class="popup-nav">
-              <button type="button" class="btn-outline-navy" onclick="summerPrev()">← Back</button>
-              <button type="submit" class="btn-primary" id="summer-submit-btn" onclick="submitSummerForm(event)">Submit Registration →</button>
-            </div>
-          </div>
-
-        </form>
-
-        <!-- Success -->
-        <div class="popup-success" id="summer-success">
-          <div class="popup-success-icon">🎉</div>
-          <h3 style="font-family:'Playfair Display',serif;color:#1a2f5e;font-size:1.5rem;margin-bottom:0.5rem;">JazakAllah Khair!</h3>
-          <p style="color:#5a6480;margin-bottom:1rem;">Your Summer Program registration has been submitted successfully!</p>
-          <div style="background:#fffde7;border:1px solid #f59e0b;border-radius:8px;padding:1rem;margin-bottom:1rem;text-align:left;">
-            <p style="color:#92400e;font-size:0.88rem;font-weight:600;margin-bottom:0.3rem;">💰 Next Step — Pay Program Fee</p>
-            <p style="color:#92400e;font-size:0.82rem;">Please send <strong>$200 via Zelle</strong> to:<br><strong>falahacademywa@gmail.com</strong><br><br>For other payment options please contact us at (301) 919-0106</p>
-          </div>
-          <p style="color:#5a6480;font-size:0.82rem;">Questions? <strong>falahacademywa@gmail.com</strong> · <strong>(301) 919-0106</strong></p>
-          <button onclick="closeSummerPopup()" class="btn-primary" style="margin-top:1.5rem;background:linear-gradient(135deg,#d97706,#b45309);">Close</button>
-        </div>
-
-      </div>
-    </div>
-  </div>
   <script>
     window.addEventListener('load', function() {
-      if (window.location.hash === '#summer-enroll') {
-        setTimeout(function() { if(typeof openSummerPopup==='function') openSummerPopup(); }, 400);
-      }
       if (window.location.hash === '#enroll') {
         setTimeout(function() { if(typeof openAdmissionPopup==='function') openAdmissionPopup(); }, 400);
       }
     });
     window.addEventListener('hashchange', function() {
-      if (window.location.hash === '#summer-enroll') {
-        if(typeof openSummerPopup==='function') openSummerPopup();
-      }
       if (window.location.hash === '#enroll') {
         if(typeof openAdmissionPopup==='function') openAdmissionPopup();
       }

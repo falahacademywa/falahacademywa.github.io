@@ -95,7 +95,12 @@ window.submitPopupForm = function(e) {
   Promise.all(uploadPromises)
     .then(function(results) {
       if (btn) btn.textContent = 'Sending...';
-      params.drive_links = results.map(function(r) { return r.fileUrl || ''; }).filter(Boolean).join('\n') || 'No files uploaded';
+      var links = results.map(function(r) { return r.fileUrl || ''; }).filter(Boolean);
+      var docNotes = [];
+      if (links.length) docNotes.push(links.join('\n'));
+      var laterBox2 = document.getElementById('p_docs_later');
+      if (laterBox2 && laterBox2.checked) docNotes.push('Parent will provide the missing document(s) before the first day of school.');
+      params.drive_links = docNotes.join('\n') || 'No files uploaded';
       emailjs.init('gYiHBKLQSOxt1Sfal');
       return emailjs.send('service_1g7cfrl', 'template_tiqzn2e', params);
     })
@@ -202,34 +207,23 @@ function resetFileUploads() {
 }
 
 function validateFileUploads() {
-  var valid = true;
-  if (!uploadedFiles.birthCert) {
-    var area = document.getElementById('birth-cert-upload-area');
-    if (area) area.style.borderColor = '#c62828';
-    var p = document.getElementById('p_birth_cert');
-    if (p && !p.parentElement.querySelector('.field-error')) {
-      var err = document.createElement('p');
-      err.className = 'field-error';
-      err.style.cssText = 'color:#c62828;font-size:11px;margin-top:4px;';
-      err.textContent = 'Please upload the Birth Certificate';
-      p.parentElement.appendChild(err);
-    }
-    valid = false;
+  // Documents are optional at application time. If any document is missing,
+  // the parent must confirm they will provide the documents before the
+  // first day of school (checkbox #p_docs_later).
+  var bothUploaded = uploadedFiles.birthCert && uploadedFiles.immunization;
+  var laterBox = document.getElementById('p_docs_later');
+  var laterChecked = laterBox && laterBox.checked;
+  if (bothUploaded || laterChecked) return true;
+
+  var group = document.getElementById('docs-later-group');
+  if (group && !group.querySelector('.field-error')) {
+    var err = document.createElement('p');
+    err.className = 'field-error';
+    err.style.cssText = 'color:#c62828;font-size:11px;margin-top:4px;';
+    err.textContent = 'Please upload the document(s) above, or check this box to confirm you will provide them before the first day of school.';
+    group.appendChild(err);
   }
-  if (!uploadedFiles.immunization) {
-    var area2 = document.getElementById('immunization-upload-area');
-    if (area2) area2.style.borderColor = '#c62828';
-    var p2 = document.getElementById('p_immunization');
-    if (p2 && !p2.parentElement.querySelector('.field-error')) {
-      var err2 = document.createElement('p');
-      err2.className = 'field-error';
-      err2.style.cssText = 'color:#c62828;font-size:11px;margin-top:4px;';
-      err2.textContent = 'Please upload the Immunization Records';
-      p2.parentElement.appendChild(err2);
-    }
-    valid = false;
-  }
-  return valid;
+  return false;
 }
 
 function validatePopupStep(step) {
