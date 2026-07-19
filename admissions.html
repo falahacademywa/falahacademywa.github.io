@@ -378,8 +378,17 @@
               <p style="font-family:'Playfair Display',serif;color:var(--navy);font-size:1rem;margin-bottom:0.3rem;">
                 <i class="ti ti-paperclip" aria-hidden="true"></i> Student Documents
               </p>
-              <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:1rem;">If you have them ready, you can upload the documents below (PDF, DOC, DOCX, JPG, PNG) — or check the box at the bottom to provide them later.</p>
+              <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:1rem;">Upload the documents below (PDF, DOC, DOCX, JPG, PNG) — or check the box to provide them later.</p>
 
+              <!-- Provide documents later -->
+              <div class="form-group" id="docs-later-group" style="margin-bottom:1rem;">
+                <label class="form-checkbox" style="font-size:0.82rem;">
+                  <input type="checkbox" id="p_docs_later" onchange="toggleDocsLater()" />
+                  I don’t have the documents ready — I will provide the Birth Certificate and Immunization Records to Falah Academy before my child’s first day of school.
+                </label>
+              </div>
+
+              <div id="doc-upload-fields">
               <!-- Birth Certificate -->
               <div class="form-group">
                 <label class="form-label" for="p_birth_cert">
@@ -429,13 +438,6 @@
                 </div>
                 <input type="file" id="p_immunization" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="display:none;" onchange="handleFileSelect(this, 'immunization')" />
               </div>
-
-              <!-- Provide documents later -->
-              <div class="form-group" id="docs-later-group" style="margin-top:1rem;margin-bottom:0;">
-                <label class="form-checkbox" style="font-size:0.82rem;">
-                  <input type="checkbox" id="p_docs_later" />
-                  I don’t have the document(s) ready — I will provide the Birth Certificate and Immunization Records to Falah Academy before my child’s first day of school.
-                </label>
               </div>
             </div>
 

@@ -27,6 +27,7 @@ window.closeAdmissionPopup = function() {
   var successEl = document.getElementById('popup-success');
   if (formEl) { formEl.style.display = 'block'; formEl.reset(); }
   if (successEl) successEl.classList.remove('show');
+  if (typeof toggleDocsLater === 'function') toggleDocsLater();
   popupStep = 1;
   showPopupStep(1);
 };
@@ -206,6 +207,22 @@ function resetFileUploads() {
   });
 }
 
+// "Provide documents later" toggle: clears and disables both upload fields
+window.toggleDocsLater = function() {
+  var box = document.getElementById('p_docs_later');
+  var wrap = document.getElementById('doc-upload-fields');
+  if (!wrap) return;
+  var on = !!(box && box.checked);
+  if (on) resetFileUploads();
+  wrap.style.opacity = on ? '0.45' : '';
+  wrap.style.pointerEvents = on ? 'none' : '';
+  var det = wrap.querySelector('details');
+  if (det) det.style.pointerEvents = 'auto'; // keep "How to obtain" help clickable
+  var group = document.getElementById('docs-later-group');
+  var err = group ? group.querySelector('.field-error') : null;
+  if (err) err.remove();
+};
+
 function validateFileUploads() {
   // Documents are optional at application time. If any document is missing,
   // the parent must confirm they will provide the documents before the
@@ -220,7 +237,7 @@ function validateFileUploads() {
     var err = document.createElement('p');
     err.className = 'field-error';
     err.style.cssText = 'color:#c62828;font-size:11px;margin-top:4px;';
-    err.textContent = 'Please upload the document(s) above, or check this box to confirm you will provide them before the first day of school.';
+    err.textContent = 'Please upload both documents below, or check this box to provide them before the first day of school.';
     group.appendChild(err);
   }
   return false;
