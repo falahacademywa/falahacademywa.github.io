@@ -5,9 +5,12 @@
 // Leave empty to disable (e.g. while testing locally).
 // ============================================================
 
-var GA_MEASUREMENT_ID = "";
+var GA_MEASUREMENT_ID = "G-V6DNKDR9Z8";
 
-if (GA_MEASUREMENT_ID) {
+// Don't count local testing as real visitors.
+var GA_DISABLED = /^(localhost|127\.|192\.168\.)/.test(location.hostname);
+
+if (GA_MEASUREMENT_ID && !GA_DISABLED) {
   var gaScript = document.createElement("script");
   gaScript.async = true;
   gaScript.src = "https://www.googletagmanager.com/gtag/js?id=" + GA_MEASUREMENT_ID;
