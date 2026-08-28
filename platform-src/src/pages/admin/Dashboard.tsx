@@ -35,11 +35,12 @@ export default function Dashboard() {
         count("attendance", (q) => q.eq("date", today).in("status", ["present", "late"])),
         count("attendance", (q) => q.eq("date", today).eq("status", "absent")),
         supabase.from("fee_plans")
-          .select("id, total_amount, enrollments!inner ( status ), payments ( payment_date )")
+          .select("id, total_amount, start_date, enrollments!inner ( status ), payments ( payment_date )")
           .eq("status", "active").eq("enrollments.status", "active").gt("total_amount", 0)
           .then(({ data }) => data ?? []),
       ]);
-      const outstanding = (plans as { payments: { payment_date: string }[] }[])
+      const outstanding = (plans as { start_date: string | null; payments: { payment_date: string }[] }[])
+        .filter((p) => !p.start_date || p.start_date <= today)  // plans not yet started don't count
         .filter((p) => !p.payments.some((x) => x.payment_date.startsWith(month))).length;
       setWidgets([
         { label: "Total Students", value: students, to: "/admin/students" },
