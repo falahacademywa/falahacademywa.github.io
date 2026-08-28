@@ -12,7 +12,7 @@ interface Student {
   archived: boolean;
   notes: string | null;
   enrollments: { id: string; school_year: string; grade_name: string; status: string; enrollment_date: string }[];
-  parent_students: { profiles: { full_name: string; phone: string | null } }[];
+  parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; address: string | null } }[];
   emergency_contacts: { id: string; name: string; phone: string; relationship: string | null; is_primary: boolean }[];
   medical_info: { allergies: string | null; medical_conditions: string | null; medications: string | null } | null;
   document_references: { id: string; document_type: string; file_url: string; uploaded_date: string }[];
@@ -29,7 +29,7 @@ export default function StudentProfile() {
       .from("students")
       .select(`id, student_no, first_name, last_name, date_of_birth, gender, archived, notes,
         enrollments ( id, school_year, grade_name, status, enrollment_date ),
-        parent_students ( profiles ( full_name, phone ) ),
+        parent_students ( profiles ( full_name, email, phone, address ) ),
         emergency_contacts ( id, name, phone, relationship, is_primary ),
         medical_info ( allergies, medical_conditions, medications ),
         document_references ( id, document_type, file_url, uploaded_date )`)
@@ -89,13 +89,23 @@ export default function StudentProfile() {
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Parents</h2>
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Parents &amp; Family Contacts</h2>
           {s.parent_students.length ? s.parent_students.map((ps, i) => (
-            <div key={i} className="py-1 text-sm">
-              <span className="font-semibold text-navy">{ps.profiles.full_name}</span>
-              {ps.profiles.phone && <span className="ml-2 text-gray-500">{ps.profiles.phone}</span>}
+            <div key={i} className="border-b py-2 text-sm last:border-0">
+              <div>
+                <span className="font-semibold text-navy">{ps.profiles.full_name}</span>
+                <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">portal account</span>
+              </div>
+              <div className="mt-0.5 text-gray-600">
+                {ps.profiles.phone && <div>📞 {ps.profiles.phone}</div>}
+                {ps.profiles.email && <div>✉️ {ps.profiles.email}</div>}
+                {ps.profiles.address && <div>🏠 {ps.profiles.address}</div>}
+              </div>
             </div>
-          )) : <p className="text-sm text-gray-400">No parent accounts linked — link them on the Parents page.</p>}
+          )) : <p className="text-sm text-gray-400">No parent account linked yet.</p>}
+          {s.notes && (
+            <p className="mt-3 whitespace-pre-wrap rounded-lg bg-silver/60 p-3 text-xs text-gray-600">{s.notes}</p>
+          )}
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
