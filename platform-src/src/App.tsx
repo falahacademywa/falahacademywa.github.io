@@ -9,6 +9,7 @@ import Admissions from "./pages/admin/Admissions";
 import Parents from "./pages/admin/Parents";
 import Teachers from "./pages/admin/Teachers";
 import StudentProfile from "./pages/admin/StudentProfile";
+import TeacherProfile from "./pages/admin/TeacherProfile";
 import Settings from "./pages/admin/Settings";
 import CalendarAdmin from "./pages/admin/CalendarAdmin";
 import AnnouncementsAdmin from "./pages/admin/AnnouncementsAdmin";
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="admissions" element={<Admissions />} />
             <Route path="parents" element={<Parents />} />
             <Route path="teachers" element={<Teachers />} />
+            <Route path="teachers/:id" element={<TeacherProfile />} />
             <Route path="fees" element={<Fees />} />
             <Route path="academics" element={<Academics />} />
             <Route path="assignments" element={<AssignmentsAdmin />} />

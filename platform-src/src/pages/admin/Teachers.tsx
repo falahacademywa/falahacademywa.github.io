@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 
 interface TeacherRow {
@@ -90,9 +91,12 @@ export default function Teachers() {
           <div key={t.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <span className="font-semibold text-navy">{t.first_name} {t.last_name}</span>
+                <Link to={`/admin/teachers/${t.id}`} className="font-semibold text-navy hover:underline">
+                  {t.first_name} {t.last_name}
+                </Link>
                 <span className="ml-3 text-sm text-gray-500">{t.email ?? ""} {t.phone ? `· ${t.phone}` : ""}</span>
                 {!t.active && <span className="ml-3 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Inactive</span>}
+                <Link to={`/admin/teachers/${t.id}`} className="ml-3 text-xs font-semibold text-royal hover:underline">View profile →</Link>
               </div>
               <button onClick={() => toggleActive(t)}
                 className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
