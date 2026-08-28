@@ -12,7 +12,8 @@ interface Student {
   archived: boolean;
   notes: string | null;
   enrollments: { id: string; school_year: string; grade_name: string; status: string; enrollment_date: string }[];
-  parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; address: string | null } }[];
+  parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; address: string | null; must_change_password: boolean } }[];
+  guardians: { id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[];
   emergency_contacts: { id: string; name: string; phone: string; relationship: string | null; is_primary: boolean }[];
   medical_info: { allergies: string | null; medical_conditions: string | null; medications: string | null } | null;
   document_references: { id: string; document_type: string; file_url: string; uploaded_date: string }[];
@@ -29,7 +30,8 @@ export default function StudentProfile() {
       .from("students")
       .select(`id, student_no, first_name, last_name, date_of_birth, gender, archived, notes,
         enrollments ( id, school_year, grade_name, status, enrollment_date ),
-        parent_students ( profiles ( full_name, email, phone, address ) ),
+        parent_students ( profiles ( full_name, email, phone, address, must_change_password ) ),
+        guardians ( id, name, relationship, phone, email, sort ),
         emergency_contacts ( id, name, phone, relationship, is_primary ),
         medical_info ( allergies, medical_conditions, medications ),
         document_references ( id, document_type, file_url, uploaded_date )`)
@@ -89,20 +91,51 @@ export default function StudentProfile() {
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Parents &amp; Family Contacts</h2>
-          {s.parent_students.length ? s.parent_students.map((ps, i) => (
-            <div key={i} className="border-b py-2 text-sm last:border-0">
-              <div>
-                <span className="font-semibold text-navy">{ps.profiles.full_name}</span>
-                <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">portal account</span>
-              </div>
-              <div className="mt-0.5 text-gray-600">
-                {ps.profiles.phone && <div>📞 {ps.profiles.phone}</div>}
-                {ps.profiles.email && <div>✉️ {ps.profiles.email}</div>}
-                {ps.profiles.address && <div>🏠 {ps.profiles.address}</div>}
-              </div>
-            </div>
-          )) : <p className="text-sm text-gray-400">No parent account linked yet.</p>}
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Parents &amp; Guardians</h2>
+          {(() => {
+            const accounts = s.parent_students.map((ps) => ps.profiles);
+            const badge = (email: string | null) => {
+              const acc = email ? accounts.find((a) => a.email?.toLowerCase() === email.toLowerCase()) : undefined;
+              if (!acc) return <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">no portal account</span>;
+              return acc.must_change_password
+                ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">invited — hasn't signed in</span>
+                : <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">account active</span>;
+            };
+            const rows = [...s.guardians].sort((a, b) => a.sort - b.sort);
+            if (!rows.length && !accounts.length)
+              return <p className="text-sm text-gray-400">No parents on file yet.</p>;
+            return (
+              <>
+                {rows.map((g) => (
+                  <div key={g.id} className="border-b py-2 text-sm last:border-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-navy">{g.name}</span>
+                      <span className="text-xs capitalize text-gray-400">({g.relationship})</span>
+                      {badge(g.email)}
+                    </div>
+                    <div className="mt-0.5 text-gray-600">
+                      {g.phone && <span className="mr-3">📞 {g.phone}</span>}
+                      {g.email && <span>✉️ {g.email}</span>}
+                    </div>
+                  </div>
+                ))}
+                {/* accounts that exist but aren't in the guardians registry */}
+                {accounts.filter((a) => !rows.some((g) => g.email?.toLowerCase() === a.email?.toLowerCase())).map((a, i) => (
+                  <div key={"acc" + i} className="border-b py-2 text-sm last:border-0">
+                    <span className="font-semibold text-navy">{a.full_name}</span>
+                    <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">portal account</span>
+                    <div className="mt-0.5 text-gray-600">
+                      {a.phone && <span className="mr-3">📞 {a.phone}</span>}
+                      {a.email && <span>✉️ {a.email}</span>}
+                    </div>
+                  </div>
+                ))}
+                {accounts.find((a) => a.address) && (
+                  <p className="mt-2 text-xs text-gray-500">🏠 {accounts.find((a) => a.address)?.address}</p>
+                )}
+              </>
+            );
+          })()}
           {s.notes && (
             <p className="mt-3 whitespace-pre-wrap rounded-lg bg-silver/60 p-3 text-xs text-gray-600">{s.notes}</p>
           )}
