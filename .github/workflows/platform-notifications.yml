@@ -1,0 +1,71 @@
+name: Platform daily notifications
+
+# Runs the daily notification rules (fee reminders after the 15th) and
+# emails any un-emailed notifications to parents via Brevo.
+# Repo secrets required:
+#   PLATFORM_SUPABASE_URL          e.g. https://xxxx.supabase.co
+#   PLATFORM_SUPABASE_SERVICE_KEY  the SECRET (service_role) key
+#   BREVO_API_KEY                  from app.brevo.com -> SMTP & API -> API keys
+# Until the secrets exist this workflow exits quietly.
+
+on:
+  schedule:
+    - cron: "30 16 * * *" # daily ~8:30-9:30am Pacific (fee rules + email dispatch)
+    - cron: "30 1 * * *"  # daily ~5:30-6:30pm Pacific (class-updates evening digest)
+  workflow_dispatch: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run daily rules and dispatch emails
+        run: |
+          URL="${{ secrets.PLATFORM_SUPABASE_URL }}"
+          KEY="${{ secrets.PLATFORM_SUPABASE_SERVICE_KEY }}"
+          BREVO="${{ secrets.BREVO_API_KEY }}"
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "Supabase secrets not set yet - skipping."
+            exit 0
+          fi
+
+          # 1) Daily rules (fee reminders etc.)
+          created=$(curl -sf -X POST "$URL/rest/v1/rpc/run_daily_notifications" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" -d '{}')
+          echo "Daily rule notifications created: $created"
+
+          if [ -z "$BREVO" ]; then
+            echo "BREVO_API_KEY not set - portal notifications only, no emails."
+            exit 0
+          fi
+
+          # 2) Fetch un-emailed notifications joined with recipient emails
+          rows=$(curl -sf "$URL/rest/v1/notifications?select=id,title,message,profiles!notifications_recipient_id_fkey(email,full_name)&emailed=is.false&limit=100" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          count=$(echo "$rows" | jq length)
+          echo "Notifications to email: $count"
+          [ "$count" -eq 0 ] && exit 0
+
+          # 3) Send each via Brevo and mark emailed
+          echo "$rows" | jq -c '.[]' | while read -r n; do
+            id=$(echo "$n" | jq -r '.id')
+            email=$(echo "$n" | jq -r '.profiles.email // empty')
+            name=$(echo "$n" | jq -r '.profiles.full_name // "Parent"')
+            title=$(echo "$n" | jq -r '.title')
+            message=$(echo "$n" | jq -r '.message')
+            if [ -n "$email" ] && [[ "$email" != *"test.local"* ]]; then
+              payload=$(jq -n --arg to "$email" --arg name "$name" --arg subj "$title" --arg msg "$message" \
+                '{sender: {name: "Falah Academy", email: "falahacademywa@gmail.com"},
+                  to: [{email: $to, name: $name}],
+                  subject: ("Falah Academy: " + $subj),
+                  htmlContent: ("<p>Assalamu Alaikum " + $name + ",</p><p>" + $msg + "</p><p>Details: <a href=\"https://falahacademywa.org/platform/\">Family Portal</a></p><p>— Falah Academy</p>")}')
+              http=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.brevo.com/v3/smtp/email" \
+                -H "api-key: $BREVO" -H "Content-Type: application/json" -d "$payload")
+              echo "notification $id -> $email : HTTP $http"
+            else
+              echo "notification $id -> skipped (test/no email)"
+            fi
+            curl -sf -X PATCH "$URL/rest/v1/notifications?id=eq.$id" \
+              -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+              -H "Content-Type: application/json" -d '{"emailed": true}' > /dev/null
+          done

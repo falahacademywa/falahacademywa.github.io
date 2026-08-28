@@ -1,0 +1,505 @@
+import { useEffect, useMemo, useState } from "react";
+import { supabase, configMissing } from "../../lib/supabase";
+import { useAuth } from "../../lib/auth";
+
+interface Child {
+  student_id: string;
+  students: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    enrollments: { id: string; grade_name: string; school_year: string; status: string }[];
+  };
+}
+interface AttRow { date: string; status: "present" | "late" | "absent" }
+interface QuranRow {
+  id: number; assessment_date: string; category: string; surah_topic: string;
+  ayah_from: number | null; ayah_to: number | null; memorization_level: string | null;
+  teacher_comment: string | null; revision: string | null;
+}
+interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
+interface FeePlan { id: string; total_amount: number; billing_frequency: string; payments: { payment_date: string; amount: number; payment_method: string }[] }
+interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
+interface Asg { id: string; subject: string; title: string; instructions: string | null; file_url: string | null; assigned_date: string; due_date: string | null }
+interface Update {
+  id: string; subject: string; note: string; update_date: string; homework_due: string | null;
+  attachment_url: string | null; attachment_thumb: string | null;
+  grade_id: number | null; enrollment_id: string | null; grades: { name: string } | null;
+}
+interface Ev { id: string; title: string; event_type: string; start_date: string; end_date: string | null; location: string | null; rsvp_enabled: boolean }
+interface Ann { id: string; title: string; content: string; category: string; is_pinned: boolean; requires_ack: boolean; publish_date: string | null; announcement_acks: { parent_id: string }[] }
+
+export default function ParentHome() {
+  const { profile, session, signOut } = useAuth();
+  const [children, setChildren] = useState<Child[]>([]);
+  const [active, setActive] = useState<Child | null>(null);
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [att, setAtt] = useState<AttRow[]>([]);
+  const [events, setEvents] = useState<Ev[]>([]);
+  const [anns, setAnns] = useState<Ann[]>([]);
+  const [quran, setQuran] = useState<QuranRow[]>([]);
+  const [acad, setAcad] = useState<AcadRow[]>([]);
+  const [fee, setFee] = useState<FeePlan | null>(null);
+  const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [calOpen, setCalOpen] = useState(false);
+  const [asgs, setAsgs] = useState<Asg[]>([]);
+  const [updates, setUpdates] = useState<Update[]>([]);
+
+  useEffect(() => {
+    if (configMissing) return;
+    (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const [{ data: kids }, { data: evs }, { data: as }] = await Promise.all([
+        supabase.from("parent_students")
+          .select("student_id, students ( id, first_name, last_name, enrollments ( id, grade_name, school_year, status ) )")
+          .order("student_id"),
+        supabase.from("calendar_events").select("id, title, event_type, start_date, end_date, location, rsvp_enabled")
+          .gte("start_date", today).order("start_date").limit(6),
+        supabase.from("announcements")
+          .select("id, title, content, category, is_pinned, requires_ack, publish_date, announcement_acks ( parent_id )")
+          .eq("status", "published")
+          .order("is_pinned", { ascending: false })
+          .order("publish_date", { ascending: false })
+          .limit(10),
+      ]);
+      const c = (kids as unknown as Child[]) ?? [];
+      setChildren(c);
+      setActive(c[0] ?? null);
+      setEvents(evs ?? []);
+      setAnns((as as unknown as Ann[]) ?? []);
+      const { data: n } = await supabase.from("notifications")
+        .select("id, title, message, priority, is_read, created_at")
+        .order("created_at", { ascending: false }).limit(20);
+      setNotifs((n as Notif[]) ?? []);
+    })();
+  }, []);
+
+  // Per-child data: Qur'an, academics, fees
+  useEffect(() => {
+    if (configMissing || !active) { setQuran([]); setAcad([]); setFee(null); return; }
+    const enr = active.students.enrollments.find((e) => e.status === "active") ?? active.students.enrollments[0];
+    if (!enr) return;
+    supabase.from("quran_progress").select("*").eq("enrollment_id", enr.id)
+      .order("assessment_date", { ascending: false }).limit(8)
+      .then(({ data }) => setQuran((data as QuranRow[]) ?? []));
+    supabase.from("academic_progress").select("*").eq("enrollment_id", enr.id)
+      .order("assessment_date", { ascending: false }).limit(8)
+      .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
+    supabase.from("fee_plans")
+      .select("id, total_amount, billing_frequency, payments ( payment_date, amount, payment_method )")
+      .eq("enrollment_id", enr.id).maybeSingle()
+      .then(({ data }) => setFee((data as unknown as FeePlan) ?? null));
+    // Assignments: grade-wide for this child's grade + individual ones.
+    // RLS already limits rows to this family; filter client-side per child.
+    supabase.from("assignments")
+      .select("id, subject, title, instructions, file_url, assigned_date, due_date, grade_id, enrollment_id, grades ( name )")
+      .order("assigned_date", { ascending: false }).limit(30)
+      .then(({ data }) => {
+        const rows = ((data as any[]) ?? []).filter((a) =>
+          a.enrollment_id === enr.id ||
+          (a.grade_id != null && a.grades?.name === (active.students.enrollments.find((e) => e.status === "active")?.grade_name ?? "")));
+        setAsgs(rows as Asg[]);
+      });
+    // Class updates feed: teacher notes for this child's grade + individual ones
+    supabase.from("class_updates")
+      .select("id, subject, note, update_date, homework_due, attachment_url, attachment_thumb, grade_id, enrollment_id, grades ( name )")
+      .order("created_at", { ascending: false }).limit(20)
+      .then(({ data }) => {
+        const gradeName = active.students.enrollments.find((e) => e.status === "active")?.grade_name ?? "";
+        const rows = ((data as unknown as Update[]) ?? []).filter((u) =>
+          u.enrollment_id === enr.id || (u.grade_id != null && u.grades?.name === gradeName));
+        setUpdates(rows);
+      });
+  }, [active]);
+
+  async function markAllRead() {
+    const unread = notifs.filter((n) => !n.is_read).map((n) => n.id);
+    if (unread.length) {
+      await supabase.from("notifications").update({ is_read: true }).in("id", unread);
+      setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    }
+  }
+
+  useEffect(() => {
+    if (configMissing || !active) return;
+    const enrollment = active.students.enrollments.find((e) => e.status === "active") ?? active.students.enrollments[0];
+    if (!enrollment) { setAtt([]); return; }
+    const [y, m] = month.split("-").map(Number);
+    const last = new Date(y, m, 0).getDate();
+    supabase.from("attendance")
+      .select("date, status")
+      .eq("enrollment_id", enrollment.id)
+      .gte("date", `${month}-01`)
+      .lte("date", `${month}-${String(last).padStart(2, "0")}`)
+      .then(({ data }) => setAtt((data as AttRow[]) ?? []));
+  }, [active, month]);
+
+  const counts = useMemo(() => {
+    const c = { present: 0, late: 0, absent: 0 };
+    att.forEach((a) => c[a.status]++);
+    return c;
+  }, [att]);
+
+  const monthGrid = useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const days = new Date(y, m, 0).getDate();
+    const map = new Map(att.map((a) => [a.date, a.status]));
+    const cells: { day: number | null; status?: string }[] = [];
+    for (let i = 0; i < first.getDay(); i++) cells.push({ day: null });
+    for (let d = 1; d <= days; d++) {
+      const key = `${month}-${String(d).padStart(2, "0")}`;
+      cells.push({ day: d, status: map.get(key) });
+    }
+    return cells;
+  }, [month, att]);
+
+  async function ack(a: Ann) {
+    if (!session) return;
+    await supabase.from("announcement_acks").insert({ announcement_id: a.id, parent_id: session.user.id });
+    setAnns((prev) => prev.map((x) => x.id === a.id
+      ? { ...x, announcement_acks: [...x.announcement_acks, { parent_id: session.user.id }] } : x));
+  }
+
+  const activeEnrollment = active?.students.enrollments.find((e) => e.status === "active") ?? active?.students.enrollments[0];
+  const monthOptions = useMemo(() => {
+    const opts: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < 10; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      opts.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    return opts;
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-silver">
+      <header className="bg-navy px-4 py-3 text-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="../images/logo.jpg" alt="" className="h-9 w-9 rounded-full object-cover" />
+            <div>
+              <div className="font-display text-sm font-semibold leading-tight">Falah Academy</div>
+              <div className="text-[11px] text-gold-light">Family Portal</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="relative">
+              <button onClick={() => { setBellOpen(!bellOpen); if (!bellOpen) markAllRead(); }}
+                className="relative text-xl" aria-label="Notifications">
+                🔔
+                {notifs.some((n) => !n.is_read) && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {notifs.filter((n) => !n.is_read).length}
+                  </span>
+                )}
+              </button>
+              {bellOpen && (
+                <div className="absolute right-0 z-20 mt-2 max-h-96 w-80 overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl">
+                  {notifs.map((n) => (
+                    <div key={n.id} className="border-b p-2.5 text-sm last:border-0">
+                      <div className="flex items-center gap-1.5 font-semibold text-navy">
+                        {n.priority === "action" ? "🔴" : n.priority === "important" ? "🟡" : "🔵"} {n.title}
+                      </div>
+                      <p className="mt-0.5 text-xs text-gray-500">{n.message}</p>
+                      <p className="mt-0.5 text-[10px] text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
+                    </div>
+                  ))}
+                  {!notifs.length && <p className="p-3 text-sm text-gray-400">No notifications.</p>}
+                </div>
+              )}
+            </div>
+            <span className="hidden text-white/70 sm:inline">{profile?.full_name}</span>
+            <button onClick={signOut} className="text-white/70 underline hover:text-white">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-5xl space-y-5 p-4 lg:p-6">
+        {configMissing && <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Platform is not connected to a database yet.</div>}
+
+        {/* Child switcher */}
+        {children.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {children.map((c) => (
+              <button key={c.student_id} onClick={() => setActive(c)}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                  active?.student_id === c.student_id ? "bg-navy text-white" : "border border-gray-300 bg-white text-gray-600 hover:bg-white/60"}`}>
+                {c.students.first_name}
+                {c.students.enrollments[0] && <span className="ml-1.5 opacity-70">· {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0].grade_name}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        {!configMissing && !children.length && (
+          <div className="rounded-xl bg-white p-6 text-sm text-gray-500 shadow-sm">
+            Assalamu Alaikum{profile ? `, ${profile.full_name}` : ""} — no students are linked to your account yet. Please contact the school office.
+          </div>
+        )}
+
+        {/* Attendance — one-line summary bar; calendar expands only on demand */}
+        <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h2 className="font-display text-lg font-semibold text-navy">
+              Attendance{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-sm font-semibold text-green-700">{counts.present} present</span>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-semibold text-amber-800">{counts.late} late</span>
+            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-sm font-semibold text-red-700">{counts.absent} absent</span>
+            <div className="ml-auto flex items-center gap-3">
+              <select value={month} onChange={(e) => setMonth(e.target.value)}
+                className="rounded border border-gray-300 px-2 py-1 text-sm">
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {new Date(m + "-15").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => setCalOpen(!calOpen)}
+                className="whitespace-nowrap text-sm font-semibold text-royal hover:underline">
+                {calOpen ? "▴ Hide calendar" : "▾ Calendar"}
+              </button>
+            </div>
+          </div>
+            {calOpen && (
+              <>
+                <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs">
+                  {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                    <div key={i} className="py-1 font-bold text-gray-400">{d}</div>
+                  ))}
+                  {monthGrid.map((c, i) => (
+                    <div key={i} className={`flex h-9 items-center justify-center rounded ${
+                      c.day == null ? "" :
+                      c.status === "present" ? "bg-green-100 font-semibold text-green-700" :
+                      c.status === "late" ? "bg-amber-100 font-semibold text-amber-800" :
+                      c.status === "absent" ? "bg-red-100 font-semibold text-red-700" :
+                      "bg-silver text-gray-400"}`}>
+                      {c.day ?? ""}
+                    </div>
+                  ))}
+                </div>
+                {activeEnrollment && (
+                  <p className="mt-3 text-xs text-gray-400">
+                    {activeEnrollment.grade_name} · {activeEnrollment.school_year}. Green = present, amber = late, red = absent.
+                  </p>
+                )}
+              </>
+            )}
+        </section>
+
+        {/* Class Updates feed */}
+        {updates.length > 0 && (
+          <section className="rounded-xl bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
+              Class Updates{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            <div className="space-y-4">
+              {updates.map((u) => (
+                <div key={u.id} className="border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{u.subject}</span>
+                    {u.enrollment_id && (
+                      <span className="rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-semibold text-navy">Just for {active?.students.first_name}</span>
+                    )}
+                    {u.homework_due && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Homework due {u.homework_due}</span>
+                    )}
+                    <span className="ml-auto text-xs text-gray-400">
+                      {new Date(u.update_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{u.note}</p>
+                  {u.attachment_thumb && (
+                    <a href={u.attachment_url ?? "#"} target="_blank" rel="noreferrer" className="mt-2 inline-block">
+                      <img src={u.attachment_thumb} alt="Attached photo" loading="lazy"
+                        className="max-h-48 rounded-lg border border-gray-200 object-cover" />
+                    </a>
+                  )}
+                  {!u.attachment_thumb && u.attachment_url && (
+                    <a href={u.attachment_url} target="_blank" rel="noreferrer"
+                      className="mt-2 inline-block text-xs font-semibold text-royal hover:underline">View attachment ↗</a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Assignments */}
+        {asgs.length > 0 && (
+          <section className="rounded-xl bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
+              Assignments{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            <div className="space-y-2">
+              {asgs.map((a) => {
+                const overdue = a.due_date && a.due_date < new Date().toISOString().slice(0, 10);
+                return (
+                  <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy">{a.subject}</span>
+                    <span className="font-semibold text-gray-800">{a.title}</span>
+                    {a.due_date && (
+                      <span className={`text-xs font-semibold ${overdue ? "text-red-600" : "text-gray-500"}`}>
+                        due {a.due_date}
+                      </span>
+                    )}
+                    {a.instructions && <span className="text-xs text-gray-500">{a.instructions}</span>}
+                    {a.file_url && (
+                      <a href={a.file_url} target="_blank" rel="noreferrer"
+                        className="ml-auto text-xs font-semibold text-royal hover:underline">Open ↗</a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Qur'an + Fees */}
+        <div className="grid gap-5 lg:grid-cols-5">
+          <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-3">
+            <h2 className="mb-4 font-display text-lg font-semibold text-navy">
+              Qur'an Learning{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            {quran.length ? (
+              <div className="space-y-3">
+                {quran.map((q, i) => (
+                  <div key={q.id} className={`rounded-lg p-3 ${i === 0 ? "bg-emerald-50" : "bg-silver/60"}`}>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      {i === 0 && <span className="rounded-full bg-emerald-brand px-2 py-0.5 text-[10px] font-bold uppercase text-white">Current</span>}
+                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-emerald-deep">{q.category}</span>
+                      <span className="font-semibold text-navy">{q.surah_topic}</span>
+                      {q.ayah_from && <span className="text-gray-500">ayah {q.ayah_from}{q.ayah_to ? `–${q.ayah_to}` : ""}</span>}
+                      {q.memorization_level && <span className="text-xs text-gray-500">({q.memorization_level})</span>}
+                      <span className="ml-auto text-xs text-gray-400">{q.assessment_date}</span>
+                    </div>
+                    {q.teacher_comment && <p className="mt-1 text-sm text-gray-600">💬 {q.teacher_comment}</p>}
+                    {q.revision && <p className="mt-1 text-sm font-semibold text-emerald-deep">📖 Practice at home: {q.revision}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-gray-400">No Qur'an progress recorded yet.</p>}
+            {acad.length > 0 && (
+              <>
+                <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wide text-gray-400">Academic Progress</h3>
+                <div className="space-y-1.5">
+                  {acad.map((a) => (
+                    <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
+                      <span className="font-semibold text-navy">{a.subject}</span>
+                      <span className="text-xs text-gray-500">{a.assessment_type}</span>
+                      {a.score != null && (
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                          {a.score}{a.max_score ? ` / ${a.max_score}` : ""}
+                        </span>
+                      )}
+                      {a.notes && <span className="text-xs text-gray-500">{a.notes}</span>}
+                      <span className="ml-auto text-xs text-gray-400">{a.assessment_date}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-2">
+            <h2 className="mb-4 font-display text-lg font-semibold text-navy">Fees</h2>
+            {fee ? (
+              Number(fee.total_amount) === 0 ? (
+                <p className="text-sm text-gray-500">No fees apply for this enrollment.</p>
+              ) : (
+                <>
+                  <div className="mb-3 flex items-center justify-between rounded-lg bg-silver p-3">
+                    <div>
+                      <div className="font-display text-xl font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}</div>
+                      <div className="text-xs text-gray-500">per {fee.billing_frequency.replace("ly", "")}</div>
+                    </div>
+                    {fee.payments.some((p) => p.payment_date.startsWith(new Date().toISOString().slice(0, 7))) ? (
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">This month pending</span>
+                    )}
+                  </div>
+                  <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">Payment history</h3>
+                  <div className="space-y-1 text-sm">
+                    {[...fee.payments].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).slice(0, 8).map((p, i) => (
+                      <div key={i} className="flex justify-between border-b py-1 last:border-0">
+                        <span className="text-gray-500">{p.payment_date}</span>
+                        <span className="font-semibold text-navy">${Number(p.amount).toFixed(2)}</span>
+                        <span className="text-xs text-gray-400">{p.payment_method}</span>
+                      </div>
+                    ))}
+                    {!fee.payments.length && <p className="text-xs text-gray-400">No payments recorded yet.</p>}
+                  </div>
+                  <p className="mt-3 text-xs text-gray-400">Payments are made at the school office; records appear here.</p>
+                </>
+              )
+            ) : <p className="text-sm text-gray-400">No fee plan set for this enrollment yet.</p>}
+          </section>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-5">
+        {/* Announcements */}
+        <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-3">
+          <h2 className="mb-4 font-display text-lg font-semibold text-navy">Announcements</h2>
+          <div className="space-y-4">
+            {anns.map((a) => {
+              const acked = a.announcement_acks.some((x) => x.parent_id === session?.user.id);
+              return (
+                <div key={a.id} className="border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {a.is_pinned && <span title="Pinned">📌</span>}
+                    <span className="font-semibold text-navy">{a.title}</span>
+                    <span className="rounded-full bg-silver px-2.5 py-0.5 text-xs text-gray-500">{a.category}</span>
+                    <span className="ml-auto text-xs text-gray-400">
+                      {a.publish_date ? new Date(a.publish_date).toLocaleDateString() : ""}
+                    </span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{a.content}</p>
+                  {a.requires_ack && (
+                    acked ? (
+                      <p className="mt-2 text-xs font-semibold text-green-600">✓ Acknowledged</p>
+                    ) : (
+                      <button onClick={() => ack(a)}
+                        className="mt-2 rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-navy-dark hover:bg-gold-light">
+                        Acknowledge
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })}
+            {!anns.length && !configMissing && <p className="text-sm text-gray-400">No announcements yet.</p>}
+          </div>
+        </section>
+
+        {/* Upcoming events */}
+        <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="mb-4 font-display text-lg font-semibold text-navy">Upcoming</h2>
+          <div className="space-y-3">
+            {events.map((e) => (
+              <div key={e.id} className="flex gap-3">
+                <div className="w-14 shrink-0 rounded-lg bg-silver py-1 text-center">
+                  <div className="text-[10px] font-bold uppercase text-gray-400">
+                    {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short" })}
+                  </div>
+                  <div className="font-display text-lg font-semibold text-navy">
+                    {new Date(e.start_date + "T12:00:00").getDate()}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-gray-800">{e.title}</div>
+                  <div className="text-xs text-gray-400">
+                    {e.event_type}{e.location ? ` · ${e.location}` : ""}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!events.length && !configMissing && <p className="text-sm text-gray-400">No upcoming events.</p>}
+          </div>
+        </section>
+        </div>
+      </main>
+    </div>
+  );
+}

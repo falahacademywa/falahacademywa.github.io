@@ -1,0 +1,32 @@
+name: Platform keep-alive
+
+# Supabase free-tier projects pause after ~1 week without traffic.
+# Pings the platform database twice a week so it never sleeps.
+# Repo secrets required (Settings > Secrets and variables > Actions):
+#   PLATFORM_SUPABASE_URL       e.g. https://rlaqpzeqmmlrdeqfbjyq.supabase.co
+#   PLATFORM_SUPABASE_ANON_KEY  the publishable (anon) key
+
+on:
+  schedule:
+    - cron: "0 14 * * 1,4" # Mon & Thu ~6-7am Pacific
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping platform REST endpoint
+        run: |
+          if [ -z "${{ secrets.PLATFORM_SUPABASE_URL }}" ]; then
+            echo "PLATFORM_SUPABASE_URL secret not set yet - skipping."
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.PLATFORM_SUPABASE_URL }}/rest/v1/school_years?select=id&limit=1" \
+            -H "apikey: ${{ secrets.PLATFORM_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.PLATFORM_SUPABASE_ANON_KEY }}")
+          echo "Supabase responded with HTTP $code"
+          if [ "$code" -ge 500 ]; then
+            echo "Server error - project may be paused or unreachable."
+            exit 1
+          fi
