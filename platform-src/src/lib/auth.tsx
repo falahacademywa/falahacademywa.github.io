@@ -90,9 +90,21 @@ export function homeFor(role: Role | undefined) {
   return role === "admin" ? "/admin" : "/parent";
 }
 
+export function Splash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-navy">
+      <div className="text-center">
+        <img src="../images/logo.jpg" alt="" className="mx-auto mb-3 h-14 w-14 animate-pulse rounded-full object-cover" />
+        <div className="font-display text-lg font-semibold text-white">Falah Academy</div>
+        <div className="mt-1 text-xs text-white/50">Loading…</div>
+      </div>
+    </div>
+  );
+}
+
 export function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { session, profile, loading } = useAuth();
-  if (loading) return <div className="p-10 text-center text-gray-500">Loading…</div>;
+  if (loading) return <Splash />;
   if (!session || !profile) return <Navigate to="/login" replace />;
   if (profile.must_change_password) return <Navigate to="/change-password" replace />;
   if (!roles.includes(profile.role)) return <Navigate to={homeFor(profile.role)} replace />;
@@ -102,7 +114,7 @@ export function RequireRole({ roles, children }: { roles: Role[]; children: Reac
 // For pages any signed-in user may reach (e.g. change-password)
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return <div className="p-10 text-center text-gray-500">Loading…</div>;
+  if (loading) return <Splash />;
   if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

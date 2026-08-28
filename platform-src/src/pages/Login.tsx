@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../lib/supabase";
-import { homeFor, useAuth } from "../lib/auth";
+import { homeFor, useAuth, Splash } from "../lib/auth";
 import type { Role } from "../lib/auth";
 
 export default function Login() {
@@ -19,6 +19,10 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Don't paint the login form until we know whether a session exists —
+  // otherwise signed-in users see it flash for a frame on refresh.
+  if (authLoading || (session && profile)) return <Splash />;
 
   async function forgot() {
     if (!email) return setError("Enter your email above first, then tap Forgot password.");
