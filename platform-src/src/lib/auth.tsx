@@ -32,11 +32,17 @@ const AuthContext = createContext<AuthState>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(!configMissing);
+  // booted: the stored session has been read from the browser. Until then we
+  // must NOT redirect anyone to /login — that race was signing users out on refresh.
+  const [booted, setBooted] = useState(configMissing);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => {
     if (configMissing) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setBooted(true);
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -53,11 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session) {
       setProfile(null);
-      setLoading(false);
       return;
     }
-    loadProfile(session.user.id).then(() => setLoading(false));
+    setProfileLoading(true);
+    loadProfile(session.user.id).finally(() => setProfileLoading(false));
   }, [session]);
+
+  const loading = !booted || profileLoading;
 
   const signOut = async () => {
     await supabase.auth.signOut();

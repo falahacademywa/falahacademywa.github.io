@@ -1,11 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../lib/supabase";
-import { homeFor } from "../lib/auth";
+import { homeFor, useAuth } from "../lib/auth";
 import type { Role } from "../lib/auth";
 
 export default function Login() {
   const nav = useNavigate();
+  const { session, profile, loading: authLoading } = useAuth();
+
+  // Already signed in? Straight to the right dashboard.
+  useEffect(() => {
+    if (!authLoading && session && profile) {
+      nav(profile.must_change_password ? "/change-password" : homeFor(profile.role), { replace: true });
+    }
+  }, [authLoading, session, profile]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
