@@ -4,7 +4,7 @@
 // row-level security policies (see supabase/platform_schema.sql).
 // Dev repo points at the DEV Supabase project; master at PROD.
 const SUPABASE_URL = "https://xettxhdspqcgmsitlahq.supabase.co";
-const SUPABASE_ANON_KEY = "REPLACE_WITH_SUPABASE_ANON_KEY";
+const SUPABASE_ANON_KEY = "sb_publishable_dveRScv2ZdRzSw5ToLoiBg_NM9bdqjC";
 
 export const configMissing =
   SUPABASE_URL.startsWith("REPLACE") || SUPABASE_ANON_KEY.startsWith("REPLACE");
