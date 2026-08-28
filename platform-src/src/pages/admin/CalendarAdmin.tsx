@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 
 interface Ev {
@@ -21,8 +21,13 @@ const typeStyles: Record<string, string> = {
   holiday: "bg-amber-100 text-amber-800",
   exam: "bg-red-100 text-red-700",
 };
+const dotColors: Record<string, string> = {
+  academic: "bg-blue-500", event: "bg-purple-500", holiday: "bg-amber-500", exam: "bg-red-500",
+};
 
 const emptyForm = { title: "", event_type: "event", start_date: "", end_date: "", location: "", description: "", grade_id: "", rsvp_enabled: false };
+
+function ym(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
 
 export default function CalendarAdmin() {
   const [rows, setRows] = useState<Ev[]>([]);
@@ -30,7 +35,7 @@ export default function CalendarAdmin() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [msg, setMsg] = useState<string | null>(null);
-  const [showPast, setShowPast] = useState(false);
+  const [month, setMonth] = useState(() => ym(new Date()));
 
   async function load() {
     if (configMissing) return;
@@ -43,49 +48,57 @@ export default function CalendarAdmin() {
   }
   useEffect(() => { load(); }, []);
 
+  // events spanning a given ISO date
+  const eventsOn = (iso: string) =>
+    rows.filter((e) => e.start_date <= iso && iso <= (e.end_date ?? e.start_date));
+
+  // School year months: Aug -> Jul
+  const yearMonths = useMemo(() => {
+    const now = new Date();
+    const startYear = now.getMonth() + 1 >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return Array.from({ length: 12 }, (_, i) => ym(new Date(startYear, 7 + i, 1)));
+  }, []);
+
+  const grid = useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const days = new Date(y, m, 0).getDate();
+    const cells: (string | null)[] = [];
+    for (let i = 0; i < first.getDay(); i++) cells.push(null);
+    for (let d = 1; d <= days; d++) cells.push(`${month}-${String(d).padStart(2, "0")}`);
+    return cells;
+  }, [month, rows]);
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    const payload = {
-      title: form.title,
-      event_type: form.event_type,
-      start_date: form.start_date,
-      end_date: form.end_date || null,
-      location: form.location || null,
+    const { error } = await supabase.from("calendar_events").insert({
+      title: form.title, event_type: form.event_type, start_date: form.start_date,
+      end_date: form.end_date || null, location: form.location || null,
       description: form.description || null,
       grade_id: form.grade_id ? Number(form.grade_id) : null,
       rsvp_enabled: form.rsvp_enabled,
-    };
-    const { error } = await supabase.from("calendar_events").insert(payload);
+    });
     if (error) return setMsg("Save failed: " + error.message);
-    setForm({ ...emptyForm });
-    setShowForm(false);
-    setMsg(null);
-    load();
+    setForm({ ...emptyForm }); setShowForm(false); setMsg(null); load();
   }
 
-  async function remove(id: string) {
-    const { error } = await supabase.from("calendar_events").delete().eq("id", id);
-    if (error) setMsg("Delete failed: " + error.message);
+  async function remove(ev: Ev) {
+    if (!confirm(`Delete "${ev.title}" (${ev.start_date})?`)) return;
+    await supabase.from("calendar_events").delete().eq("id", ev.id);
     load();
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const visible = showPast ? rows : rows.filter((r) => (r.end_date ?? r.start_date) >= today);
+  const monthLabel = new Date(month + "-15").toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   return (
-    <div className="max-w-4xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="max-w-5xl">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold text-navy">Calendar</h1>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600">
-            <input type="checkbox" checked={showPast} onChange={(e) => setShowPast(e.target.checked)} />
-            Show past events
-          </label>
-          <button onClick={() => setShowForm(!showForm)}
-            className="rounded-lg bg-emerald-brand px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-deep">
-            {showForm ? "Cancel" : "+ Add Event"}
-          </button>
-        </div>
+        <button onClick={() => setShowForm(!showForm)}
+          className="rounded-lg bg-emerald-brand px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-deep">
+          {showForm ? "Cancel" : "+ Add Event"}
+        </button>
       </div>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage the calendar.</p>}
@@ -113,8 +126,6 @@ export default function CalendarAdmin() {
           </label>
           <input placeholder="Location" className="rounded border border-gray-300 px-3 py-2 text-sm sm:col-span-2"
             value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-          <textarea placeholder="Description" rows={2} className="rounded border border-gray-300 px-3 py-2 text-sm sm:col-span-2"
-            value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={form.rsvp_enabled} onChange={(e) => setForm({ ...form, rsvp_enabled: e.target.checked })} />
             Enable RSVP
@@ -123,23 +134,88 @@ export default function CalendarAdmin() {
         </form>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        {visible.map((r) => (
-          <div key={r.id} className="flex flex-wrap items-center gap-3 border-b px-4 py-3 last:border-0 hover:bg-silver/50">
-            <div className="w-28 shrink-0 text-sm font-semibold text-navy">
-              {new Date(r.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              {r.end_date && <div className="text-xs font-normal text-gray-400">→ {new Date(r.end_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>}
+      {/* Zoomed current month */}
+      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <button onClick={() => { const [y, m] = month.split("-").map(Number); setMonth(ym(new Date(y, m - 2, 1))); }}
+            className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-silver">←</button>
+          <h2 className="font-display text-xl font-semibold text-navy">{monthLabel}</h2>
+          <button onClick={() => { const [y, m] = month.split("-").map(Number); setMonth(ym(new Date(y, m, 1))); }}
+            className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-silver">→</button>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
+            <div key={d} className="py-1 text-center text-xs font-bold text-gray-400">{d}</div>
+          ))}
+          {grid.map((iso, i) => (
+            <div key={i} className={`min-h-20 rounded-lg border p-1 ${
+              iso == null ? "border-transparent" :
+              iso === today ? "border-emerald-brand bg-emerald-50" : "border-gray-100 bg-white"}`}>
+              {iso && (
+                <>
+                  <div className={`text-right text-xs ${iso === today ? "font-bold text-emerald-deep" : "text-gray-400"}`}>
+                    {Number(iso.slice(-2))}
+                  </div>
+                  {eventsOn(iso).map((e) => (
+                    <button key={e.id + iso} onClick={() => remove(e)} title={`${e.title} — click to delete`}
+                      className={`mb-0.5 block w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-semibold ${typeStyles[e.event_type] ?? "bg-gray-100 text-gray-600"}`}>
+                      {e.title}{e.grade_id ? ` (${e.grades?.name})` : ""}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeStyles[r.event_type] ?? "bg-gray-100 text-gray-600"}`}>{r.event_type}</span>
-            <span className="flex-1 text-sm font-semibold text-gray-800">{r.title}</span>
-            {r.grade_id && <span className="rounded-full bg-navy/10 px-2.5 py-0.5 text-xs text-navy">{r.grades?.name}</span>}
-            {r.rsvp_enabled && <span className="rounded-full bg-gold/20 px-2.5 py-0.5 text-xs text-navy">RSVP</span>}
-            <button onClick={() => remove(r.id)} className="text-xs text-gray-400 hover:text-red-600">Delete</button>
-          </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-400">Click an event to delete it. Green cell = today.</p>
+      </section>
+
+      {/* Full school year */}
+      <h2 className="mb-3 font-display text-lg font-semibold text-navy">School Year at a Glance</h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {yearMonths.map((m) => {
+          const [y, mo] = m.split("-").map(Number);
+          const days = new Date(y, mo, 0).getDate();
+          const firstDow = new Date(y, mo - 1, 1).getDay();
+          const cells: (string | null)[] = [];
+          for (let i = 0; i < firstDow; i++) cells.push(null);
+          for (let d = 1; d <= days; d++) cells.push(`${m}-${String(d).padStart(2, "0")}`);
+          return (
+            <button key={m} onClick={() => setMonth(m)}
+              className={`rounded-xl border p-2 text-left shadow-sm transition hover:border-royal ${m === month ? "border-emerald-brand bg-emerald-50" : "border-gray-200 bg-white"}`}>
+              <div className="mb-1 text-center text-xs font-bold text-navy">
+                {new Date(m + "-15").toLocaleDateString("en-US", { month: "short", year: "2-digit" })}
+              </div>
+              <div className="grid grid-cols-7 gap-px">
+                {cells.map((iso, i) => {
+                  const evs = iso ? eventsOn(iso) : [];
+                  return (
+                    <div key={i} className="flex h-4 flex-col items-center justify-center">
+                      {iso && (
+                        <>
+                          <span className={`text-[8px] leading-none ${evs.length ? "font-bold text-navy" : "text-gray-400"}`}>
+                            {Number(iso.slice(-2))}
+                          </span>
+                          {evs.length > 0 && (
+                            <span className={`mt-px h-1 w-1 rounded-full ${dotColors[evs[0].event_type] ?? "bg-gray-400"}`} />
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
+        {TYPES.map((t) => (
+          <span key={t} className="flex items-center gap-1">
+            <span className={`h-2 w-2 rounded-full ${dotColors[t]}`} /> {t}
+          </span>
         ))}
-        {!configMissing && !visible.length && (
-          <p className="p-8 text-center text-sm text-gray-400">No upcoming events.</p>
-        )}
+        <span className="ml-auto">Click a month to zoom it.</span>
       </div>
     </div>
   );

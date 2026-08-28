@@ -1,6 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
+
+interface AttRow { date: string; status: "present" | "late" | "absent" }
+interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
+interface QuranRow { id: number; assessment_date: string; category: string; surah_topic: string; memorization_level: string | null; teacher_comment: string | null; revision: string | null }
+interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
 
 interface Student {
   id: string;
@@ -11,6 +16,8 @@ interface Student {
   gender: string | null;
   archived: boolean;
   notes: string | null;
+  profile_photo_url: string | null;
+  photo_pending_url: string | null;
   enrollments: { id: string; school_year: string; grade_name: string; status: string; enrollment_date: string }[];
   parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; address: string | null; must_change_password: boolean } }[];
   guardians: { id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[];
@@ -23,12 +30,17 @@ export default function StudentProfile() {
   const { id } = useParams();
   const [s, setS] = useState<Student | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [att, setAtt] = useState<AttRow[]>([]);
+  const [feeInfo, setFeeInfo] = useState<FeeInfo | null>(null);
+  const [quran, setQuran] = useState<QuranRow[]>([]);
+  const [acad, setAcad] = useState<AcadRow[]>([]);
 
   async function load() {
     if (configMissing || !id) return;
     const { data, error } = await supabase
       .from("students")
-      .select(`id, student_no, first_name, last_name, date_of_birth, gender, archived, notes,
+      .select(`id, student_no, first_name, last_name, date_of_birth, gender, archived, notes, profile_photo_url, photo_pending_url,
         enrollments ( id, school_year, grade_name, status, enrollment_date ),
         parent_students ( profiles ( full_name, email, phone, address, must_change_password ) ),
         guardians ( id, name, relationship, phone, email, sort ),
@@ -41,6 +53,70 @@ export default function StudentProfile() {
     setS(data as unknown as Student);
   }
   useEffect(() => { load(); }, [id]);
+
+  const activeEnr = s?.enrollments.find((e) => e.status === "active") ?? s?.enrollments[0];
+
+  // Attendance for selected month
+  useEffect(() => {
+    if (configMissing || !activeEnr) { setAtt([]); return; }
+    const [y, m] = month.split("-").map(Number);
+    const last = new Date(y, m, 0).getDate();
+    supabase.from("attendance").select("date, status")
+      .eq("enrollment_id", activeEnr.id)
+      .gte("date", `${month}-01`).lte("date", `${month}-${String(last).padStart(2, "0")}`)
+      .then(({ data }) => setAtt((data as AttRow[]) ?? []));
+  }, [activeEnr?.id, month]);
+
+  // Fees + progress
+  useEffect(() => {
+    if (configMissing || !activeEnr) return;
+    supabase.from("fee_plans")
+      .select("total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method )")
+      .eq("enrollment_id", activeEnr.id).maybeSingle()
+      .then(({ data }) => setFeeInfo((data as unknown as FeeInfo) ?? null));
+    supabase.from("quran_progress").select("id, assessment_date, category, surah_topic, memorization_level, teacher_comment, revision")
+      .eq("enrollment_id", activeEnr.id).order("assessment_date", { ascending: false }).limit(5)
+      .then(({ data }) => setQuran((data as QuranRow[]) ?? []));
+    supabase.from("academic_progress").select("id, assessment_date, subject, assessment_type, score, max_score, notes")
+      .eq("enrollment_id", activeEnr.id).order("assessment_date", { ascending: false }).limit(5)
+      .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
+  }, [activeEnr?.id]);
+
+  const counts = useMemo(() => {
+    const c = { present: 0, late: 0, absent: 0 };
+    att.forEach((a) => c[a.status]++);
+    return c;
+  }, [att]);
+
+  const monthGrid = useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const days = new Date(y, m, 0).getDate();
+    const map = new Map(att.map((a) => [a.date, a.status]));
+    const cells: { day: number | null; status?: string }[] = [];
+    for (let i = 0; i < first.getDay(); i++) cells.push({ day: null });
+    for (let d = 1; d <= days; d++) cells.push({ day: d, status: map.get(`${month}-${String(d).padStart(2, "0")}`) });
+    return cells;
+  }, [month, att]);
+
+  const monthOptions = useMemo(() => {
+    const opts: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < 10; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      opts.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    return opts;
+  }, []);
+
+  async function photoDecision(approve: boolean) {
+    if (!s) return;
+    await supabase.from("students").update(
+      approve ? { profile_photo_url: s.photo_pending_url, photo_pending_url: null }
+              : { photo_pending_url: null }
+    ).eq("id", s.id);
+    load();
+  }
 
   async function toggleArchive() {
     if (!s) return;
@@ -56,8 +132,16 @@ export default function StudentProfile() {
     <div className="max-w-4xl">
       <Link to="/admin/students" className="text-sm text-royal hover:underline">← Students</Link>
       <div className="mt-2 mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
+          {s.profile_photo_url ? (
+            <img src={s.profile_photo_url} alt={s.first_name}
+              className="h-16 w-16 rounded-full border-2 border-gold object-cover" />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy/10 font-display text-xl font-semibold text-navy">
+              {s.first_name[0]}{s.last_name[0]}
+            </div>
+          )}
         <div>
-          <h1 className="font-display text-2xl font-semibold text-navy">{s.first_name} {s.last_name}</h1>
           <div className="mt-1 text-sm text-gray-500">
             Student ID <span className="font-mono font-semibold">{String(s.student_no).padStart(5, "0")}</span>
             {s.date_of_birth && <> · DOB {s.date_of_birth}</>}
@@ -65,13 +149,127 @@ export default function StudentProfile() {
             {s.archived && <span className="ml-2 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Archived</span>}
           </div>
         </div>
+        </div>
         <button onClick={toggleArchive}
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
           {s.archived ? "Restore" : "Archive"}
         </button>
       </div>
 
+      {s.photo_pending_url && (
+        <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <img src={s.photo_pending_url} alt="Pending" className="h-20 w-20 rounded-lg object-cover" />
+          <div className="flex-1 text-sm text-amber-800">
+            <strong>Photo awaiting approval</strong> — a parent uploaded this picture for {s.first_name}.
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => photoDecision(true)}
+              className="rounded-lg bg-emerald-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-emerald-deep">Approve</button>
+            <button onClick={() => photoDecision(false)}
+              className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-semibold text-gray-600 hover:bg-white">Reject</button>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
+        {/* Attendance — full color calendar */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">Attendance</h2>
+            <select value={month} onChange={(e) => setMonth(e.target.value)}
+              className="rounded border border-gray-300 px-2 py-1 text-sm">
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>{new Date(m + "-15").toLocaleDateString("en-US", { month: "long", year: "numeric" })}</option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-green-100 p-2 text-center text-green-700"><b>{counts.present}</b> <span className="text-xs">present</span></div>
+            <div className="rounded-lg bg-amber-100 p-2 text-center text-amber-800"><b>{counts.late}</b> <span className="text-xs">late</span></div>
+            <div className="rounded-lg bg-red-100 p-2 text-center text-red-700"><b>{counts.absent}</b> <span className="text-xs">absent</span></div>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-xs">
+            {["S","M","T","W","T","F","S"].map((d, i) => <div key={i} className="py-1 font-bold text-gray-400">{d}</div>)}
+            {monthGrid.map((c, i) => (
+              <div key={i} className={`flex h-8 items-center justify-center rounded ${
+                c.day == null ? "" :
+                c.status === "present" ? "bg-green-100 font-semibold text-green-700" :
+                c.status === "late" ? "bg-amber-100 font-semibold text-amber-800" :
+                c.status === "absent" ? "bg-red-100 font-semibold text-red-700" :
+                "bg-silver text-gray-400"}`}>{c.day ?? ""}</div>
+            ))}
+          </div>
+        </section>
+
+        {/* Fees */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Fees</h2>
+          {feeInfo ? (
+            Number(feeInfo.total_amount) === 0 ? (
+              <p className="text-sm text-gray-500">No fee applies to this enrollment ($0 plan — no reminders sent).</p>
+            ) : (
+              <>
+                <div className="mb-3 flex items-center justify-between rounded-lg bg-silver p-3">
+                  <div>
+                    <div className="font-display text-xl font-semibold text-navy">${Number(feeInfo.total_amount).toFixed(0)}</div>
+                    <div className="text-xs text-gray-500">per {feeInfo.billing_frequency.replace("ly", "")}</div>
+                  </div>
+                  {feeInfo.start_date && feeInfo.start_date > new Date().toISOString().slice(0, 10) ? (
+                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                      Starts {new Date(feeInfo.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  ) : feeInfo.payments.some((p) => p.payment_date.startsWith(new Date().toISOString().slice(0, 7))) ? (
+                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
+                  ) : (
+                    <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">Not paid (due by the 5th)</span>
+                  )}
+                </div>
+                {[...feeInfo.payments].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).slice(0, 5).map((p, i) => (
+                  <div key={i} className="flex justify-between border-b py-1 text-sm last:border-0">
+                    <span className="text-gray-500">{p.payment_date}</span>
+                    <span className="font-semibold text-navy">${Number(p.amount).toFixed(2)}</span>
+                    <span className="text-xs text-gray-400">{p.payment_method}</span>
+                  </div>
+                ))}
+                {!feeInfo.payments.length && <p className="text-xs text-gray-400">No payments recorded yet.</p>}
+              </>
+            )
+          ) : <p className="text-sm text-gray-400">No fee plan for this enrollment.</p>}
+        </section>
+
+        {/* Progress */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Qur'an &amp; Academic Progress</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              {quran.map((q, i) => (
+                <div key={q.id} className={`mb-2 rounded-lg p-2.5 text-sm ${i === 0 ? "bg-emerald-50" : "bg-silver/60"}`}>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-emerald-deep">{q.category}</span>
+                  <span className="ml-2 font-semibold text-navy">{q.surah_topic}</span>
+                  {q.memorization_level && <span className="ml-2 text-xs text-gray-500">({q.memorization_level})</span>}
+                  <span className="float-right text-xs text-gray-400">{q.assessment_date}</span>
+                  {(q.teacher_comment || q.revision) && (
+                    <p className="mt-1 text-xs text-gray-500">{q.teacher_comment}{q.revision ? ` · Revision: ${q.revision}` : ""}</p>
+                  )}
+                </div>
+              ))}
+              {!quran.length && <p className="text-sm text-gray-400">No Qur'an entries yet.</p>}
+            </div>
+            <div>
+              {acad.map((a) => (
+                <div key={a.id} className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 p-2.5 text-sm">
+                  <span className="font-semibold text-navy">{a.subject}</span>
+                  <span className="text-xs text-gray-500">{a.assessment_type}</span>
+                  {a.score != null && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">{a.score}{a.max_score ? `/${a.max_score}` : ""}</span>}
+                  {a.notes && <span className="text-xs text-gray-500">{a.notes}</span>}
+                  <span className="ml-auto text-xs text-gray-400">{a.assessment_date}</span>
+                </div>
+              ))}
+              {!acad.length && <p className="text-sm text-gray-400">No academic entries yet.</p>}
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Enrollment History</h2>
           {s.enrollments.length ? (

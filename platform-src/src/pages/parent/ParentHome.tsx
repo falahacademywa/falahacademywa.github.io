@@ -8,6 +8,8 @@ interface Child {
     id: string;
     first_name: string;
     last_name: string;
+    profile_photo_url: string | null;
+    photo_pending_url: string | null;
     enrollments: { id: string; grade_name: string; school_year: string; status: string }[];
   };
 }
@@ -52,7 +54,7 @@ export default function ParentHome() {
       const today = new Date().toISOString().slice(0, 10);
       const [{ data: kids }, { data: evs }, { data: as }] = await Promise.all([
         supabase.from("parent_students")
-          .select("student_id, students ( id, first_name, last_name, enrollments ( id, grade_name, school_year, status ) )")
+          .select("student_id, students ( id, first_name, last_name, profile_photo_url, photo_pending_url, enrollments ( id, grade_name, school_year, status ) )")
           .order("student_id"),
         supabase.from("calendar_events").select("id, title, event_type, start_date, end_date, location, rsvp_enabled")
           .gte("start_date", today).order("start_date").limit(6),
@@ -112,6 +114,20 @@ export default function ParentHome() {
         setUpdates(rows);
       });
   }, [active]);
+
+  async function uploadPhoto(file: File) {
+    if (!active) return;
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${active.students.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from("student-photos").upload(path, file);
+    if (error) { alert("Upload failed: " + error.message); return; }
+    const { data } = supabase.storage.from("student-photos").getPublicUrl(path);
+    const { error: e2 } = await supabase.rpc("request_student_photo", { sid: active.students.id, url: data.publicUrl });
+    if (e2) { alert("Request failed: " + e2.message); return; }
+    setChildren((prev) => prev.map((c) => c.student_id === active.student_id
+      ? { ...c, students: { ...c.students, photo_pending_url: data.publicUrl } } : c));
+    alert("Photo submitted! It will appear once the school approves it.");
+  }
 
   async function markAllRead() {
     const unread = notifs.filter((n) => !n.is_read).map((n) => n.id);
@@ -241,6 +257,22 @@ export default function ParentHome() {
         {/* Attendance — one-line summary bar; calendar expands only on demand */}
         <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {active && (
+              <label className="group relative cursor-pointer" title={active.students.photo_pending_url ? "Photo awaiting school approval" : "Add or change photo"}>
+                {active.students.profile_photo_url ? (
+                  <img src={active.students.profile_photo_url} alt="" className="h-10 w-10 rounded-full border-2 border-gold object-cover" />
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-navy/10 text-sm font-bold text-navy">
+                    {active.students.first_name[0]}
+                  </span>
+                )}
+                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[10px] shadow">
+                  {active.students.photo_pending_url ? "⏳" : "📷"}
+                </span>
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
+              </label>
+            )}
             <h2 className="font-display text-lg font-semibold text-navy">
               Attendance{active ? ` — ${active.students.first_name}` : ""}
             </h2>
