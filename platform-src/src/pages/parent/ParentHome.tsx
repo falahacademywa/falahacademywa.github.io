@@ -47,6 +47,40 @@ export default function ParentHome() {
   const [calOpen, setCalOpen] = useState(false);
   const [asgs, setAsgs] = useState<Asg[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
+  const [totalDue, setTotalDue] = useState<number | null>(null);
+
+  // Family-wide amount due: for every child's plan, each month since the plan
+  // started (through the current month) with no recorded payment adds one
+  // monthly amount. $0 plans and not-yet-started plans contribute nothing.
+  useEffect(() => {
+    if (configMissing || !children.length) { setTotalDue(null); return; }
+    const enrIds = children
+      .map((c) => (c.students.enrollments.find((e) => e.status === "active") ?? c.students.enrollments[0])?.id)
+      .filter(Boolean) as string[];
+    if (!enrIds.length) return;
+    supabase.from("fee_plans")
+      .select("total_amount, billing_frequency, start_date, enrollment_id, payments ( payment_date )")
+      .in("enrollment_id", enrIds)
+      .then(({ data }) => {
+        const today = new Date();
+        const curKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+        let due = 0;
+        ((data as any[]) ?? []).forEach((p) => {
+          const amt = Number(p.total_amount);
+          if (!amt || p.billing_frequency !== "monthly") return;
+          const start = p.start_date ? new Date(p.start_date + "T12:00:00") : today;
+          const paidMonths = new Set((p.payments ?? []).map((x: { payment_date: string }) => x.payment_date.slice(0, 7)));
+          const d = new Date(start.getFullYear(), start.getMonth(), 1);
+          while (true) {
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            if (key > curKey) break;
+            if (!paidMonths.has(key)) due += amt;
+            d.setMonth(d.getMonth() + 1);
+          }
+        });
+        setTotalDue(due);
+      });
+  }, [children]);
 
   useEffect(() => {
     if (configMissing) return;
@@ -251,6 +285,21 @@ export default function ParentHome() {
         {!configMissing && !children.length && (
           <div className="rounded-xl bg-white p-6 text-sm text-gray-500 shadow-sm">
             Assalamu Alaikum{profile ? `, ${profile.full_name}` : ""} — no students are linked to your account yet. Please contact the school office.
+          </div>
+        )}
+
+        {/* Family fees due banner */}
+        {totalDue !== null && totalDue > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-3">
+            <span className="text-sm font-semibold text-red-700">
+              Family fees due: <span className="font-display text-lg">${totalDue.toFixed(0)}</span>
+            </span>
+            <span className="text-xs text-red-600">Fees are due by the 5th of each month. Payments are made at the school office.</span>
+          </div>
+        )}
+        {totalDue === 0 && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-2.5 text-sm font-semibold text-green-700">
+            ✓ All family fees are up to date. JazakAllah khair!
           </div>
         )}
 

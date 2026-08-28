@@ -35,6 +35,25 @@ export default function StudentProfile() {
   const [feeInfo, setFeeInfo] = useState<FeeInfo | null>(null);
   const [quran, setQuran] = useState<QuranRow[]>([]);
   const [acad, setAcad] = useState<AcadRow[]>([]);
+  const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+
+  // Siblings: students sharing a guardian email with this one (parent-portal-style switcher)
+  useEffect(() => {
+    if (configMissing || !id) { setSiblings([]); return; }
+    (async () => {
+      const { data: mine } = await supabase.from("guardians").select("email").eq("student_id", id).not("email", "is", null);
+      const emails = [...new Set((mine ?? []).map((g: { email: string }) => g.email.toLowerCase()))];
+      if (!emails.length) { setSiblings([]); return; }
+      const { data: sibs } = await supabase.from("guardians")
+        .select("student_id, email, students ( id, first_name, last_name, archived )")
+        .in("email", emails).neq("student_id", id);
+      const seen = new Map<string, { id: string; first_name: string; last_name: string }>();
+      (sibs as any[] ?? []).forEach((g) => {
+        if (g.students && !g.students.archived) seen.set(g.students.id, g.students);
+      });
+      setSiblings([...seen.values()]);
+    })();
+  }, [id]);
 
   async function load() {
     if (configMissing || !id) return;
@@ -155,6 +174,19 @@ export default function StudentProfile() {
           {s.archived ? "Restore" : "Archive"}
         </button>
       </div>
+
+      {siblings.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">Family:</span>
+          <span className="rounded-full bg-navy px-3 py-1 text-xs font-semibold text-white">{s.first_name}</span>
+          {siblings.map((sib) => (
+            <Link key={sib.id} to={`/admin/students/${sib.id}`}
+              className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-600 hover:border-navy hover:text-navy">
+              {sib.first_name} {sib.last_name}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {s.photo_pending_url && (
         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">

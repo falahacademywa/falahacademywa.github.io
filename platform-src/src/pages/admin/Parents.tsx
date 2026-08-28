@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 
 interface GuardianRow {
@@ -25,6 +25,7 @@ interface StudentOpt { id: string; first_name: string; last_name: string }
 type SortKey = "name" | "children" | "status";
 
 export default function Parents() {
+  const nav = useNavigate();
   const [guardians, setGuardians] = useState<GuardianRow[]>([]);
   const [accounts, setAccounts] = useState<ParentAccount[]>([]);
   const [students, setStudents] = useState<StudentOpt[]>([]);
@@ -135,7 +136,8 @@ export default function Parents() {
             {rows.map((f, i) => {
               const st = statusOf(f.email);
               return (
-                <tr key={i} className="border-b last:border-0 hover:bg-silver/60">
+                <tr key={i} onClick={() => f.kids.length && nav(`/admin/students/${f.kids[0].id}`)}
+                  className="cursor-pointer border-b last:border-0 hover:bg-silver/60">
                   <td className="px-4 py-2.5">
                     <span className="font-semibold text-navy">{f.name}</span>
                     <span className="ml-2 text-xs capitalize text-gray-400">({f.relationship})</span>
@@ -144,7 +146,7 @@ export default function Parents() {
                   <td className="px-4 py-2.5 text-gray-600">{f.email ?? "—"}</td>
                   <td className="px-4 py-2.5">
                     {f.kids.map((k) => (
-                      <Link key={k.id} to={`/admin/students/${k.id}`}
+                      <Link key={k.id} to={`/admin/students/${k.id}`} onClick={(e) => e.stopPropagation()}
                         className="mr-1.5 inline-block rounded-full bg-silver px-2.5 py-0.5 text-xs font-semibold text-navy hover:bg-navy hover:text-white">
                         {k.label}
                       </Link>
