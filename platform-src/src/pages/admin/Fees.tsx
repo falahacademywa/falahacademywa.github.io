@@ -7,6 +7,7 @@ interface PlanRow {
   plan_name: string;
   total_amount: number;
   billing_frequency: string;
+  start_date: string | null;
   status: string;
   enrollment_id: string;
   enrollments: {
@@ -137,9 +138,13 @@ export default function Fees() {
                 ${Number(r.total_amount).toFixed(0)} / {r.billing_frequency}
               </span>
               {Number(r.total_amount) > 0 && (
-                paidThisMonth(r)
-                  ? <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Paid this month</span>
-                  : <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Not paid this month</span>
+                r.start_date && r.start_date > new Date().toISOString().slice(0, 10)
+                  ? <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                      Starts {new Date(r.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  : paidThisMonth(r)
+                    ? <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Paid this month</span>
+                    : <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Not paid this month</span>
               )}
               <span className="ml-auto text-xs text-gray-400">Total received: ${paid(r).toFixed(2)}</span>
               <button onClick={() => setPayFor(payFor === r.id ? null : r.id)}

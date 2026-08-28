@@ -18,7 +18,7 @@ interface QuranRow {
   teacher_comment: string | null; revision: string | null;
 }
 interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
-interface FeePlan { id: string; total_amount: number; billing_frequency: string; payments: { payment_date: string; amount: number; payment_method: string }[] }
+interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
 interface Asg { id: string; subject: string; title: string; instructions: string | null; file_url: string | null; assigned_date: string; due_date: string | null }
 interface Update {
@@ -87,7 +87,7 @@ export default function ParentHome() {
       .order("assessment_date", { ascending: false }).limit(8)
       .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
     supabase.from("fee_plans")
-      .select("id, total_amount, billing_frequency, payments ( payment_date, amount, payment_method )")
+      .select("id, total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method )")
       .eq("enrollment_id", enr.id).maybeSingle()
       .then(({ data }) => setFee((data as unknown as FeePlan) ?? null));
     // Assignments: grade-wide for this child's grade + individual ones.
@@ -414,10 +414,14 @@ export default function ParentHome() {
                       <div className="font-display text-xl font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}</div>
                       <div className="text-xs text-gray-500">per {fee.billing_frequency.replace("ly", "")}</div>
                     </div>
-                    {fee.payments.some((p) => p.payment_date.startsWith(new Date().toISOString().slice(0, 7))) ? (
+                    {fee.start_date && fee.start_date > new Date().toISOString().slice(0, 10) ? (
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                        Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    ) : fee.payments.some((p) => p.payment_date.startsWith(new Date().toISOString().slice(0, 7))) ? (
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
                     ) : (
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">This month pending</span>
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
                     )}
                   </div>
                   <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">Payment history</h3>
