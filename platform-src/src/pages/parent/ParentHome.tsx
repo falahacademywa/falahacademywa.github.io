@@ -271,15 +271,35 @@ export default function ParentHome() {
 
         {/* Child switcher */}
         {children.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {children.map((c) => (
               <button key={c.student_id} onClick={() => setActive(c)}
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                  active?.student_id === c.student_id ? "bg-navy text-white" : "border border-gray-300 bg-white text-gray-600 hover:bg-white/60"}`}>
+                className={`flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-5 text-base font-semibold transition ${
+                  active?.student_id === c.student_id ? "bg-navy text-white shadow-md" : "border border-gray-300 bg-white text-gray-600 hover:bg-white/60"}`}>
+                {c.students.profile_photo_url ? (
+                  <img src={c.students.profile_photo_url} alt=""
+                    className={`h-12 w-12 rounded-full object-cover ${active?.student_id === c.student_id ? "border-2 border-gold" : "border border-gray-200"}`} />
+                ) : (
+                  <span className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
+                    active?.student_id === c.student_id ? "bg-white/20 text-white" : "bg-navy/10 text-navy"}`}>
+                    {c.students.first_name[0]}
+                  </span>
+                )}
                 {c.students.first_name}
-                {c.students.enrollments[0] && <span className="ml-1.5 opacity-70">· {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0].grade_name}</span>}
+                {c.students.enrollments[0] && <span className="text-sm opacity-70">· {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0].grade_name}</span>}
               </button>
             ))}
+            {active && (
+              active.students.photo_pending_url ? (
+                <span className="rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-800">⏳ Photo pending approval</span>
+              ) : (
+                <label className="cursor-pointer rounded-full border-2 border-royal bg-white px-4 py-2 text-sm font-semibold text-royal transition hover:bg-royal hover:text-white">
+                  📷 {active.students.profile_photo_url ? `Change ${active.students.first_name}'s photo` : `Add ${active.students.first_name}'s photo`}
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
+                </label>
+              )
+            )}
           </div>
         )}
         {!configMissing && !children.length && (
@@ -306,27 +326,6 @@ export default function ParentHome() {
         {/* Attendance — one-line summary bar; calendar expands only on demand */}
         <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {active && (
-              <label className="flex cursor-pointer items-center gap-2"
-                title={active.students.photo_pending_url ? "Photo awaiting school approval" : "Add or change photo"}>
-                {active.students.profile_photo_url ? (
-                  <img src={active.students.profile_photo_url} alt="" className="h-10 w-10 rounded-full border-2 border-gold object-cover" />
-                ) : (
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-navy/10 text-sm font-bold text-navy">
-                    {active.students.first_name[0]}
-                  </span>
-                )}
-                {active.students.photo_pending_url ? (
-                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">⏳ Photo pending approval</span>
-                ) : (
-                  <span className="rounded-full border border-royal px-2.5 py-1 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
-                    📷 {active.students.profile_photo_url ? "Change photo" : "Add photo"}
-                  </span>
-                )}
-                <input type="file" accept="image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
-              </label>
-            )}
             <h2 className="font-display text-lg font-semibold text-navy">
               Attendance{active ? ` — ${active.students.first_name}` : ""}
             </h2>
