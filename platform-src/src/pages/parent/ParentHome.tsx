@@ -230,14 +230,17 @@ export default function ParentHome() {
   }
 
   const activeEnrollment = active?.students.enrollments.find((e) => e.status === "active") ?? active?.students.enrollments[0];
+  // Months of the current school year only (Aug -> now), newest first
   const monthOptions = useMemo(() => {
-    const opts: string[] = [];
     const now = new Date();
-    for (let i = 0; i < 10; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const startYear = now.getMonth() + 1 >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    const opts: string[] = [];
+    const d = new Date(startYear, 7, 1);
+    while (d <= now) {
       opts.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      d.setMonth(d.getMonth() + 1);
     }
-    return opts;
+    return opts.reverse();
   }, []);
 
   return (
