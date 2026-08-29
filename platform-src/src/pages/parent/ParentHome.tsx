@@ -646,6 +646,14 @@ export default function ParentHome() {
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-gray-800">{e.title}</div>
                   <div className="text-xs text-gray-400">
+                    {e.end_date && e.end_date !== e.start_date && (
+                      <span className="mr-1.5 font-semibold text-navy">
+                        {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" – "}
+                        {new Date(e.end_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" ·"}
+                      </span>
+                    )}
                     {e.event_type}{e.location ? ` · ${e.location}` : ""}
                   </div>
                 </div>
