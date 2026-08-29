@@ -307,7 +307,8 @@ export default function ParentHome() {
         <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             {active && (
-              <label className="group relative cursor-pointer" title={active.students.photo_pending_url ? "Photo awaiting school approval" : "Add or change photo"}>
+              <label className="flex cursor-pointer items-center gap-2"
+                title={active.students.photo_pending_url ? "Photo awaiting school approval" : "Add or change photo"}>
                 {active.students.profile_photo_url ? (
                   <img src={active.students.profile_photo_url} alt="" className="h-10 w-10 rounded-full border-2 border-gold object-cover" />
                 ) : (
@@ -315,9 +316,13 @@ export default function ParentHome() {
                     {active.students.first_name[0]}
                   </span>
                 )}
-                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[10px] shadow">
-                  {active.students.photo_pending_url ? "⏳" : "📷"}
-                </span>
+                {active.students.photo_pending_url ? (
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">⏳ Photo pending approval</span>
+                ) : (
+                  <span className="rounded-full border border-royal px-2.5 py-1 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
+                    📷 {active.students.profile_photo_url ? "Change photo" : "Add photo"}
+                  </span>
+                )}
                 <input type="file" accept="image/*" className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
               </label>
