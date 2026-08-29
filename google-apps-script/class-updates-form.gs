@@ -22,7 +22,7 @@
  */
 
 var GRADES = ["Pre-K", "KG", "Grade 1", "Grade 3"];
-var SUBJECTS = ["English", "Math", "Science", "Islamic Studies", "Qur'an", "Arabic", "Other"];
+var SUBJECTS = ["English", "Mathematics", "Science", "Islamic Education", "Qur'an", "Other"];
 var STUDENT_NONE = "Whole class (default)";
 
 function createForm() {

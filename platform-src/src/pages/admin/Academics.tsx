@@ -19,7 +19,10 @@ interface AcadRow {
 }
 
 const emptyQuran = { category: "quran", surah_topic: "", ayah_from: "", ayah_to: "", memorization_level: "practicing", teacher_comment: "", revision: "" };
-const emptyAcad = { subject: "", assessment_type: "progress", score: "", max_score: "", notes: "" };
+const emptyAcad = { subject: "English", assessment_type: "progress", score: "", max_score: "", notes: "" };
+
+// KG and above track per subject; Pre-K stays generic (PRD-aligned school policy)
+const SUBJECTS = ["English", "Mathematics", "Science", "Islamic Education", "Other"];
 
 export default function Academics() {
   const { profile } = useAuth();
@@ -85,9 +88,10 @@ export default function Academics() {
   async function saveAcad(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
+    const isPreK = grades.find((g) => g.id === gradeId)?.name === "Pre-K";
     const { error } = await supabase.from("academic_progress").insert({
       enrollment_id: selected.id,
-      subject: aForm.subject,
+      subject: isPreK ? "General" : aForm.subject,
       assessment_type: aForm.assessment_type,
       score: aForm.score ? Number(aForm.score) : null,
       max_score: aForm.max_score ? Number(aForm.max_score) : null,
@@ -189,9 +193,14 @@ export default function Academics() {
       {selected && tab === "academic" && (
         <>
           <form onSubmit={saveAcad} className="mb-5 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-3">
-            <input required placeholder="Subject (Math, English…)" value={aForm.subject}
-              onChange={(e) => setAForm({ ...aForm, subject: e.target.value })}
-              className="rounded border border-gray-300 px-3 py-2 text-sm" />
+            {grades.find((g) => g.id === gradeId)?.name === "Pre-K" ? (
+              <input value="General" disabled className="rounded border border-gray-200 bg-silver px-3 py-2 text-sm text-gray-500" />
+            ) : (
+              <select value={aForm.subject} onChange={(e) => setAForm({ ...aForm, subject: e.target.value })}
+                className="rounded border border-gray-300 px-3 py-2 text-sm">
+                {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
             <select value={aForm.assessment_type} onChange={(e) => setAForm({ ...aForm, assessment_type: e.target.value })}
               className="rounded border border-gray-300 px-3 py-2 text-sm">
               {["progress", "quiz", "test", "report"].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}

@@ -137,7 +137,7 @@ export default function ParentHome() {
       .order("assessment_date", { ascending: false }).limit(8)
       .then(({ data }) => setQuran((data as QuranRow[]) ?? []));
     supabase.from("academic_progress").select("*").eq("enrollment_id", enr.id)
-      .order("assessment_date", { ascending: false }).limit(8)
+      .order("assessment_date", { ascending: false }).limit(40)
       .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
     supabase.from("fee_plans")
       .select("id, total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method )")
@@ -511,26 +511,46 @@ export default function ParentHome() {
                 ))}
               </div>
             ) : <p className="text-sm text-gray-400">No Qur'an progress recorded yet.</p>}
-            {acad.length > 0 && (
-              <>
-                <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wide text-gray-400">Academic Progress</h3>
-                <div className="space-y-1.5">
-                  {acad.map((a) => (
-                    <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
-                      <span className="font-semibold text-navy">{a.subject}</span>
-                      <span className="text-xs text-gray-500">{a.assessment_type}</span>
-                      {a.score != null && (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                          {a.score}{a.max_score ? ` / ${a.max_score}` : ""}
-                        </span>
-                      )}
-                      {a.notes && <span className="text-xs text-gray-500">{a.notes}</span>}
-                      <span className="ml-auto text-xs text-gray-400">{a.assessment_date}</span>
-                    </div>
-                  ))}
+            {acad.length > 0 && (() => {
+              const gradeName = active?.students.enrollments.find((e) => e.status === "active")?.grade_name ?? "";
+              const isPreK = gradeName === "Pre-K";
+              const row = (a: AcadRow) => (
+                <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
+                  {isPreK && <span className="font-semibold text-navy">{a.subject}</span>}
+                  <span className="text-xs text-gray-500">{a.assessment_type}</span>
+                  {a.score != null && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                      {a.score}{a.max_score ? ` / ${a.max_score}` : ""}
+                    </span>
+                  )}
+                  {a.notes && <span className="text-xs text-gray-600">{a.notes}</span>}
+                  <span className="ml-auto text-xs text-gray-400">{a.assessment_date}</span>
                 </div>
-              </>
-            )}
+              );
+              if (isPreK) {
+                return (
+                  <>
+                    <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wide text-gray-400">Learning Progress</h3>
+                    <div className="space-y-1.5">{acad.map(row)}</div>
+                  </>
+                );
+              }
+              const ORDER = ["English", "Mathematics", "Science", "Islamic Education"];
+              const groups = new Map<string, AcadRow[]>();
+              acad.forEach((a) => groups.set(a.subject, [...(groups.get(a.subject) ?? []), a]));
+              const keys = [...groups.keys()].sort((a, b) => {
+                const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+                return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+              });
+              return keys.map((subj) => (
+                <div key={subj}>
+                  <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wide text-gray-400">
+                    {subj} — {active?.students.first_name}
+                  </h3>
+                  <div className="space-y-1.5">{groups.get(subj)!.slice(0, 5).map(row)}</div>
+                </div>
+              ));
+            })()}
           </section>
 
           <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-2">
