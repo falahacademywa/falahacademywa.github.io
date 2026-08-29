@@ -22,6 +22,14 @@ interface QuranRow {
 interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
 interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
+
+// Payment channels shown in the "How to pay" dialog.
+// TODO: replace placeholders with the school's real details.
+const PAY_INFO = {
+  zelle: { name: "Falah Academy", contact: "(to be provided by the school)" },
+  bank: { bankName: "(bank name)", accountName: "Falah Academy", accountNo: "(account number)", routing: "(routing number)" },
+  note: "Please include your child's name in the payment memo.",
+};
 interface Asg { id: string; subject: string; title: string; instructions: string | null; file_url: string | null; assigned_date: string; due_date: string | null }
 interface Update {
   id: string; subject: string; note: string; update_date: string; homework_due: string | null;
@@ -48,6 +56,7 @@ export default function ParentHome() {
   const [asgs, setAsgs] = useState<Asg[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [feeSummary, setFeeSummary] = useState<{ due: number; anyStarted: boolean; futureStart: string | null; hasPaidPlans: boolean } | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
 
   // Family-wide amount due: for every child's plan, each month since the plan
   // started (through the current month) with no recorded payment adds one
@@ -316,25 +325,45 @@ export default function ParentHome() {
           </div>
         )}
 
-        {/* Family fees banner: due / not-started / up-to-date */}
-        {feeSummary && feeSummary.hasPaidPlans && (
-          feeSummary.due > 0 ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-3">
-              <span className="text-sm font-semibold text-red-700">
-                Family fees due: <span className="font-display text-lg">${feeSummary.due.toFixed(0)}</span>
-              </span>
-              <span className="text-xs text-red-600">Fees are due by the 5th of each month. Payments are made at the school office.</span>
+        {/* Family fees banner: shown ONLY when something is due */}
+        {feeSummary && feeSummary.due > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-3">
+            <span className="text-sm font-semibold text-red-700">
+              Fees due: <span className="font-display text-lg">${feeSummary.due.toFixed(0)}</span>
+            </span>
+            <span className="text-xs text-red-600">Due by the 5th of the month.</span>
+            <button onClick={() => setPayOpen(true)}
+              className="ml-auto rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700">
+              How to pay
+            </button>
+          </div>
+        )}
+
+        {/* How-to-pay dialog */}
+        {payOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPayOpen(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-display text-lg font-semibold text-navy">How to pay</h3>
+                <button onClick={() => setPayOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+              </div>
+              <div className="space-y-4 text-sm">
+                <div className="rounded-xl bg-silver p-4">
+                  <div className="mb-1 font-bold text-navy">Zelle</div>
+                  <div className="text-gray-700">Recipient: {PAY_INFO.zelle.name}</div>
+                  <div className="text-gray-700">Send to: {PAY_INFO.zelle.contact}</div>
+                </div>
+                <div className="rounded-xl bg-silver p-4">
+                  <div className="mb-1 font-bold text-navy">Bank transfer</div>
+                  <div className="text-gray-700">Bank: {PAY_INFO.bank.bankName}</div>
+                  <div className="text-gray-700">Account name: {PAY_INFO.bank.accountName}</div>
+                  <div className="text-gray-700">Account #: {PAY_INFO.bank.accountNo}</div>
+                  <div className="text-gray-700">Routing #: {PAY_INFO.bank.routing}</div>
+                </div>
+                <p className="text-xs text-gray-500">{PAY_INFO.note} Cash and check are also accepted at the school office. Your payment appears here once the office records it.</p>
+              </div>
             </div>
-          ) : !feeSummary.anyStarted && feeSummary.futureStart ? (
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-2.5 text-sm font-semibold text-blue-700">
-              School fees begin {new Date(feeSummary.futureStart + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" })} —
-              first payment due by {new Date(feeSummary.futureStart + "T12:00:00").toLocaleDateString("en-US", { month: "long" })} 5 at the school office.
-            </div>
-          ) : (
-            <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-2.5 text-sm font-semibold text-green-700">
-              ✓ All family fees are up to date. JazakAllah khair!
-            </div>
-          )
+          </div>
         )}
 
         {/* Attendance — one-line summary bar; calendar expands only on demand */}
@@ -523,18 +552,39 @@ export default function ParentHome() {
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
                     )}
                   </div>
-                  <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">Payment history</h3>
+                  <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">Monthly status</h3>
                   <div className="space-y-1 text-sm">
-                    {[...fee.payments].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).slice(0, 8).map((p, i) => (
-                      <div key={i} className="flex justify-between border-b py-1 last:border-0">
-                        <span className="text-gray-500">{p.payment_date}</span>
-                        <span className="font-semibold text-navy">${Number(p.amount).toFixed(2)}</span>
-                        <span className="text-xs text-gray-400">{p.payment_method}</span>
-                      </div>
-                    ))}
-                    {!fee.payments.length && <p className="text-xs text-gray-400">No payments recorded yet.</p>}
+                    {(() => {
+                      const today = new Date();
+                      const curKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+                      const start = fee.start_date ? new Date(fee.start_date + "T12:00:00") : today;
+                      const months: { key: string; label: string; payment?: { amount: number; payment_date: string } }[] = [];
+                      const d = new Date(start.getFullYear(), start.getMonth(), 1);
+                      while (true) {
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                        if (key > curKey) break;
+                        months.push({
+                          key,
+                          label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+                          payment: fee.payments.find((p) => p.payment_date.startsWith(key)),
+                        });
+                        d.setMonth(d.getMonth() + 1);
+                      }
+                      if (!months.length) return <p className="text-xs text-gray-400">First month begins {fee.start_date ? new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "soon"}.</p>;
+                      return months.reverse().map((m) => (
+                        <div key={m.key} className="flex items-center justify-between border-b py-1.5 last:border-0">
+                          <span className="text-gray-600">{m.label}</span>
+                          {m.payment ? (
+                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                              Fees Paid ✓ <span className="font-normal text-green-600">(${Number(m.payment.amount).toFixed(0)} · {m.payment.payment_date.slice(5)})</span>
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Fees Due</span>
+                          )}
+                        </div>
+                      ));
+                    })()}
                   </div>
-                  <p className="mt-3 text-xs text-gray-400">Payments are made at the school office; records appear here.</p>
                 </>
               )
             ) : <p className="text-sm text-gray-400">No fee plan set for this enrollment yet.</p>}
