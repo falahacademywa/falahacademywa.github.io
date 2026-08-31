@@ -46,8 +46,10 @@ export default function Fees() {
     ]);
     setPlans(((p as unknown as PlanRow[]) ?? []).sort((a, b) =>
       a.enrollments.students.last_name.localeCompare(b.enrollments.students.last_name)));
-    setUnplanned(((e as unknown as (EnrollmentOpt & { fee_plans: unknown[] })[]) ?? [])
-      .filter((x) => !x.fee_plans?.length));
+    // fee_plans.enrollment_id is UNIQUE, so PostgREST embeds it as a to-one
+    // object (or null) — never an array with .length.
+    setUnplanned(((e as unknown as (EnrollmentOpt & { fee_plans: unknown })[]) ?? [])
+      .filter((x) => !x.fee_plans || (Array.isArray(x.fee_plans) && !x.fee_plans.length)));
   }
   useEffect(() => { load(); }, []);
 

@@ -196,6 +196,8 @@ export default function ParentHome() {
     if (e2) { alert("Request failed: " + e2.message); return; }
     setChildren((prev) => prev.map((c) => c.student_id === active.student_id
       ? { ...c, students: { ...c.students, photo_pending_url: data.publicUrl } } : c));
+    setActive((prev) => prev
+      ? { ...prev, students: { ...prev.students, photo_pending_url: data.publicUrl } } : prev);
     alert("Photo submitted! It will appear once the school approves it.");
   }
 

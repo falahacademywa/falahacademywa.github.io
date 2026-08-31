@@ -19,7 +19,7 @@ interface Student {
   profile_photo_url: string | null;
   photo_pending_url: string | null;
   enrollments: { id: string; school_year: string; grade_name: string; status: string; enrollment_date: string }[];
-  parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; address: string | null; must_change_password: boolean } }[];
+  parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; must_change_password: boolean } }[];
   guardians: { id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[];
   emergency_contacts: { id: string; name: string; phone: string; relationship: string | null; is_primary: boolean }[];
   medical_info: { allergies: string | null; medical_conditions: string | null; medications: string | null } | null;
@@ -61,7 +61,7 @@ export default function StudentProfile() {
       .from("students")
       .select(`id, student_no, first_name, last_name, date_of_birth, gender, archived, notes, profile_photo_url, photo_pending_url,
         enrollments ( id, school_year, grade_name, status, enrollment_date ),
-        parent_students ( profiles ( full_name, email, phone, address, must_change_password ) ),
+        parent_students ( profiles ( full_name, email, phone, must_change_password ) ),
         guardians ( id, name, relationship, phone, email, sort ),
         emergency_contacts ( id, name, phone, relationship, is_primary ),
         medical_info ( allergies, medical_conditions, medications ),
@@ -164,6 +164,7 @@ export default function StudentProfile() {
             </div>
           )}
         <div>
+          <h1 className="font-display text-2xl font-semibold text-navy">{s.first_name} {s.last_name}</h1>
           <div className="mt-1 text-sm text-gray-500">
             Student ID <span className="font-mono font-semibold">{String(s.student_no).padStart(5, "0")}</span>
             {s.date_of_birth && <> · DOB {s.date_of_birth}</>}
@@ -363,9 +364,6 @@ export default function StudentProfile() {
                     </div>
                   </div>
                 ))}
-                {accounts.find((a) => a.address) && (
-                  <p className="mt-2 text-xs text-gray-500">🏠 {accounts.find((a) => a.address)?.address}</p>
-                )}
               </>
             );
           })()}
