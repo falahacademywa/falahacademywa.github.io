@@ -57,6 +57,25 @@ export default function ParentHome() {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [feeSummary, setFeeSummary] = useState<{ due: number; anyStarted: boolean; futureStart: string | null; hasPaidPlans: boolean } | null>(null);
   const [payOpen, setPayOpen] = useState(false);
+  const [calModalOpen, setCalModalOpen] = useState(false);
+  const [allEvents, setAllEvents] = useState<Ev[] | null>(null);
+  const [fbOpen, setFbOpen] = useState(false);
+  const [fbCategory, setFbCategory] = useState("general");
+  const [fbMessage, setFbMessage] = useState("");
+  const [fbState, setFbState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  const ICS_URL = "https://falahacademywa.org/falah-academy-2026-2027.ics";
+
+  async function openFullCalendar() {
+    setCalModalOpen(true);
+    if (allEvents === null && !configMissing) {
+      const { data } = await supabase
+        .from("calendar_events")
+        .select("id, title, event_type, start_date, end_date, location, rsvp_enabled")
+        .order("start_date");
+      setAllEvents((data as Ev[]) ?? []);
+    }
+  }
 
   // Family-wide amount due: for every child's plan, each month since the plan
   // started (through the current month) with no recorded payment adds one
@@ -178,6 +197,16 @@ export default function ParentHome() {
     setChildren((prev) => prev.map((c) => c.student_id === active.student_id
       ? { ...c, students: { ...c.students, photo_pending_url: data.publicUrl } } : c));
     alert("Photo submitted! It will appear once the school approves it.");
+  }
+
+  async function sendFeedback() {
+    if (!session || !fbMessage.trim() || fbState === "sending") return;
+    setFbState("sending");
+    const { error } = await supabase.from("feedback")
+      .insert({ parent_id: session.user.id, category: fbCategory, message: fbMessage.trim() });
+    if (error) { setFbState("error"); return; }
+    setFbState("sent");
+    setFbMessage("");
   }
 
   async function markAllRead() {
@@ -320,6 +349,10 @@ export default function ParentHome() {
                 </label>
               )
             )}
+            <button onClick={() => { setFbOpen(true); setFbState("idle"); }}
+              className="ml-auto rounded-full border-2 border-emerald-brand bg-white px-4 py-2 text-sm font-semibold text-emerald-deep transition hover:bg-emerald-brand hover:text-white">
+              💬 Feedback
+            </button>
           </div>
         )}
         {!configMissing && !children.length && (
@@ -364,6 +397,111 @@ export default function ParentHome() {
                   <div className="text-gray-700">Routing #: {PAY_INFO.bank.routing}</div>
                 </div>
                 <p className="text-xs text-gray-500">{PAY_INFO.note} Cash and check are also accepted at the school office. Your payment appears here once the office records it.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Feedback dialog */}
+        {fbOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFbOpen(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-display text-lg font-semibold text-navy">💬 Feedback</h3>
+                <button onClick={() => setFbOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+              </div>
+              {fbState === "sent" ? (
+                <div className="space-y-4 text-center">
+                  <p className="text-3xl">✅</p>
+                  <p className="text-sm text-gray-700">JazakAllah Khair! Your feedback has been sent to the school.</p>
+                  <button onClick={() => setFbOpen(false)}
+                    className="rounded-full bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-royal">Close</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-500">Questions, concerns, or suggestions — we read every message.</p>
+                  <select value={fbCategory} onChange={(e) => setFbCategory(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 p-2.5 text-sm">
+                    <option value="general">General</option>
+                    <option value="attendance">Attendance</option>
+                    <option value="fees">Fees</option>
+                    <option value="class">Class / Teacher</option>
+                    <option value="portal">Portal issue</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <textarea value={fbMessage} onChange={(e) => setFbMessage(e.target.value)} rows={5}
+                    placeholder="Write your feedback here..."
+                    className="w-full rounded-lg border border-gray-300 p-2.5 text-sm" />
+                  {fbState === "error" && <p className="text-xs text-red-600">Could not send — please try again, or email falahacademywa@gmail.com.</p>}
+                  <button onClick={sendFeedback} disabled={!fbMessage.trim() || fbState === "sending"}
+                    className="w-full rounded-full bg-emerald-brand py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-deep disabled:opacity-40">
+                    {fbState === "sending" ? "Sending..." : "Send feedback"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Full academic calendar dialog */}
+        {calModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setCalModalOpen(false)}>
+            <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b p-5 pb-3">
+                <h3 className="font-display text-lg font-semibold text-navy">Academic Calendar 2026–2027</h3>
+                <button onClick={() => setCalModalOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+              </div>
+              <div className="flex flex-wrap gap-2 border-b bg-silver/50 px-5 py-3">
+                <a href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(ICS_URL.replace("https://", "webcal://"))}`}
+                  target="_blank" rel="noreferrer"
+                  className="rounded-full bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-royal">
+                  Add to Google Calendar
+                </a>
+                <a href={ICS_URL.replace("https://", "webcal://")}
+                  className="rounded-full border border-navy px-3 py-1.5 text-xs font-semibold text-navy hover:bg-navy hover:text-white">
+                  Apple / Outlook
+                </a>
+                <a href={ICS_URL} download
+                  className="rounded-full border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
+                  Download .ics
+                </a>
+              </div>
+              <div className="flex-1 overflow-y-auto p-5">
+                {allEvents === null && <p className="text-sm text-gray-400">Loading…</p>}
+                {allEvents && (() => {
+                  const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+                    new Date(iso + "T12:00:00").toLocaleDateString("en-US", opts);
+                  const groups = new Map<string, Ev[]>();
+                  allEvents.forEach((e) => {
+                    const key = e.start_date.slice(0, 7);
+                    groups.set(key, [...(groups.get(key) ?? []), e]);
+                  });
+                  const chip: Record<string, string> = {
+                    academic: "bg-blue-100 text-blue-700", event: "bg-purple-100 text-purple-700",
+                    holiday: "bg-amber-100 text-amber-800", exam: "bg-red-100 text-red-700",
+                  };
+                  const today = new Date().toISOString().slice(0, 10);
+                  return [...groups.entries()].map(([month, evs]) => (
+                    <div key={month} className="mb-4">
+                      <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">
+                        {fmt(month + "-15", { month: "long", year: "numeric" })}
+                      </h4>
+                      {evs.map((e) => (
+                        <div key={e.id} className={`mb-1.5 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                          (e.end_date ?? e.start_date) < today ? "bg-silver/40 opacity-60" : "bg-silver/70"}`}>
+                          <span className="w-24 shrink-0 text-xs font-semibold text-navy">
+                            {fmt(e.start_date, { month: "short", day: "numeric" })}
+                            {e.end_date && e.end_date !== e.start_date && <> – {fmt(e.end_date, { month: "short", day: "numeric" })}</>}
+                          </span>
+                          <span className="font-semibold text-gray-800">{e.title}</span>
+                          <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip[e.event_type] ?? "bg-gray-100 text-gray-600"}`}>
+                            {e.event_type}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
           </div>
@@ -651,7 +789,13 @@ export default function ParentHome() {
 
         {/* Upcoming events */}
         <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-4 font-display text-lg font-semibold text-navy">Upcoming</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold text-navy">Upcoming</h2>
+            <button onClick={openFullCalendar}
+              className="rounded-full border border-royal px-3 py-1 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
+              📅 Full Academic Calendar
+            </button>
+          </div>
           <div className="space-y-3">
             {events.map((e) => (
               <div key={e.id} className="flex gap-3">

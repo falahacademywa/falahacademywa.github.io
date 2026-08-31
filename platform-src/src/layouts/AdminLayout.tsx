@@ -14,6 +14,7 @@ const nav = [
   { to: "/admin/updates", label: "Class Updates" },
   { to: "/admin/calendar", label: "Calendar" },
   { to: "/admin/announcements", label: "Announcements" },
+  { to: "/admin/feedback", label: "Feedback" },
   { to: "/admin/reports", label: "Reports" },
   { to: "/admin/settings", label: "Settings" },
 ];

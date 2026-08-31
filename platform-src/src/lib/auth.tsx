@@ -43,7 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setBooted(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    // Supabase fires SIGNED_IN / TOKEN_REFRESHED on every tab refocus; keeping
+    // the old session object when the user is unchanged avoids re-running the
+    // profile effect, which unmounted the whole portal (closing modals, losing
+    // scroll and half-typed forms).
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>
+      setSession((prev) => (prev?.user.id === s?.user.id ? prev : s)));
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -104,7 +109,9 @@ export function Splash() {
 
 export function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { session, profile, loading } = useAuth();
-  if (loading) return <Splash />;
+  // Splash only before the FIRST profile load — a background re-fetch for the
+  // same user must not unmount the page beneath it.
+  if (loading && !profile) return <Splash />;
   if (!session || !profile) return <Navigate to="/login" replace />;
   if (profile.must_change_password) return <Navigate to="/change-password" replace />;
   if (!roles.includes(profile.role)) return <Navigate to={homeFor(profile.role)} replace />;
