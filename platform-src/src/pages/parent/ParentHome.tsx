@@ -63,6 +63,11 @@ export default function ParentHome() {
   const [fbCategory, setFbCategory] = useState("general");
   const [fbMessage, setFbMessage] = useState("");
   const [fbState, setFbState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [myOpen, setMyOpen] = useState(false);
+  const [myPhone, setMyPhone] = useState("");
+  const [myAddress, setMyAddress] = useState("");
+  const [myState, setMyState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [addrReady, setAddrReady] = useState(true);
 
   const ICS_URL = "https://falahacademywa.org/falah-academy-2026-2027.ics";
 
@@ -201,6 +206,32 @@ export default function ParentHome() {
     alert("Photo submitted! It will appear once the school approves it.");
   }
 
+  async function openMyInfo() {
+    setMyOpen(true);
+    setMyState("idle");
+    if (!session || configMissing) return;
+    // address ships ahead of the phase-10 column in some environments —
+    // fall back to phone-only if the column isn't there yet.
+    const r = await supabase.from("profiles").select("phone, address").eq("id", session.user.id).single();
+    let row: { phone?: string | null; address?: string | null } | null = r.data;
+    if (r.error) {
+      setAddrReady(false);
+      const r2 = await supabase.from("profiles").select("phone").eq("id", session.user.id).single();
+      row = r2.data;
+    }
+    setMyPhone(row?.phone ?? "");
+    setMyAddress(row?.address ?? "");
+  }
+
+  async function saveMyInfo() {
+    if (!session || myState === "saving") return;
+    setMyState("saving");
+    const patch: Record<string, string | null> = { phone: myPhone.trim() || null };
+    if (addrReady) patch.address = myAddress.trim() || null;
+    const { error } = await supabase.from("profiles").update(patch).eq("id", session.user.id);
+    setMyState(error ? "error" : "saved");
+  }
+
   async function sendFeedback() {
     if (!session || !fbMessage.trim() || fbState === "sending") return;
     setFbState("sending");
@@ -311,7 +342,8 @@ export default function ParentHome() {
                 </div>
               )}
             </div>
-            <span className="hidden text-white/70 sm:inline">{profile?.full_name}</span>
+            <button onClick={openMyInfo} className="hidden text-white/70 underline hover:text-white sm:inline">{profile?.full_name}</button>
+            <button onClick={openMyInfo} className="text-white/70 underline hover:text-white sm:hidden">My Info</button>
             <button onClick={signOut} className="text-white/70 underline hover:text-white">Sign out</button>
           </div>
         </div>
@@ -399,6 +431,49 @@ export default function ParentHome() {
                   <div className="text-gray-700">Routing #: {PAY_INFO.bank.routing}</div>
                 </div>
                 <p className="text-xs text-gray-500">{PAY_INFO.note} Cash and check are also accepted at the school office. Your payment appears here once the office records it.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* My Info dialog: parents keep their own phone + home address current */}
+        {myOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMyOpen(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-display text-lg font-semibold text-navy">My Contact Info</h3>
+                <button onClick={() => setMyOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Name</div>
+                  <div className="rounded-lg bg-silver px-3 py-2 text-gray-700">{profile?.full_name}</div>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Login email</div>
+                  <div className="rounded-lg bg-silver px-3 py-2 text-gray-700">{session?.user.email}</div>
+                  <p className="mt-1 text-[11px] text-gray-400">To change your name or login email, contact the school office.</p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">Phone</label>
+                  <input value={myPhone} onChange={(e) => { setMyPhone(e.target.value); setMyState("idle"); }}
+                    placeholder="(555) 123-4567"
+                    className="w-full rounded-lg border border-gray-300 p-2.5" />
+                </div>
+                {addrReady && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">Home address</label>
+                    <textarea value={myAddress} onChange={(e) => { setMyAddress(e.target.value); setMyState("idle"); }} rows={2}
+                      placeholder="Street, City, State ZIP"
+                      className="w-full rounded-lg border border-gray-300 p-2.5" />
+                  </div>
+                )}
+                {myState === "error" && <p className="text-xs text-red-600">Could not save — please try again.</p>}
+                {myState === "saved" && <p className="text-xs font-semibold text-emerald-deep">✓ Saved — the school sees the update right away.</p>}
+                <button onClick={saveMyInfo} disabled={myState === "saving"}
+                  className="w-full rounded-full bg-navy py-2.5 font-semibold text-white transition hover:bg-royal disabled:opacity-40">
+                  {myState === "saving" ? "Saving..." : "Save"}
+                </button>
               </div>
             </div>
           </div>

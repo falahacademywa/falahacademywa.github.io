@@ -36,6 +36,7 @@ export default function StudentProfile() {
   const [quran, setQuran] = useState<QuranRow[]>([]);
   const [acad, setAcad] = useState<AcadRow[]>([]);
   const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  const [addrMap, setAddrMap] = useState<Record<string, string>>({});
 
   // Siblings: students sharing a guardian email with this one (parent-portal-style switcher)
   useEffect(() => {
@@ -70,6 +71,14 @@ export default function StudentProfile() {
       .single();
     if (error) setErr(error.message);
     setS(data as unknown as Student);
+    // Home addresses live on profiles.address (phase 10). Fetched separately
+    // and guarded so environments without the column still render the page.
+    const { data: addr } = await supabase.from("parent_students")
+      .select("profiles ( email, address )").eq("student_id", id);
+    const m: Record<string, string> = {};
+    ((addr as unknown as { profiles: { email: string | null; address: string | null } }[]) ?? [])
+      .forEach((r) => { if (r.profiles?.email && r.profiles.address) m[r.profiles.email.toLowerCase()] = r.profiles.address; });
+    setAddrMap(m);
   }
   useEffect(() => { load(); }, [id]);
 
@@ -351,6 +360,9 @@ export default function StudentProfile() {
                       {g.phone && <span className="mr-3">📞 {g.phone}</span>}
                       {g.email && <span>✉️ {g.email}</span>}
                     </div>
+                    {g.email && addrMap[g.email.toLowerCase()] && (
+                      <div className="mt-0.5 text-xs text-gray-500">🏠 {addrMap[g.email.toLowerCase()]}</div>
+                    )}
                   </div>
                 ))}
                 {/* accounts that exist but aren't in the guardians registry */}
@@ -362,6 +374,9 @@ export default function StudentProfile() {
                       {a.phone && <span className="mr-3">📞 {a.phone}</span>}
                       {a.email && <span>✉️ {a.email}</span>}
                     </div>
+                    {a.email && addrMap[a.email.toLowerCase()] && (
+                      <div className="mt-0.5 text-xs text-gray-500">🏠 {addrMap[a.email.toLowerCase()]}</div>
+                    )}
                   </div>
                 ))}
               </>

@@ -33,6 +33,7 @@ export default function Parents() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortAsc, setSortAsc] = useState(true);
   const [linking, setLinking] = useState<string | null>(null);
+  const [addrMap, setAddrMap] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
@@ -49,6 +50,14 @@ export default function Parents() {
     setGuardians((g as unknown as GuardianRow[]) ?? []);
     setAccounts((p as unknown as ParentAccount[]) ?? []);
     setStudents(s ?? []);
+    // Home addresses (profiles.address, phase 10) — guarded separately so
+    // environments without the column still render the page.
+    const { data: addr } = await supabase.from("profiles")
+      .select("email, address").eq("role", "parent").not("address", "is", null);
+    const m: Record<string, string> = {};
+    ((addr as { email: string | null; address: string | null }[]) ?? [])
+      .forEach((r) => { if (r.email && r.address) m[r.email.toLowerCase()] = r.address; });
+    setAddrMap(m);
   }
   useEffect(() => { load(); }, []);
 
@@ -142,8 +151,13 @@ export default function Parents() {
                     <span className="font-semibold text-navy">{f.name}</span>
                     <span className="ml-2 text-xs capitalize text-gray-400">({f.relationship})</span>
                   </td>
-                  <td className="px-4 py-2.5 text-gray-600">{f.phone ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{f.email ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{accountFor(f.email)?.phone ?? f.phone ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-600">
+                    {f.email ?? "—"}
+                    {f.email && addrMap[f.email.toLowerCase()] && (
+                      <div className="mt-0.5 text-xs text-gray-400">🏠 {addrMap[f.email.toLowerCase()]}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">
                     {f.kids.map((k) => (
                       <Link key={k.id} to={`/admin/students/${k.id}`} onClick={(e) => e.stopPropagation()}
