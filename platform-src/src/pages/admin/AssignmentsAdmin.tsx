@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import { todayStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
 
 interface Asg {
@@ -70,7 +71,7 @@ export default function AssignmentsAdmin() {
     load();
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
 
   return (
     <div className="max-w-4xl">

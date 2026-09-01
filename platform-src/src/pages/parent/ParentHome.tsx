@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import { todayStr, monthStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
 
 interface Child {
@@ -23,11 +24,11 @@ interface AcadRow { id: number; assessment_date: string; subject: string; assess
 interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
 
-// Payment channels shown in the "How to pay" dialog.
-// TODO: replace placeholders with the school's real details.
+// Payment channels shown in the "How to pay" dialog. Bank account details are
+// deliberately NOT here — this bundle is publicly readable; the office shares
+// them directly with families who ask.
 const PAY_INFO = {
-  zelle: { name: "Falah Academy", contact: "(to be provided by the school)" },
-  bank: { bankName: "(bank name)", accountName: "Falah Academy", accountNo: "(account number)", routing: "(routing number)" },
+  zelle: { name: "Falah Academy", contact: "falahacademywa@gmail.com" },
   note: "Please include your child's name in the payment memo.",
 };
 interface Asg { id: string; subject: string; title: string; instructions: string | null; file_url: string | null; assigned_date: string; due_date: string | null }
@@ -43,7 +44,7 @@ export default function ParentHome() {
   const { profile, session, signOut } = useAuth();
   const [children, setChildren] = useState<Child[]>([]);
   const [active, setActive] = useState<Child | null>(null);
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(() => monthStr());
   const [att, setAtt] = useState<AttRow[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
   const [anns, setAnns] = useState<Ann[]>([]);
@@ -68,6 +69,8 @@ export default function ParentHome() {
   const [myAddress, setMyAddress] = useState("");
   const [myState, setMyState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [addrReady, setAddrReady] = useState(true);
+  const [famGuardians, setFamGuardians] = useState<{ name: string; relationship: string; phone: string | null; email: string | null }[]>([]);
+  const [famContacts, setFamContacts] = useState<{ student: string; name: string; phone: string; relationship: string | null }[]>([]);
 
   const ICS_URL = "https://falahacademywa.org/falah-academy-2026-2027.ics";
 
@@ -96,7 +99,7 @@ export default function ParentHome() {
       .in("enrollment_id", enrIds)
       .then(({ data }) => {
         const today = new Date();
-        const todayIso = today.toISOString().slice(0, 10);
+        const todayIso = todayStr();
         const curKey = todayIso.slice(0, 7);
         let due = 0, anyStarted = false, hasPaidPlans = false;
         let futureStart: string | null = null;
@@ -126,7 +129,7 @@ export default function ParentHome() {
   useEffect(() => {
     if (configMissing) return;
     (async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayStr();
       const [{ data: kids }, { data: evs }, { data: as }] = await Promise.all([
         supabase.from("parent_students")
           .select("student_id, students ( id, first_name, last_name, profile_photo_url, photo_pending_url, enrollments ( id, grade_name, school_year, status ) )")
@@ -221,6 +224,22 @@ export default function ParentHome() {
     }
     setMyPhone(row?.phone ?? "");
     setMyAddress(row?.address ?? "");
+    // Family review: both parents (guardians registry) and emergency contacts
+    // for this family's children. RLS limits both to the parent's own kids.
+    const sids = children.map((c) => c.students.id);
+    if (sids.length) {
+      const [{ data: g }, { data: ec }] = await Promise.all([
+        supabase.from("guardians").select("name, relationship, phone, email, sort").in("student_id", sids).order("sort"),
+        supabase.from("emergency_contacts").select("student_id, name, phone, relationship").in("student_id", sids),
+      ]);
+      const seen = new Map<string, { name: string; relationship: string; phone: string | null; email: string | null }>();
+      ((g as { name: string; relationship: string; phone: string | null; email: string | null }[]) ?? [])
+        .forEach((x) => { const k = (x.email ?? x.name).toLowerCase(); if (!seen.has(k)) seen.set(k, x); });
+      setFamGuardians([...seen.values()]);
+      const nameOf = (sid: string) => children.find((c) => c.students.id === sid)?.students.first_name ?? "";
+      setFamContacts(((ec as { student_id: string; name: string; phone: string; relationship: string | null }[]) ?? [])
+        .map((x) => ({ student: nameOf(x.student_id), name: x.name, phone: x.phone, relationship: x.relationship })));
+    }
   }
 
   async function saveMyInfo() {
@@ -419,16 +438,13 @@ export default function ParentHome() {
               </div>
               <div className="space-y-4 text-sm">
                 <div className="rounded-xl bg-silver p-4">
-                  <div className="mb-1 font-bold text-navy">Zelle</div>
+                  <div className="mb-1 font-bold text-navy">Zelle (preferred)</div>
                   <div className="text-gray-700">Recipient: {PAY_INFO.zelle.name}</div>
-                  <div className="text-gray-700">Send to: {PAY_INFO.zelle.contact}</div>
+                  <div className="text-gray-700">Send to: <span className="font-semibold">{PAY_INFO.zelle.contact}</span></div>
                 </div>
                 <div className="rounded-xl bg-silver p-4">
                   <div className="mb-1 font-bold text-navy">Bank transfer</div>
-                  <div className="text-gray-700">Bank: {PAY_INFO.bank.bankName}</div>
-                  <div className="text-gray-700">Account name: {PAY_INFO.bank.accountName}</div>
-                  <div className="text-gray-700">Account #: {PAY_INFO.bank.accountNo}</div>
-                  <div className="text-gray-700">Routing #: {PAY_INFO.bank.routing}</div>
+                  <div className="text-gray-700">Contact the school office for account-transfer details.</div>
                 </div>
                 <p className="text-xs text-gray-500">{PAY_INFO.note} Cash and check are also accepted at the school office. Your payment appears here once the office records it.</p>
               </div>
@@ -439,9 +455,9 @@ export default function ParentHome() {
         {/* My Info dialog: parents keep their own phone + home address current */}
         {myOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMyOpen(false)}>
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-display text-lg font-semibold text-navy">My Contact Info</h3>
+                <h3 className="font-display text-lg font-semibold text-navy">Family Information</h3>
                 <button onClick={() => setMyOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
               </div>
               <div className="space-y-3 text-sm">
@@ -474,6 +490,57 @@ export default function ParentHome() {
                   className="w-full rounded-full bg-navy py-2.5 font-semibold text-white transition hover:bg-royal disabled:opacity-40">
                   {myState === "saving" ? "Saving..." : "Save"}
                 </button>
+
+                {famGuardians.length > 0 && (
+                  <div className="border-t pt-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Parents & Guardians on file</div>
+                    {famGuardians.map((g, i) => (
+                      <div key={i} className="mb-2 rounded-lg bg-silver/60 px-3 py-2">
+                        <span className="font-semibold text-navy">{g.name}</span>
+                        <span className="ml-2 text-xs capitalize text-gray-400">({g.relationship})</span>
+                        <div className="mt-0.5 text-xs text-gray-600">
+                          {g.phone && <span className="mr-3">📞 {g.phone}</span>}
+                          {g.email && <span>✉️ {g.email}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="border-t pt-3">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Emergency contacts on file</div>
+                  {famContacts.length ? famContacts.map((c, i) => (
+                    <div key={i} className="mb-2 rounded-lg bg-silver/60 px-3 py-2">
+                      <span className="font-semibold text-navy">{c.name}</span>
+                      {c.relationship && <span className="ml-2 text-xs capitalize text-gray-400">({c.relationship})</span>}
+                      <span className="ml-2 text-xs text-gray-400">for {c.student}</span>
+                      <div className="mt-0.5 text-xs text-gray-600">📞 {c.phone}</div>
+                    </div>
+                  )) : (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      ⚠ No emergency contact on file — please give one to the school office.
+                    </p>
+                  )}
+                </div>
+
+                <div className="border-t pt-3">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Students</div>
+                  {children.map((c) => (
+                    <div key={c.student_id} className="mb-1.5 rounded-lg bg-silver/60 px-3 py-2">
+                      <span className="font-semibold text-navy">{c.students.first_name} {c.students.last_name}</span>
+                      <span className="ml-2 text-xs text-gray-400">
+                        {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0]?.grade_name}
+                      </span>
+                      {addrReady && myAddress.trim() && (
+                        <div className="mt-0.5 text-xs text-gray-600">🏠 {myAddress.trim()}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-gray-400">
+                  Something outdated or incorrect? Update phone and address above, or tell us through 💬 Feedback / the school office and we'll correct it.
+                </p>
               </div>
             </div>
           </div>
@@ -557,7 +624,7 @@ export default function ParentHome() {
                     academic: "bg-blue-100 text-blue-700", event: "bg-purple-100 text-purple-700",
                     holiday: "bg-amber-100 text-amber-800", exam: "bg-red-100 text-red-700",
                   };
-                  const today = new Date().toISOString().slice(0, 10);
+                  const today = todayStr();
                   return [...groups.entries()].map(([month, evs]) => (
                     <div key={month} className="mb-4">
                       <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">
@@ -680,7 +747,7 @@ export default function ParentHome() {
             </h2>
             <div className="space-y-2">
               {asgs.map((a) => {
-                const overdue = a.due_date && a.due_date < new Date().toISOString().slice(0, 10);
+                const overdue = a.due_date && a.due_date < todayStr();
                 return (
                   <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
                     <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy">{a.subject}</span>
@@ -780,11 +847,11 @@ export default function ParentHome() {
                       <div className="font-display text-xl font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}</div>
                       <div className="text-xs text-gray-500">per {fee.billing_frequency.replace("ly", "")}</div>
                     </div>
-                    {fee.start_date && fee.start_date > new Date().toISOString().slice(0, 10) ? (
+                    {fee.start_date && fee.start_date > todayStr() ? (
                       <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                         Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
-                    ) : fee.payments.some((p) => p.payment_date.startsWith(new Date().toISOString().slice(0, 7))) ? (
+                    ) : fee.payments.some((p) => p.payment_date.startsWith(monthStr())) ? (
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
                     ) : (
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>

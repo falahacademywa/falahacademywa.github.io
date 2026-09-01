@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
+import { todayStr } from "../../lib/dates";
 
 interface Widget {
   label: string;
@@ -25,7 +26,7 @@ export default function Dashboard() {
         const { count: c } = await q;
         return c ?? 0;
       };
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayStr();
       const month = today.slice(0, 7);
       const [students, applicants, parents, teachers, presentToday, absentToday, plans] = await Promise.all([
         count("students", (q) => q.eq("archived", false)),

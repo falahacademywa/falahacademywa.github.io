@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import { monthStr } from "../../lib/dates";
 
 function downloadCsv(filename: string, header: string[], rows: (string | number | null)[][]) {
   const esc = (v: string | number | null) => {
@@ -16,7 +17,7 @@ function downloadCsv(filename: string, header: string[], rows: (string | number 
 }
 
 export default function Reports() {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(monthStr());
   const [msg, setMsg] = useState<string | null>(null);
 
   async function exportRoster() {
@@ -52,7 +53,7 @@ export default function Reports() {
     const { data } = await supabase.from("fee_plans")
       .select("plan_name, total_amount, billing_frequency, enrollments!inner ( grade_name, status, students ( student_no, first_name, last_name ) ), payments ( payment_date, amount )")
       .eq("enrollments.status", "active");
-    const thisMonth = new Date().toISOString().slice(0, 7);
+    const thisMonth = monthStr();
     downloadCsv("falah-fees.csv",
       ["StudentNo", "Student", "Grade", "Plan $", "Frequency", "Total Paid", "Paid This Month"],
       (data ?? []).map((r: any) => [

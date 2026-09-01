@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import { todayStr } from "../../lib/dates";
 
 interface Ev {
   id: string;
@@ -88,7 +89,7 @@ export default function CalendarAdmin() {
     load();
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   const monthLabel = new Date(month + "-15").toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   return (

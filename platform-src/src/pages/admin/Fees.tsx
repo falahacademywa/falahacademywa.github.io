@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import { todayStr, monthStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
 
 interface PlanRow {
@@ -31,7 +32,7 @@ export default function Fees() {
   const [unplanned, setUnplanned] = useState<EnrollmentOpt[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [payFor, setPayFor] = useState<string | null>(null);
-  const [payForm, setPayForm] = useState({ amount: "", payment_method: "cash", reference_no: "", payment_date: new Date().toISOString().slice(0, 10) });
+  const [payForm, setPayForm] = useState({ amount: "", payment_method: "cash", reference_no: "", payment_date: todayStr() });
   const [planForm, setPlanForm] = useState({ enrollment_id: "", total_amount: "", billing_frequency: "monthly" });
 
   async function load() {
@@ -55,7 +56,7 @@ export default function Fees() {
 
   const paid = (r: PlanRow) => r.payments.reduce((s, p) => s + Number(p.amount), 0);
   const paidThisMonth = (r: PlanRow) => {
-    const m = new Date().toISOString().slice(0, 7);
+    const m = monthStr();
     return r.payments.some((p) => p.payment_date.startsWith(m));
   };
 
@@ -140,7 +141,7 @@ export default function Fees() {
                 ${Number(r.total_amount).toFixed(0)} / {r.billing_frequency}
               </span>
               {Number(r.total_amount) > 0 && (
-                r.start_date && r.start_date > new Date().toISOString().slice(0, 10)
+                r.start_date && r.start_date > todayStr()
                   ? <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                       Starts {new Date(r.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>

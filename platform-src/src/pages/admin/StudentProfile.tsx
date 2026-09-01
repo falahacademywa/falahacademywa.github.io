@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
+import { todayStr, monthStr } from "../../lib/dates";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
@@ -30,7 +31,7 @@ export default function StudentProfile() {
   const { id } = useParams();
   const [s, setS] = useState<Student | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(() => monthStr());
   const [att, setAtt] = useState<AttRow[]>([]);
   const [feeInfo, setFeeInfo] = useState<FeeInfo | null>(null);
   const [quran, setQuran] = useState<QuranRow[]>([]);
@@ -259,11 +260,11 @@ export default function StudentProfile() {
                     <div className="font-display text-xl font-semibold text-navy">${Number(feeInfo.total_amount).toFixed(0)}</div>
                     <div className="text-xs text-gray-500">per {feeInfo.billing_frequency.replace("ly", "")}</div>
                   </div>
-                  {feeInfo.start_date && feeInfo.start_date > new Date().toISOString().slice(0, 10) ? (
+                  {feeInfo.start_date && feeInfo.start_date > todayStr() ? (
                     <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                       Starts {new Date(feeInfo.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
-                  ) : feeInfo.payments.some((p) => p.payment_date.startsWith(new Date().toISOString().slice(0, 7))) ? (
+                  ) : feeInfo.payments.some((p) => p.payment_date.startsWith(monthStr())) ? (
                     <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
                   ) : (
                     <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">Not paid (due by the 5th)</span>
