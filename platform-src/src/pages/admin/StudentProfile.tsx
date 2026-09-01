@@ -24,8 +24,9 @@ interface Student {
   guardians: { id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[];
   emergency_contacts: { id: string; name: string; phone: string; relationship: string | null; is_primary: boolean }[];
   medical_info: { allergies: string | null; medical_conditions: string | null; medications: string | null } | null;
-  document_references: { id: string; document_type: string; file_url: string; uploaded_date: string }[];
+  document_references: { id: string; document_type: string; file_url: string | null; storage_path: string | null; uploaded_date: string }[];
 }
+type DocRef = Student["document_references"][number];
 
 export default function StudentProfile() {
   const { id } = useParams();
@@ -38,6 +39,48 @@ export default function StudentProfile() {
   const [acad, setAcad] = useState<AcadRow[]>([]);
   const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
+  const [docTypes, setDocTypes] = useState<{ id: number; name: string }[]>([]);
+
+  useEffect(() => {
+    if (configMissing) return;
+    supabase.from("document_types").select("id, name").eq("active", true).order("sort")
+      .then(({ data }) => setDocTypes(data ?? []));
+  }, []);
+
+  async function uploadDoc(typeName: string, file: File) {
+    if (!s) return;
+    const path = `${s.id}/${crypto.randomUUID()}-${file.name}`;
+    const { error } = await supabase.storage.from("student-documents").upload(path, file);
+    if (error) { alert("Upload failed: " + error.message); return; }
+    const existing = s.document_references.find((d) => d.document_type === typeName);
+    if (existing) {
+      if (existing.storage_path) await supabase.storage.from("student-documents").remove([existing.storage_path]);
+      await supabase.from("document_references").update({ storage_path: path, uploaded_date: new Date().toISOString() }).eq("id", existing.id);
+    } else {
+      await supabase.from("document_references").insert({ student_id: s.id, document_type: typeName, storage_path: path });
+    }
+    load();
+  }
+
+  // Admin override: mark received (no file), or clear the submission entirely
+  async function markDoc(typeName: string) {
+    if (!s) return;
+    await supabase.from("document_references").insert({ student_id: s.id, document_type: typeName });
+    load();
+  }
+  async function clearDoc(d: DocRef) {
+    if (d.storage_path) await supabase.storage.from("student-documents").remove([d.storage_path]);
+    await supabase.from("document_references").delete().eq("id", d.id);
+    load();
+  }
+  async function viewDoc(d: DocRef) {
+    if (d.storage_path) {
+      const { data } = await supabase.storage.from("student-documents").createSignedUrl(d.storage_path, 3600);
+      if (data?.signedUrl) { window.open(data.signedUrl, "_blank"); return; }
+      const dl = await supabase.storage.from("student-documents").download(d.storage_path);
+      if (dl.data) window.open(URL.createObjectURL(dl.data), "_blank");
+    } else if (d.file_url) window.open(d.file_url, "_blank");
+  }
 
   // Siblings: students sharing a guardian email with this one (parent-portal-style switcher)
   useEffect(() => {
@@ -67,7 +110,7 @@ export default function StudentProfile() {
         guardians ( id, name, relationship, phone, email, sort ),
         emergency_contacts ( id, name, phone, relationship, is_primary ),
         medical_info ( allergies, medical_conditions, medications ),
-        document_references ( id, document_type, file_url, uploaded_date )`)
+        document_references ( id, document_type, file_url, storage_path, uploaded_date )`)
       .eq("id", id)
       .single();
     if (error) setErr(error.message);
@@ -412,13 +455,43 @@ export default function StudentProfile() {
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Documents (stored in Google Drive)</h2>
-          {s.document_references.length ? s.document_references.map((d) => (
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Required Documents</h2>
+          {docTypes.map((t) => {
+            const sub = s.document_references.find((d) => d.document_type === t.name);
+            return (
+              <div key={t.id} className="flex flex-wrap items-center gap-2.5 border-b py-2 text-sm last:border-0">
+                <span className={sub ? "text-emerald-deep" : "text-gray-300"}>{sub ? "✅" : "⬜"}</span>
+                <span className={sub ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
+                {sub && <span className="text-xs text-gray-400">{new Date(sub.uploaded_date).toLocaleDateString()}</span>}
+                <span className="ml-auto flex items-center gap-2">
+                  {sub && (sub.storage_path || sub.file_url) && (
+                    <button onClick={() => viewDoc(sub)}
+                      className="rounded-full border border-royal px-2.5 py-0.5 text-xs font-semibold text-royal hover:bg-royal hover:text-white">View</button>
+                  )}
+                  <label className="cursor-pointer rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-semibold text-gray-600 hover:bg-silver">
+                    {sub?.storage_path ? "Replace file" : "Upload scan"}
+                    <input type="file" accept="application/pdf,image/*" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDoc(t.name, f); e.target.value = ""; }} />
+                  </label>
+                  {!sub ? (
+                    <button onClick={() => markDoc(t.name)}
+                      className="rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-semibold text-gray-600 hover:bg-silver">Mark received</button>
+                  ) : (
+                    <button onClick={() => clearDoc(sub)}
+                      className="rounded-full border border-red-200 px-2.5 py-0.5 text-xs font-semibold text-red-500 hover:bg-red-50">Clear</button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {/* legacy rows whose type is not in the registry */}
+          {s.document_references.filter((d) => !docTypes.some((t) => t.name === d.document_type)).map((d) => (
             <div key={d.id} className="flex items-center justify-between border-b py-2 text-sm last:border-0">
-              <a href={d.file_url} target="_blank" rel="noreferrer" className="font-semibold text-royal hover:underline">{d.document_type}</a>
+              <button onClick={() => viewDoc(d)} className="font-semibold text-royal hover:underline">{d.document_type}</button>
               <span className="text-xs text-gray-400">{new Date(d.uploaded_date).toLocaleDateString()}</span>
             </div>
-          )) : <p className="text-sm text-gray-400">No documents referenced.</p>}
+          ))}
+          <p className="mt-2 text-[11px] text-gray-400">Manage the required-forms list in Settings. Parents see this checklist (and any uploaded scans) in their portal.</p>
         </section>
       </div>
     </div>

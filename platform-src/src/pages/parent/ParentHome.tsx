@@ -39,6 +39,10 @@ interface Update {
 }
 interface Ev { id: string; title: string; event_type: string; start_date: string; end_date: string | null; location: string | null; rsvp_enabled: boolean }
 interface EcRow { id: string | null; student_id: string; name: string; phone: string; relationship: string; del?: boolean }
+// One person in the guardians registry, deduped across their children's rows.
+interface GPerson { key: string; name: string; relationship: string; phone: string; email: string | null; rowIds: string[] }
+interface DocType { id: number; name: string; sort: number }
+interface DocRef { id: string; student_id: string; document_type: string; file_url: string | null; storage_path: string | null; uploaded_date: string }
 interface Ann { id: string; title: string; content: string; category: string; is_pinned: boolean; requires_ack: boolean; publish_date: string | null; announcement_acks: { parent_id: string }[] }
 
 export default function ParentHome() {
@@ -66,7 +70,7 @@ export default function ParentHome() {
   const [fbMessage, setFbMessage] = useState("");
   const [fbState, setFbState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [myOpen, setMyOpen] = useState(false);
-  const [famTab, setFamTab] = useState<"students" | "parents" | "contacts">("students");
+  const [famTab, setFamTab] = useState<"students" | "parents" | "contacts" | "documents">("students");
   const [famEdit, setFamEdit] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null);
   const [myPhone, setMyPhone] = useState("");
@@ -74,9 +78,16 @@ export default function ParentHome() {
   const [mySaved, setMySaved] = useState({ phone: "", address: "" });
   const [myState, setMyState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [addrReady, setAddrReady] = useState(true);
-  const [famGuardians, setFamGuardians] = useState<{ name: string; relationship: string; phone: string | null; email: string | null }[]>([]);
   const [ecOrig, setEcOrig] = useState<EcRow[]>([]);
   const [ecDraft, setEcDraft] = useState<EcRow[]>([]);
+  const [personsOrig, setPersonsOrig] = useState<GPerson[]>([]);
+  const [personsDraft, setPersonsDraft] = useState<GPerson[]>([]);
+  const [primaryOrig, setPrimaryOrig] = useState<string | null>(null);
+  const [primaryDraft, setPrimaryDraft] = useState<string | null>(null);
+  const [namesOrig, setNamesOrig] = useState<Record<string, { first: string; last: string }>>({});
+  const [namesDraft, setNamesDraft] = useState<Record<string, { first: string; last: string }>>({});
+  const [docTypes, setDocTypes] = useState<DocType[]>([]);
+  const [docRefs, setDocRefs] = useState<DocRef[]>([]);
 
   const ICS_URL = "https://falahacademywa.org/falah-academy-2026-2027.ics";
 
@@ -231,54 +242,92 @@ export default function ParentHome() {
     setMyPhone(row?.phone ?? "");
     setMyAddress(row?.address ?? "");
     setMySaved({ phone: row?.phone ?? "", address: row?.address ?? "" });
-    // Family review: both parents (guardians registry) and emergency contacts
-    // for this family's children. RLS limits both to the parent's own kids.
+    // Family review data. RLS limits everything to the parent's own kids.
+    const names: Record<string, { first: string; last: string }> = {};
+    children.forEach((c) => { names[c.students.id] = { first: c.students.first_name, last: c.students.last_name }; });
+    setNamesOrig(names);
+    setNamesDraft(JSON.parse(JSON.stringify(names)));
     const sids = children.map((c) => c.students.id);
     if (sids.length) {
-      const [{ data: g }, { data: ec }] = await Promise.all([
-        supabase.from("guardians").select("name, relationship, phone, email, sort").in("student_id", sids).order("sort"),
+      const [{ data: g }, { data: ec }, { data: dt }, { data: dr }] = await Promise.all([
+        supabase.from("guardians").select("id, student_id, name, relationship, phone, email, sort").in("student_id", sids).order("sort"),
         supabase.from("emergency_contacts").select("id, student_id, name, phone, relationship").in("student_id", sids),
+        supabase.from("document_types").select("id, name, sort").eq("active", true).order("sort"),
+        supabase.from("document_references").select("id, student_id, document_type, file_url, storage_path, uploaded_date").in("student_id", sids),
       ]);
-      const seen = new Map<string, { name: string; relationship: string; phone: string | null; email: string | null }>();
-      ((g as { name: string; relationship: string; phone: string | null; email: string | null }[]) ?? [])
-        .forEach((x) => { const k = (x.email ?? x.name).toLowerCase(); if (!seen.has(k)) seen.set(k, x); });
-      setFamGuardians([...seen.values()]);
+      // Dedupe guardian rows into people (one person has a row per child)
+      const people = new Map<string, GPerson>();
+      let primary: string | null = null;
+      ((g as { id: string; student_id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[]) ?? [])
+        .forEach((x) => {
+          const k = (x.email ?? x.name).toLowerCase();
+          const p = people.get(k) ?? { key: k, name: x.name, relationship: x.relationship, phone: x.phone ?? "", email: x.email, rowIds: [] };
+          p.rowIds.push(x.id);
+          people.set(k, p);
+          if (x.sort === 1 && !primary) primary = k;
+        });
+      const plist = [...people.values()];
+      setPersonsOrig(plist);
+      setPersonsDraft(plist.map((p) => ({ ...p, rowIds: [...p.rowIds] })));
+      setPrimaryOrig(primary ?? plist[0]?.key ?? null);
+      setPrimaryDraft(primary ?? plist[0]?.key ?? null);
       const rows = ((ec as { id: string; student_id: string; name: string; phone: string; relationship: string | null }[]) ?? [])
         .map((x) => ({ id: x.id, student_id: x.student_id, name: x.name, phone: x.phone, relationship: x.relationship ?? "" }));
       setEcOrig(rows);
       setEcDraft(rows.map((x) => ({ ...x })));
+      setDocTypes((dt as DocType[]) ?? []);
+      setDocRefs((dr as DocRef[]) ?? []);
+    }
+  }
+
+  // Open a submitted document (private bucket -> short-lived signed URL)
+  async function viewDoc(d: DocRef) {
+    if (d.storage_path) {
+      const { data } = await supabase.storage.from("student-documents").createSignedUrl(d.storage_path, 3600);
+      if (data?.signedUrl) { window.open(data.signedUrl, "_blank"); return; }
+      const dl = await supabase.storage.from("student-documents").download(d.storage_path);
+      if (dl.data) window.open(URL.createObjectURL(dl.data), "_blank");
+    } else if (d.file_url) {
+      window.open(d.file_url, "_blank");
     }
   }
 
   // Unsaved edits on the current Family Information tab?
   const famDirty = famEdit && (
-    famTab === "parents" ? myPhone !== mySaved.phone || myAddress !== mySaved.address
+    famTab === "students" ? JSON.stringify(namesDraft) !== JSON.stringify(namesOrig)
+      : famTab === "parents" ? myPhone !== mySaved.phone || myAddress !== mySaved.address
+        || primaryDraft !== primaryOrig
+        || JSON.stringify(personsDraft.map((p) => p.phone)) !== JSON.stringify(personsOrig.map((p) => p.phone))
       : famTab === "contacts" ? JSON.stringify(ecDraft) !== JSON.stringify(ecOrig)
         : false);
 
-  function closeFamily() {
-    setMyOpen(false); setFamEdit(false); setConfirmDiscard(null);
+  function resetFamDrafts() {
     setMyPhone(mySaved.phone); setMyAddress(mySaved.address);
     setEcDraft(ecOrig.map((x) => ({ ...x })));
+    setPersonsDraft(personsOrig.map((p) => ({ ...p, rowIds: [...p.rowIds] })));
+    setPrimaryDraft(primaryOrig);
+    setNamesDraft(JSON.parse(JSON.stringify(namesOrig)));
+  }
+  function closeFamily() {
+    setMyOpen(false); setFamEdit(false); setConfirmDiscard(null);
+    resetFamDrafts();
   }
   function requestCloseFamily() {
     if (famDirty) setConfirmDiscard(() => closeFamily);
     else closeFamily();
   }
-  function switchFamTab(t: "students" | "parents" | "contacts") {
+  function switchFamTab(t: "students" | "parents" | "contacts" | "documents") {
     if (t === famTab) return;
     const go = () => {
       setFamEdit(false); setMyState("idle"); setConfirmDiscard(null);
-      setMyPhone(mySaved.phone); setMyAddress(mySaved.address);
-      setEcDraft(ecOrig.map((x) => ({ ...x })));
+      resetFamDrafts();
       setFamTab(t);
     };
     if (famDirty) setConfirmDiscard(() => go);
     else go();
   }
   function cancelFamEdit() {
-    setMyPhone(mySaved.phone); setMyAddress(mySaved.address);
-    setEcDraft(ecOrig.map((x) => ({ ...x })));
+    resetFamDrafts();
     setFamEdit(false); setMyState("idle");
   }
 
@@ -286,15 +335,56 @@ export default function ParentHome() {
     if (!session || myState === "saving") return;
     setMyState("saving");
     let failed = false;
-    if (famTab === "parents") {
+    if (famTab === "students") {
+      for (const [sid, n] of Object.entries(namesDraft)) {
+        const o = namesOrig[sid];
+        if (!n.first.trim() || !n.last.trim()) continue;
+        if (o && (o.first !== n.first || o.last !== n.last)) {
+          const { error } = await supabase.from("students")
+            .update({ first_name: n.first.trim(), last_name: n.last.trim() }).eq("id", sid);
+          failed = failed || !!error;
+        }
+      }
+      if (!failed) {
+        setNamesOrig(JSON.parse(JSON.stringify(namesDraft)));
+        setChildren((prev) => prev.map((c) => {
+          const n = namesDraft[c.students.id];
+          return n ? { ...c, students: { ...c.students, first_name: n.first.trim(), last_name: n.last.trim() } } : c;
+        }));
+        setActive((prev) => {
+          const n = prev && namesDraft[prev.students.id];
+          return prev && n ? { ...prev, students: { ...prev.students, first_name: n.first.trim(), last_name: n.last.trim() } } : prev;
+        });
+      }
+    } else if (famTab === "parents") {
       const patch: Record<string, string | null> = { phone: myPhone.trim() || null };
       if (addrReady) patch.address = myAddress.trim() || null;
       const { error } = await supabase.from("profiles").update(patch).eq("id", session.user.id);
       failed = !!error;
+      // Guardian registry: phones and the primary-contact flag
+      const myKey = (session.user.email ?? "").toLowerCase();
+      for (const p of personsDraft) {
+        const o = personsOrig.find((x) => x.key === p.key);
+        const desiredSort = p.key === (primaryDraft ?? "") ? 1 : 2;
+        const origSort = o?.key === (primaryOrig ?? "") ? 1 : 2;
+        const phone = p.key === myKey ? myPhone.trim() : p.phone.trim();
+        const origPhone = p.key === myKey ? mySaved.phone : (o?.phone ?? "");
+        if (phone !== origPhone || desiredSort !== origSort) {
+          for (const rid of p.rowIds) {
+            const { error: e2 } = await supabase.from("guardians")
+              .update({ phone: phone || null, sort: desiredSort }).eq("id", rid);
+            failed = failed || !!e2;
+          }
+        }
+      }
       if (!failed) {
         setMySaved({ phone: myPhone.trim(), address: addrReady ? myAddress.trim() : mySaved.address });
         setMyPhone(myPhone.trim());
         setMyAddress(addrReady ? myAddress.trim() : mySaved.address);
+        const cleaned = personsDraft.map((p) => ({ ...p, phone: (p.key === myKey ? myPhone : p.phone).trim(), rowIds: [...p.rowIds] }));
+        setPersonsOrig(cleaned);
+        setPersonsDraft(cleaned.map((p) => ({ ...p, rowIds: [...p.rowIds] })));
+        setPrimaryOrig(primaryDraft);
       }
     } else if (famTab === "contacts") {
       for (const c of ecDraft) {
@@ -551,7 +641,7 @@ export default function ParentHome() {
               {/* Side tabs */}
               <div className="flex w-28 shrink-0 flex-col gap-1 border-r bg-silver/60 p-2 sm:w-44 sm:p-3">
                 <div className="hidden px-2 pb-3 pt-1 font-display text-sm font-semibold leading-tight text-navy sm:block">Family Information</div>
-                {([["students", "🎓", "Students"], ["parents", "👤", "Parents"], ["contacts", "🚑", "Emergency"]] as const).map(([key, icon, label]) => (
+                {([["students", "🎓", "Students"], ["parents", "👤", "Parents"], ["contacts", "🚑", "Emergency"], ["documents", "📄", "Documents"]] as const).map(([key, icon, label]) => (
                   <button key={key} onClick={() => switchFamTab(key)}
                     className={`rounded-lg px-2 py-2 text-left text-xs font-semibold transition sm:px-3 sm:text-sm ${
                       famTab === key ? "bg-navy text-white shadow" : "text-gray-600 hover:bg-white"}`}>
@@ -561,13 +651,14 @@ export default function ParentHome() {
               </div>
 
               {/* Tab content */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="relative flex-1 overflow-y-auto p-4 sm:p-5">
                 <div className="mb-4 flex items-center justify-between gap-2">
                   <h3 className="font-display text-lg font-semibold text-navy">
-                    {famTab === "students" ? "Student Information" : famTab === "parents" ? "Parents" : "Emergency Contacts"}
+                    {famTab === "students" ? "Student Information" : famTab === "parents" ? "Parents"
+                      : famTab === "contacts" ? "Emergency Contacts" : "Documents"}
                   </h3>
                   <div className="flex items-center gap-2">
-                    {famTab !== "students" && !famEdit && (
+                    {famTab !== "documents" && !famEdit && (
                       <button onClick={() => { setFamEdit(true); setMyState("idle"); }}
                         className="flex items-center gap-1 rounded-full border-2 border-royal px-3 py-1 text-xs font-bold text-royal transition hover:bg-royal hover:text-white">
                         ✏️ Edit
@@ -579,25 +670,61 @@ export default function ParentHome() {
 
                 {famTab === "students" && (
                   <div className="space-y-2 text-sm">
-                    {children.map((c) => (
-                      <div key={c.student_id} className="rounded-xl bg-silver/60 p-3">
-                        <span className="font-semibold text-navy">{c.students.first_name} {c.students.last_name}</span>
-                        <span className="ml-2 text-xs text-gray-400">
-                          {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0]?.grade_name}
-                        </span>
-                        {addrReady && mySaved.address.trim() && (
-                          <div className="mt-1 text-xs text-gray-600">🏠 {mySaved.address.trim()}</div>
-                        )}
-                      </div>
-                    ))}
+                    {children.map((c) => {
+                      const n = namesDraft[c.students.id];
+                      return (
+                        <div key={c.student_id} className={`rounded-xl p-3 ${famEdit ? "border-2 border-royal/40" : "bg-silver/60"}`}>
+                          {famEdit && n ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <input value={n.first}
+                                onChange={(e) => setNamesDraft((prev) => ({ ...prev, [c.students.id]: { ...prev[c.students.id], first: e.target.value } }))}
+                                placeholder="First name" className="min-w-0 flex-1 basis-32 rounded-lg border border-gray-300 p-2 text-sm" />
+                              <input value={n.last}
+                                onChange={(e) => setNamesDraft((prev) => ({ ...prev, [c.students.id]: { ...prev[c.students.id], last: e.target.value } }))}
+                                placeholder="Last name" className="min-w-0 flex-1 basis-32 rounded-lg border border-gray-300 p-2 text-sm" />
+                              <span className="text-xs text-gray-400">
+                                {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0]?.grade_name}
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="font-semibold text-navy">{c.students.first_name} {c.students.last_name}</span>
+                              <span className="ml-2 text-xs text-gray-400">
+                                {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0]?.grade_name}
+                              </span>
+                            </>
+                          )}
+                          {addrReady && mySaved.address.trim() && (
+                            <div className="mt-1 text-xs text-gray-600">🏠 {mySaved.address.trim()}</div>
+                          )}
+                        </div>
+                      );
+                    })}
                     <p className="pt-1 text-[11px] text-gray-400">
-                      Student names and grades are managed by the school office. The home address can be updated under the Parents tab.
+                      Grades, date of birth, and other records are managed by the school office. The home address can be updated under the Parents tab.
                     </p>
                   </div>
                 )}
 
                 {famTab === "parents" && (
                   <div className="space-y-3 text-sm">
+                    {personsDraft.length > 0 && (
+                      <div className={`rounded-xl p-3 ${famEdit ? "border-2 border-royal/40" : "bg-silver/60"}`}>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Primary contact
+                          <select disabled={!famEdit} value={primaryDraft ?? ""}
+                            onChange={(e) => setPrimaryDraft(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800 disabled:border-gray-200 disabled:bg-white/60 disabled:text-gray-500">
+                            {personsDraft.map((p) => (
+                              <option key={p.key} value={p.key}>
+                                {p.relationship ? p.relationship[0].toUpperCase() + p.relationship.slice(1) : "Parent"} - {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <p className="mt-1 text-[11px] text-gray-400">The school calls the primary contact first.</p>
+                      </div>
+                    )}
+
                     <div className={`rounded-xl p-3 ${famEdit ? "border-2 border-royal/40" : "bg-silver/60"}`}>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-navy">{profile?.full_name}</span>
@@ -621,20 +748,24 @@ export default function ParentHome() {
                         )}
                       </div>
                     </div>
-                    {famGuardians
-                      .filter((g) => (g.email ?? "").toLowerCase() !== (session?.user.email ?? "").toLowerCase())
-                      .map((g, i) => (
-                        <div key={i} className="rounded-xl bg-silver/60 p-3">
-                          <span className="font-semibold text-navy">{g.name}</span>
-                          <span className="ml-2 text-xs capitalize text-gray-400">({g.relationship})</span>
-                          <div className="mt-0.5 text-xs text-gray-600">
-                            {g.phone && <span className="mr-3">📞 {g.phone}</span>}
-                            {g.email && <span>✉️ {g.email}</span>}
-                          </div>
+
+                    {personsDraft
+                      .filter((p) => p.key !== (session?.user.email ?? "").toLowerCase())
+                      .map((p) => (
+                        <div key={p.key} className={`rounded-xl p-3 ${famEdit ? "border-2 border-royal/40" : "bg-silver/60"}`}>
+                          <span className="font-semibold text-navy">{p.name}</span>
+                          <span className="ml-2 text-xs capitalize text-gray-400">({p.relationship})</span>
+                          {p.email && <div className="mt-1 text-xs text-gray-500">✉️ {p.email}</div>}
+                          <label className="mt-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">Phone
+                            <input disabled={!famEdit} value={p.phone}
+                              onChange={(e) => setPersonsDraft((prev) => prev.map((x) => x.key === p.key ? { ...x, phone: e.target.value } : x))}
+                              placeholder="(555) 123-4567"
+                              className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800 disabled:border-gray-200 disabled:bg-white/60 disabled:text-gray-500" />
+                          </label>
                         </div>
                       ))}
                     <p className="pt-1 text-[11px] text-gray-400">
-                      Names, login emails, and the other parent's details are updated by the school office.
+                      Names, relationships, and login emails are updated by the school office.
                     </p>
                   </div>
                 )}
@@ -685,6 +816,41 @@ export default function ParentHome() {
                     })}
                     <p className="pt-1 text-[11px] text-gray-400">
                       Please keep at least one emergency contact per child up to date.
+                    </p>
+                  </div>
+                )}
+
+                {famTab === "documents" && (
+                  <div className="space-y-4 text-sm">
+                    {children.map((c) => {
+                      const refs = docRefs.filter((r) => r.student_id === c.students.id);
+                      return (
+                        <div key={c.student_id}>
+                          <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">For {c.students.first_name}</div>
+                          {docTypes.map((t) => {
+                            const sub = refs.find((r) => r.document_type === t.name);
+                            return (
+                              <div key={t.id} className="mb-1.5 flex items-center gap-2.5 rounded-lg bg-silver/60 px-3 py-2">
+                                <span className={sub ? "text-emerald-deep" : "text-gray-300"}>{sub ? "✅" : "⬜"}</span>
+                                <span className={sub ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
+                                {sub && (sub.storage_path || sub.file_url) ? (
+                                  <button onClick={() => viewDoc(sub)}
+                                    className="ml-auto shrink-0 rounded-full border border-royal px-2.5 py-0.5 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
+                                    View / PDF
+                                  </button>
+                                ) : sub ? (
+                                  <span className="ml-auto shrink-0 text-[10px] text-gray-400">on file at office</span>
+                                ) : (
+                                  <span className="ml-auto shrink-0 text-[10px] text-gray-400">not submitted</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                    <p className="pt-1 text-[11px] text-gray-400">
+                      Submit forms at the school office — the office marks them received and uploads scans here for your records.
                     </p>
                   </div>
                 )}
