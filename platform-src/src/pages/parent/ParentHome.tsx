@@ -38,6 +38,7 @@ interface Update {
   grade_id: number | null; enrollment_id: string | null; grades: { name: string } | null;
 }
 interface Ev { id: string; title: string; event_type: string; start_date: string; end_date: string | null; location: string | null; rsvp_enabled: boolean }
+interface EcRow { id: string | null; student_id: string; name: string; phone: string; relationship: string; del?: boolean }
 interface Ann { id: string; title: string; content: string; category: string; is_pinned: boolean; requires_ack: boolean; publish_date: string | null; announcement_acks: { parent_id: string }[] }
 
 export default function ParentHome() {
@@ -65,12 +66,17 @@ export default function ParentHome() {
   const [fbMessage, setFbMessage] = useState("");
   const [fbState, setFbState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [myOpen, setMyOpen] = useState(false);
+  const [famTab, setFamTab] = useState<"students" | "parents" | "contacts">("students");
+  const [famEdit, setFamEdit] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null);
   const [myPhone, setMyPhone] = useState("");
   const [myAddress, setMyAddress] = useState("");
+  const [mySaved, setMySaved] = useState({ phone: "", address: "" });
   const [myState, setMyState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [addrReady, setAddrReady] = useState(true);
   const [famGuardians, setFamGuardians] = useState<{ name: string; relationship: string; phone: string | null; email: string | null }[]>([]);
-  const [famContacts, setFamContacts] = useState<{ student: string; name: string; phone: string; relationship: string | null }[]>([]);
+  const [ecOrig, setEcOrig] = useState<EcRow[]>([]);
+  const [ecDraft, setEcDraft] = useState<EcRow[]>([]);
 
   const ICS_URL = "https://falahacademywa.org/falah-academy-2026-2027.ics";
 
@@ -224,31 +230,101 @@ export default function ParentHome() {
     }
     setMyPhone(row?.phone ?? "");
     setMyAddress(row?.address ?? "");
+    setMySaved({ phone: row?.phone ?? "", address: row?.address ?? "" });
     // Family review: both parents (guardians registry) and emergency contacts
     // for this family's children. RLS limits both to the parent's own kids.
     const sids = children.map((c) => c.students.id);
     if (sids.length) {
       const [{ data: g }, { data: ec }] = await Promise.all([
         supabase.from("guardians").select("name, relationship, phone, email, sort").in("student_id", sids).order("sort"),
-        supabase.from("emergency_contacts").select("student_id, name, phone, relationship").in("student_id", sids),
+        supabase.from("emergency_contacts").select("id, student_id, name, phone, relationship").in("student_id", sids),
       ]);
       const seen = new Map<string, { name: string; relationship: string; phone: string | null; email: string | null }>();
       ((g as { name: string; relationship: string; phone: string | null; email: string | null }[]) ?? [])
         .forEach((x) => { const k = (x.email ?? x.name).toLowerCase(); if (!seen.has(k)) seen.set(k, x); });
       setFamGuardians([...seen.values()]);
-      const nameOf = (sid: string) => children.find((c) => c.students.id === sid)?.students.first_name ?? "";
-      setFamContacts(((ec as { student_id: string; name: string; phone: string; relationship: string | null }[]) ?? [])
-        .map((x) => ({ student: nameOf(x.student_id), name: x.name, phone: x.phone, relationship: x.relationship })));
+      const rows = ((ec as { id: string; student_id: string; name: string; phone: string; relationship: string | null }[]) ?? [])
+        .map((x) => ({ id: x.id, student_id: x.student_id, name: x.name, phone: x.phone, relationship: x.relationship ?? "" }));
+      setEcOrig(rows);
+      setEcDraft(rows.map((x) => ({ ...x })));
     }
   }
 
-  async function saveMyInfo() {
+  // Unsaved edits on the current Family Information tab?
+  const famDirty = famEdit && (
+    famTab === "parents" ? myPhone !== mySaved.phone || myAddress !== mySaved.address
+      : famTab === "contacts" ? JSON.stringify(ecDraft) !== JSON.stringify(ecOrig)
+        : false);
+
+  function closeFamily() {
+    setMyOpen(false); setFamEdit(false); setConfirmDiscard(null);
+    setMyPhone(mySaved.phone); setMyAddress(mySaved.address);
+    setEcDraft(ecOrig.map((x) => ({ ...x })));
+  }
+  function requestCloseFamily() {
+    if (famDirty) setConfirmDiscard(() => closeFamily);
+    else closeFamily();
+  }
+  function switchFamTab(t: "students" | "parents" | "contacts") {
+    if (t === famTab) return;
+    const go = () => {
+      setFamEdit(false); setMyState("idle"); setConfirmDiscard(null);
+      setMyPhone(mySaved.phone); setMyAddress(mySaved.address);
+      setEcDraft(ecOrig.map((x) => ({ ...x })));
+      setFamTab(t);
+    };
+    if (famDirty) setConfirmDiscard(() => go);
+    else go();
+  }
+  function cancelFamEdit() {
+    setMyPhone(mySaved.phone); setMyAddress(mySaved.address);
+    setEcDraft(ecOrig.map((x) => ({ ...x })));
+    setFamEdit(false); setMyState("idle");
+  }
+
+  async function saveFamily() {
     if (!session || myState === "saving") return;
     setMyState("saving");
-    const patch: Record<string, string | null> = { phone: myPhone.trim() || null };
-    if (addrReady) patch.address = myAddress.trim() || null;
-    const { error } = await supabase.from("profiles").update(patch).eq("id", session.user.id);
-    setMyState(error ? "error" : "saved");
+    let failed = false;
+    if (famTab === "parents") {
+      const patch: Record<string, string | null> = { phone: myPhone.trim() || null };
+      if (addrReady) patch.address = myAddress.trim() || null;
+      const { error } = await supabase.from("profiles").update(patch).eq("id", session.user.id);
+      failed = !!error;
+      if (!failed) {
+        setMySaved({ phone: myPhone.trim(), address: addrReady ? myAddress.trim() : mySaved.address });
+        setMyPhone(myPhone.trim());
+        setMyAddress(addrReady ? myAddress.trim() : mySaved.address);
+      }
+    } else if (famTab === "contacts") {
+      for (const c of ecDraft) {
+        if (c.del) {
+          if (c.id) { const { error } = await supabase.from("emergency_contacts").delete().eq("id", c.id); failed = failed || !!error; }
+          continue;
+        }
+        if (!c.name.trim() || !c.phone.trim()) continue; // ignore incomplete rows
+        const vals = { name: c.name.trim(), phone: c.phone.trim(), relationship: c.relationship.trim() || null };
+        if (c.id) {
+          const orig = ecOrig.find((o) => o.id === c.id);
+          if (orig && (orig.name !== c.name || orig.phone !== c.phone || orig.relationship !== c.relationship)) {
+            const { error } = await supabase.from("emergency_contacts").update(vals).eq("id", c.id);
+            failed = failed || !!error;
+          }
+        } else {
+          const { error } = await supabase.from("emergency_contacts").insert({ student_id: c.student_id, ...vals });
+          failed = failed || !!error;
+        }
+      }
+      const sids = children.map((c) => c.students.id);
+      const { data: ec } = await supabase.from("emergency_contacts")
+        .select("id, student_id, name, phone, relationship").in("student_id", sids);
+      const rows = ((ec as { id: string; student_id: string; name: string; phone: string; relationship: string | null }[]) ?? [])
+        .map((x) => ({ id: x.id, student_id: x.student_id, name: x.name, phone: x.phone, relationship: x.relationship ?? "" }));
+      setEcOrig(rows);
+      setEcDraft(rows.map((x) => ({ ...x })));
+    }
+    setMyState(failed ? "error" : "saved");
+    if (!failed) setFamEdit(false);
   }
 
   async function sendFeedback() {
@@ -260,6 +336,22 @@ export default function ParentHome() {
     setFbState("sent");
     setFbMessage("");
   }
+
+  // Escape closes whichever popup is on top; Family Information asks before
+  // dropping unsaved edits. Re-registered every render so closures stay fresh.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (confirmDiscard) { setConfirmDiscard(null); return; }
+      if (myOpen) { requestCloseFamily(); return; }
+      if (fbOpen) { setFbOpen(false); return; }
+      if (payOpen) { setPayOpen(false); return; }
+      if (calModalOpen) { setCalModalOpen(false); return; }
+      if (bellOpen) setBellOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   async function markAllRead() {
     const unread = notifs.filter((n) => !n.is_read).map((n) => n.id);
@@ -452,97 +544,186 @@ export default function ParentHome() {
           </div>
         )}
 
-        {/* My Info dialog: parents keep their own phone + home address current */}
+        {/* Family Information dialog: side tabs, read-only until ✏️ Edit */}
         {myOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMyOpen(false)}>
-            <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-display text-lg font-semibold text-navy">Family Information</h3>
-                <button onClick={() => setMyOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={requestCloseFamily}>
+            <div className="flex max-h-[85vh] min-h-[26rem] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              {/* Side tabs */}
+              <div className="flex w-28 shrink-0 flex-col gap-1 border-r bg-silver/60 p-2 sm:w-44 sm:p-3">
+                <div className="hidden px-2 pb-3 pt-1 font-display text-sm font-semibold leading-tight text-navy sm:block">Family Information</div>
+                {([["students", "🎓", "Students"], ["parents", "👤", "Parents"], ["contacts", "🚑", "Emergency"]] as const).map(([key, icon, label]) => (
+                  <button key={key} onClick={() => switchFamTab(key)}
+                    className={`rounded-lg px-2 py-2 text-left text-xs font-semibold transition sm:px-3 sm:text-sm ${
+                      famTab === key ? "bg-navy text-white shadow" : "text-gray-600 hover:bg-white"}`}>
+                    {icon} {label}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Name</div>
-                  <div className="rounded-lg bg-silver px-3 py-2 text-gray-700">{profile?.full_name}</div>
-                </div>
-                <div>
-                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Login email</div>
-                  <div className="rounded-lg bg-silver px-3 py-2 text-gray-700">{session?.user.email}</div>
-                  <p className="mt-1 text-[11px] text-gray-400">To change your name or login email, contact the school office.</p>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">Phone</label>
-                  <input value={myPhone} onChange={(e) => { setMyPhone(e.target.value); setMyState("idle"); }}
-                    placeholder="(555) 123-4567"
-                    className="w-full rounded-lg border border-gray-300 p-2.5" />
-                </div>
-                {addrReady && (
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">Home address</label>
-                    <textarea value={myAddress} onChange={(e) => { setMyAddress(e.target.value); setMyState("idle"); }} rows={2}
-                      placeholder="Street, City, State ZIP"
-                      className="w-full rounded-lg border border-gray-300 p-2.5" />
-                  </div>
-                )}
-                {myState === "error" && <p className="text-xs text-red-600">Could not save — please try again.</p>}
-                {myState === "saved" && <p className="text-xs font-semibold text-emerald-deep">✓ Saved — the school sees the update right away.</p>}
-                <button onClick={saveMyInfo} disabled={myState === "saving"}
-                  className="w-full rounded-full bg-navy py-2.5 font-semibold text-white transition hover:bg-royal disabled:opacity-40">
-                  {myState === "saving" ? "Saving..." : "Save"}
-                </button>
 
-                {famGuardians.length > 0 && (
-                  <div className="border-t pt-3">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Parents & Guardians on file</div>
-                    {famGuardians.map((g, i) => (
-                      <div key={i} className="mb-2 rounded-lg bg-silver/60 px-3 py-2">
-                        <span className="font-semibold text-navy">{g.name}</span>
-                        <span className="ml-2 text-xs capitalize text-gray-400">({g.relationship})</span>
-                        <div className="mt-0.5 text-xs text-gray-600">
-                          {g.phone && <span className="mr-3">📞 {g.phone}</span>}
-                          {g.email && <span>✉️ {g.email}</span>}
-                        </div>
+              {/* Tab content */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <h3 className="font-display text-lg font-semibold text-navy">
+                    {famTab === "students" ? "Student Information" : famTab === "parents" ? "Parents" : "Emergency Contacts"}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {famTab !== "students" && !famEdit && (
+                      <button onClick={() => { setFamEdit(true); setMyState("idle"); }}
+                        className="flex items-center gap-1 rounded-full border-2 border-royal px-3 py-1 text-xs font-bold text-royal transition hover:bg-royal hover:text-white">
+                        ✏️ Edit
+                      </button>
+                    )}
+                    <button onClick={requestCloseFamily} className="px-1 text-gray-400 hover:text-navy">✕</button>
+                  </div>
+                </div>
+
+                {famTab === "students" && (
+                  <div className="space-y-2 text-sm">
+                    {children.map((c) => (
+                      <div key={c.student_id} className="rounded-xl bg-silver/60 p-3">
+                        <span className="font-semibold text-navy">{c.students.first_name} {c.students.last_name}</span>
+                        <span className="ml-2 text-xs text-gray-400">
+                          {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0]?.grade_name}
+                        </span>
+                        {addrReady && mySaved.address.trim() && (
+                          <div className="mt-1 text-xs text-gray-600">🏠 {mySaved.address.trim()}</div>
+                        )}
                       </div>
                     ))}
+                    <p className="pt-1 text-[11px] text-gray-400">
+                      Student names and grades are managed by the school office. The home address can be updated under the Parents tab.
+                    </p>
                   </div>
                 )}
 
-                <div className="border-t pt-3">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Emergency contacts on file</div>
-                  {famContacts.length ? famContacts.map((c, i) => (
-                    <div key={i} className="mb-2 rounded-lg bg-silver/60 px-3 py-2">
-                      <span className="font-semibold text-navy">{c.name}</span>
-                      {c.relationship && <span className="ml-2 text-xs capitalize text-gray-400">({c.relationship})</span>}
-                      <span className="ml-2 text-xs text-gray-400">for {c.student}</span>
-                      <div className="mt-0.5 text-xs text-gray-600">📞 {c.phone}</div>
+                {famTab === "parents" && (
+                  <div className="space-y-3 text-sm">
+                    <div className={`rounded-xl p-3 ${famEdit ? "border-2 border-royal/40" : "bg-silver/60"}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-navy">{profile?.full_name}</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-deep">you</span>
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">✉️ {session?.user.email} <span className="text-gray-400">· login email — office-managed</span></div>
+                      <div className="mt-3 space-y-2.5">
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Phone
+                          <input disabled={!famEdit} value={myPhone}
+                            onChange={(e) => { setMyPhone(e.target.value); setMyState("idle"); }}
+                            placeholder="(555) 123-4567"
+                            className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800 disabled:border-gray-200 disabled:bg-white/60 disabled:text-gray-500" />
+                        </label>
+                        {addrReady && (
+                          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Home address
+                            <textarea disabled={!famEdit} rows={2} value={myAddress}
+                              onChange={(e) => { setMyAddress(e.target.value); setMyState("idle"); }}
+                              placeholder="Street, City, State ZIP"
+                              className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800 disabled:border-gray-200 disabled:bg-white/60 disabled:text-gray-500" />
+                          </label>
+                        )}
+                      </div>
                     </div>
-                  )) : (
-                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      ⚠ No emergency contact on file — please give one to the school office.
+                    {famGuardians
+                      .filter((g) => (g.email ?? "").toLowerCase() !== (session?.user.email ?? "").toLowerCase())
+                      .map((g, i) => (
+                        <div key={i} className="rounded-xl bg-silver/60 p-3">
+                          <span className="font-semibold text-navy">{g.name}</span>
+                          <span className="ml-2 text-xs capitalize text-gray-400">({g.relationship})</span>
+                          <div className="mt-0.5 text-xs text-gray-600">
+                            {g.phone && <span className="mr-3">📞 {g.phone}</span>}
+                            {g.email && <span>✉️ {g.email}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    <p className="pt-1 text-[11px] text-gray-400">
+                      Names, login emails, and the other parent's details are updated by the school office.
                     </p>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                <div className="border-t pt-3">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Students</div>
-                  {children.map((c) => (
-                    <div key={c.student_id} className="mb-1.5 rounded-lg bg-silver/60 px-3 py-2">
-                      <span className="font-semibold text-navy">{c.students.first_name} {c.students.last_name}</span>
-                      <span className="ml-2 text-xs text-gray-400">
-                        {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0]?.grade_name}
-                      </span>
-                      {addrReady && myAddress.trim() && (
-                        <div className="mt-0.5 text-xs text-gray-600">🏠 {myAddress.trim()}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {famTab === "contacts" && (
+                  <div className="space-y-4 text-sm">
+                    {children.map((c) => {
+                      const rows = ecDraft.filter((x) => x.student_id === c.students.id && !x.del);
+                      return (
+                        <div key={c.student_id}>
+                          <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">For {c.students.first_name}</div>
+                          {!rows.length && !famEdit && (
+                            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                              ⚠ No emergency contact on file — tap ✏️ Edit to add one.
+                            </p>
+                          )}
+                          {rows.map((r) => {
+                            const idx = ecDraft.indexOf(r);
+                            const upd = (patch: Partial<EcRow>) =>
+                              setEcDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+                            return famEdit ? (
+                              <div key={idx} className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 p-2.5">
+                                <input value={r.name} onChange={(e) => upd({ name: e.target.value })} placeholder="Full name"
+                                  className="min-w-0 flex-1 basis-36 rounded-lg border border-gray-300 p-2 text-sm" />
+                                <input value={r.phone} onChange={(e) => upd({ phone: e.target.value })} placeholder="Phone"
+                                  className="min-w-0 flex-1 basis-28 rounded-lg border border-gray-300 p-2 text-sm" />
+                                <input value={r.relationship} onChange={(e) => upd({ relationship: e.target.value })} placeholder="Relationship"
+                                  className="min-w-0 flex-1 basis-28 rounded-lg border border-gray-300 p-2 text-sm" />
+                                <button onClick={() => upd({ del: true })} title="Remove this contact"
+                                  className="px-1 text-red-400 hover:text-red-600">🗑</button>
+                              </div>
+                            ) : (
+                              <div key={idx} className="mb-2 rounded-xl bg-silver/60 p-3">
+                                <span className="font-semibold text-navy">{r.name}</span>
+                                {r.relationship && <span className="ml-2 text-xs capitalize text-gray-400">({r.relationship})</span>}
+                                <div className="mt-0.5 text-xs text-gray-600">📞 {r.phone}</div>
+                              </div>
+                            );
+                          })}
+                          {famEdit && (
+                            <button onClick={() => setEcDraft((prev) => [...prev, { id: null, student_id: c.students.id, name: "", phone: "", relationship: "" }])}
+                              className="rounded-full border border-dashed border-gray-400 px-3 py-1 text-xs font-semibold text-gray-500 hover:border-navy hover:text-navy">
+                              + Add contact
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <p className="pt-1 text-[11px] text-gray-400">
+                      Please keep at least one emergency contact per child up to date.
+                    </p>
+                  </div>
+                )}
 
-                <p className="text-[11px] text-gray-400">
-                  Something outdated or incorrect? Update phone and address above, or tell us through 💬 Feedback / the school office and we'll correct it.
-                </p>
+                {famEdit && (
+                  <div className="mt-4 flex gap-2 border-t pt-3">
+                    <button onClick={saveFamily} disabled={myState === "saving"}
+                      className="rounded-full bg-navy px-5 py-2 text-sm font-semibold text-white transition hover:bg-royal disabled:opacity-40">
+                      {myState === "saving" ? "Saving..." : "Save changes"}
+                    </button>
+                    <button onClick={cancelFamEdit}
+                      className="rounded-full border border-gray-300 px-5 py-2 text-sm font-semibold text-gray-600 hover:bg-silver">
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {myState === "saved" && !famEdit && (
+                  <p className="mt-3 text-xs font-semibold text-emerald-deep">✓ Saved — the school sees the update right away.</p>
+                )}
+                {myState === "error" && (
+                  <p className="mt-3 text-xs text-red-600">Could not save — please try again, or contact the school office.</p>
+                )}
               </div>
             </div>
+
+            {/* Unsaved-changes confirmation */}
+            {confirmDiscard && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={(e) => e.stopPropagation()}>
+                <div className="w-full max-w-xs rounded-2xl bg-white p-5 text-center shadow-2xl">
+                  <p className="text-sm text-gray-700">You have unsaved changes.<br />Leave without saving?</p>
+                  <div className="mt-4 flex justify-center gap-2">
+                    <button onClick={() => { const go = confirmDiscard; setConfirmDiscard(null); go(); }}
+                      className="rounded-full bg-red-600 px-6 py-2 text-sm font-semibold text-white hover:bg-red-700">Sure</button>
+                    <button onClick={() => setConfirmDiscard(null)}
+                      className="rounded-full border border-gray-300 px-6 py-2 text-sm font-semibold text-gray-600 hover:bg-silver">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
