@@ -14,10 +14,19 @@
  * 2. Project Settings > Script properties:
  *      SUPABASE_URL          e.g. https://xxxx.supabase.co
  *      SUPABASE_SERVICE_KEY  the SECRET key (never in the website)
+ *      ALWAYS_KEEP_EDITORS   (optional) comma-separated addresses that must
+ *                            never lose edit access, e.g. the school admin.
  * 3. Run the function `setupSheet` once (dropdowns + formatting).
  * 4. Triggers > Add trigger:
- *      syncAttendance  | From spreadsheet | On change
- *      clearToday      | Time-driven     | Day timer | Midnight to 1am
+ *      syncAttendance    | From spreadsheet | On change
+ *      clearToday        | Time-driven      | Day timer   | Midnight to 1am
+ *      syncSheetEditors  | Time-driven      | Hour timer  | (auto-share)
+ *
+ * ACCESS IS AUTOMATIC: teachers who can edit this sheet are kept in sync
+ * with the ACTIVE teachers in the platform (Admin -> Teachers). Add a
+ * teacher (with their Google email) or deactivate one there and, within
+ * the hour, syncSheetEditors adds/removes them here. Run it by hand once
+ * after first setup to grant access immediately.
  */
 
 var STATUS_MAP = {
@@ -77,6 +86,71 @@ function clearToday() {
     var last = sheet.getLastRow();
     if (last > 1) sheet.getRange(2, 3, last - 1, 2).clearContent();
   });
+}
+
+/**
+ * Auto-manage who can edit this attendance sheet, from the platform.
+ * Editors are reconciled to the ACTIVE teachers in Admin -> Teachers:
+ * new active teachers are added (Google emails them an invite), and
+ * teachers deactivated in the portal are removed. The owner and any
+ * address listed in the ALWAYS_KEEP_EDITORS script property (comma-
+ * separated, e.g. the school admin) are never removed.
+ *
+ * SETUP: add a time-driven trigger -> syncSheetEditors -> Hour timer
+ * (or Day timer). Runs alongside the attendance sync.
+ */
+function syncSheetEditors() {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty("SUPABASE_URL");
+  var key = props.getProperty("SUPABASE_SERVICE_KEY");
+  if (!url || !key) throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_KEY.");
+
+  var wanted = {};
+  activeTeacherEmails_(url, key).forEach(function (e) { wanted[e] = true; });
+  if (!Object.keys(wanted).length) {
+    Logger.log("No active teacher emails returned — skipping (no changes).");
+    return;
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var owner = ((ss.getOwner() && ss.getOwner().getEmail()) || "").toLowerCase();
+  var keep = (props.getProperty("ALWAYS_KEEP_EDITORS") || "").toLowerCase()
+    .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  keep.push(owner);
+
+  // Add active teachers who aren't editors yet
+  var current = ss.getEditors().map(function (u) { return u.getEmail().toLowerCase(); });
+  Object.keys(wanted).forEach(function (email) {
+    if (current.indexOf(email) === -1) {
+      try { ss.addEditor(email); Logger.log("Granted attendance access: " + email); }
+      catch (err) { Logger.log("Could not add " + email + ": " + err); }
+    }
+  });
+
+  // Remove editors who are neither active teachers nor protected
+  ss.getEditors().forEach(function (u) {
+    var email = u.getEmail().toLowerCase();
+    if (!wanted[email] && keep.indexOf(email) === -1) {
+      try { ss.removeEditor(email); Logger.log("Revoked attendance access: " + email); }
+      catch (err) { Logger.log("Could not remove " + email + ": " + err); }
+    }
+  });
+}
+
+/** Emails of active teachers in the platform. [] on error (no changes made). */
+function activeTeacherEmails_(url, key) {
+  try {
+    var r = UrlFetchApp.fetch(
+      url + "/rest/v1/teachers?select=email&active=eq.true&email=not.is.null",
+      { headers: { apikey: key, Authorization: "Bearer " + key }, muteHttpExceptions: true });
+    if (r.getResponseCode() >= 300) return [];
+    return JSON.parse(r.getContentText())
+      .map(function (t) { return (t.email || "").trim().toLowerCase(); })
+      .filter(Boolean);
+  } catch (err) {
+    Logger.log("activeTeacherEmails_ failed: " + err);
+    return [];
+  }
 }
 
 /** One-time helper: headers, dropdowns, frozen row, column widths. */

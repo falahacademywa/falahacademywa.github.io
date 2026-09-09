@@ -9,8 +9,11 @@
  * 2. Project Settings -> Script properties:
  *      SUPABASE_URL          e.g. https://xxxx.supabase.co
  *      SUPABASE_SERVICE_KEY  the LEGACY service_role key (starts eyJ...)
- *      TEACHER_EMAILS        comma-separated allowlist, e.g.
- *                            "teacher1@gmail.com, quran.teacher@gmail.com"
+ *      TEACHER_EMAILS        (OPTIONAL) extra always-allowed addresses,
+ *                            e.g. the school admin. The real allowlist is
+ *                            the ACTIVE teachers in Admin -> Teachers — add
+ *                            or deactivate a teacher there (with their Google
+ *                            email) and form access follows automatically.
  * 3. Run createForm() once (authorize when asked). The log prints the
  *    form's edit URL and the teacher link.
  * 4. MANUAL STEP (Google's API can't add upload questions): open the form's
@@ -71,13 +74,22 @@ function onFormSubmitHandler(e) {
   var props = PropertiesService.getScriptProperties();
   var url = props.getProperty("SUPABASE_URL");
   var key = props.getProperty("SUPABASE_SERVICE_KEY");
-  var allow = (props.getProperty("TEACHER_EMAILS") || "").toLowerCase()
-    .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
 
   var resp = e.response;
   var email = (resp.getRespondentEmail() || "").toLowerCase();
+
+  // Allowlist = active teachers in the platform (Admin -> Teachers).
+  // Add/deactivate a teacher there and form access follows automatically;
+  // no script edits. TEACHER_EMAILS (optional) is merged in as extra
+  // always-allowed addresses (e.g. the school admin) and as a fallback if
+  // the platform is briefly unreachable.
+  var allow = activeTeacherEmails_(url, key);
+  var extra = (props.getProperty("TEACHER_EMAILS") || "").toLowerCase()
+    .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  extra.forEach(function (a) { if (allow.indexOf(a) === -1) allow.push(a); });
+
   if (allow.length && allow.indexOf(email) === -1) {
-    Logger.log("Ignored submission from non-allowlisted address: " + email);
+    Logger.log("Ignored submission from non-active-teacher address: " + email);
     return;
   }
 
@@ -143,6 +155,23 @@ function onFormSubmitHandler(e) {
 }
 
 // ---------------- helpers ----------------
+// Emails of active teachers in the platform (Admin -> Teachers). Lowercased.
+// Returns [] on any error so callers can fall back to TEACHER_EMAILS.
+function activeTeacherEmails_(url, key) {
+  try {
+    var r = UrlFetchApp.fetch(
+      url + "/rest/v1/teachers?select=email&active=eq.true&email=not.is.null",
+      { headers: { apikey: key, Authorization: "Bearer " + key }, muteHttpExceptions: true });
+    if (r.getResponseCode() >= 300) return [];
+    return JSON.parse(r.getContentText())
+      .map(function (t) { return (t.email || "").trim().toLowerCase(); })
+      .filter(Boolean);
+  } catch (err) {
+    Logger.log("activeTeacherEmails_ failed: " + err);
+    return [];
+  }
+}
+
 function fetchRoster_() {
   var props = PropertiesService.getScriptProperties();
   var r = UrlFetchApp.fetch(
