@@ -91,7 +91,17 @@ export default function ParentHome() {
 
   const ICS_URL = "https://falahacademywa.org/falah-academy-2026-2027.ics";
 
+  // Activity log (admin's Parents grid + activity report). Fire-and-forget:
+  // failures (e.g. phase-12 not applied yet) never disturb the parent.
+  function track(event: string, detail?: string) {
+    if (configMissing || !session) return;
+    supabase.from("portal_events")
+      .insert({ user_id: session.user.id, event, detail: detail ?? null })
+      .then(() => {});
+  }
+
   async function openFullCalendar() {
+    track("open_calendar");
     setCalModalOpen(true);
     if (allEvents === null && !configMissing) {
       const { data } = await supabase
@@ -169,6 +179,7 @@ export default function ParentHome() {
         .select("id, title, message, priority, is_read, created_at")
         .order("created_at", { ascending: false }).limit(20);
       setNotifs((n as Notif[]) ?? []);
+      track("open_portal");
     })();
   }, []);
 
@@ -227,6 +238,7 @@ export default function ParentHome() {
   }
 
   async function openMyInfo() {
+    track("open_family_info");
     setMyOpen(true);
     setMyState("idle");
     if (!session || configMissing) return;
@@ -282,6 +294,7 @@ export default function ParentHome() {
 
   // Open a submitted document (private bucket -> short-lived signed URL)
   async function viewDoc(d: DocRef) {
+    track("view_document", d.document_type);
     if (d.storage_path) {
       const { data } = await supabase.storage.from("student-documents").createSignedUrl(d.storage_path, 3600);
       if (data?.signedUrl) { window.open(data.signedUrl, "_blank"); return; }
@@ -557,7 +570,7 @@ export default function ParentHome() {
         {children.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             {children.map((c) => (
-              <button key={c.student_id} onClick={() => setActive(c)}
+              <button key={c.student_id} onClick={() => { setActive(c); if (c.student_id !== active?.student_id) track("view_child", c.students.first_name); }}
                 className={`flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-5 text-base font-semibold transition ${
                   active?.student_id === c.student_id ? "bg-navy text-white shadow-md" : "border border-gray-300 bg-white text-gray-600 hover:bg-white/60"}`}>
                 {c.students.profile_photo_url ? (
@@ -584,7 +597,7 @@ export default function ParentHome() {
                 </label>
               )
             )}
-            <button onClick={() => { setFbOpen(true); setFbState("idle"); }}
+            <button onClick={() => { track("open_feedback"); setFbOpen(true); setFbState("idle"); }}
               className="ml-auto rounded-full border-2 border-emerald-brand bg-white px-4 py-2 text-sm font-semibold text-emerald-deep transition hover:bg-emerald-brand hover:text-white">
               💬 Feedback
             </button>
@@ -603,7 +616,7 @@ export default function ParentHome() {
               Fees due: <span className="font-display text-lg">${feeSummary.due.toFixed(0)}</span>
             </span>
             <span className="text-xs text-red-600">Due by the 5th of the month.</span>
-            <button onClick={() => setPayOpen(true)}
+            <button onClick={() => { track("open_how_to_pay"); setPayOpen(true); }}
               className="ml-auto rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700">
               How to pay
             </button>

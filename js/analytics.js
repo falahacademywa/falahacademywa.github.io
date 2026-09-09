@@ -22,3 +22,20 @@ if (GA_MEASUREMENT_ID && !GA_DISABLED) {
   gtag("js", new Date());
   gtag("config", GA_MEASUREMENT_ID);
 }
+
+// ============================================================
+// Umami — privacy-friendly analytics for the PUBLIC website only.
+// This file is loaded by the public pages and never by /platform,
+// so parent-portal usage is not tracked here. Dashboard (private):
+// https://cloud.umami.is  (log in with the school account).
+// ============================================================
+
+var UMAMI_WEBSITE_ID = "9a779eb3-a610-4783-a21e-226095b0bbaf";
+
+if (UMAMI_WEBSITE_ID && !GA_DISABLED) {
+  var umamiScript = document.createElement("script");
+  umamiScript.defer = true;
+  umamiScript.src = "https://cloud.umami.is/script.js";
+  umamiScript.setAttribute("data-website-id", UMAMI_WEBSITE_ID);
+  document.head.appendChild(umamiScript);
+}

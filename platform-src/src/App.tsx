@@ -16,6 +16,7 @@ import AnnouncementsAdmin from "./pages/admin/AnnouncementsAdmin";
 import Fees from "./pages/admin/Fees";
 import Academics from "./pages/admin/Academics";
 import Reports from "./pages/admin/Reports";
+import ParentActivity from "./pages/admin/ParentActivity";
 import AssignmentsAdmin from "./pages/admin/AssignmentsAdmin";
 import ClassUpdates from "./pages/admin/ClassUpdates";
 import Feedback from "./pages/admin/Feedback";
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="announcements" element={<AnnouncementsAdmin />} />
             <Route path="feedback" element={<Feedback />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="parent-activity" element={<ParentActivity />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

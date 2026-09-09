@@ -34,6 +34,7 @@ export default function Parents() {
   const [sortAsc, setSortAsc] = useState(true);
   const [linking, setLinking] = useState<string | null>(null);
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
+  const [loginMap, setLoginMap] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
@@ -58,6 +59,13 @@ export default function Parents() {
     ((addr as { email: string | null; address: string | null }[]) ?? [])
       .forEach((r) => { if (r.email && r.address) m[r.email.toLowerCase()] = r.address; });
     setAddrMap(m);
+    // Real last-login times from auth (phase 12 RPC) — guarded so the page
+    // still renders where the function isn't installed yet.
+    const { data: logins } = await supabase.rpc("admin_parent_logins");
+    const lm: Record<string, string> = {};
+    ((logins as { email: string | null; last_sign_in_at: string | null }[]) ?? [])
+      .forEach((r) => { if (r.email && r.last_sign_in_at) lm[r.email.toLowerCase()] = r.last_sign_in_at; });
+    setLoginMap(lm);
   }
   useEffect(() => { load(); }, []);
 
@@ -75,6 +83,15 @@ export default function Parents() {
 
   const accountFor = (email: string | null) =>
     email ? accounts.find((a) => a.email?.toLowerCase() === email.toLowerCase()) : undefined;
+
+  const lastLogin = (email: string | null) => {
+    const iso = email ? loginMap[email.toLowerCase()] : undefined;
+    if (!iso) return { label: "never", cls: "text-gray-400" };
+    const d = new Date(iso);
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    const label = days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+    return { label, cls: days <= 7 ? "text-emerald-deep" : "text-gray-500", full: d.toLocaleString() };
+  };
 
   const statusOf = (email: string | null) => {
     const a = accountFor(email);
@@ -139,6 +156,7 @@ export default function Parents() {
               <th className="px-4 py-3">Email (login)</th>
               <th className="cursor-pointer px-4 py-3 hover:text-navy" onClick={() => sortBy("children")}>Children{arrow("children")}</th>
               <th className="cursor-pointer px-4 py-3 hover:text-navy" onClick={() => sortBy("status")}>Account{arrow("status")}</th>
+              <th className="px-4 py-3">Last Login</th>
             </tr>
           </thead>
           <tbody>
@@ -169,11 +187,14 @@ export default function Parents() {
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
                   </td>
+                  <td className="px-4 py-2.5">
+                    {(() => { const l = lastLogin(f.email); return <span className={`text-xs ${l.cls}`} title={l.full ?? ""}>{l.label}</span>; })()}
+                  </td>
                 </tr>
               );
             })}
             {!rows.length && !configMissing && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No parents match.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No parents match.</td></tr>
             )}
           </tbody>
         </table>

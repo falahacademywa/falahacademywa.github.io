@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { monthStr } from "../../lib/dates";
 
@@ -97,6 +98,11 @@ export default function Reports() {
           <h2 className="font-semibold text-navy">Fees Status</h2>
           <p className="mb-3 mt-1 text-sm text-gray-500">Every active fee plan with totals and this-month payment status.</p>
           <button className={btn} onClick={exportFees}>Export CSV</button>
+        </div>
+        <div className={card}>
+          <h2 className="font-semibold text-navy">Parent Portal Activity</h2>
+          <p className="mb-3 mt-1 text-sm text-gray-500">Who's using the portal, and a drill-down of what each family viewed.</p>
+          <Link to="/admin/parent-activity" className={btn}>Open report</Link>
         </div>
       </div>
     </div>
