@@ -113,10 +113,11 @@ function syncSheetEditors() {
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var owner = ((ss.getOwner() && ss.getOwner().getEmail()) || "").toLowerCase();
   var keep = (props.getProperty("ALWAYS_KEEP_EDITORS") || "").toLowerCase()
     .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
-  keep.push(owner);
+  // Never remove the file owner (null on Shared Drives) or whoever runs this.
+  try { var o = ss.getOwner(); if (o && o.getEmail()) keep.push(o.getEmail().toLowerCase()); } catch (err) {}
+  try { var me = Session.getEffectiveUser().getEmail(); if (me) keep.push(me.toLowerCase()); } catch (err) {}
 
   // Add active teachers who aren't editors yet
   var current = ss.getEditors().map(function (u) { return u.getEmail().toLowerCase(); });
