@@ -112,7 +112,15 @@ function syncSheetEditors() {
     return;
   }
 
+  // Resolve the sheet: the active one if this script is bound to it,
+  // otherwise open it by ID from the ATTENDANCE_SHEET_ID script property
+  // (the long id in the sheet's URL). Works standalone or bound.
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    var sid = props.getProperty("ATTENDANCE_SHEET_ID");
+    if (!sid) throw new Error("No active spreadsheet. Set the ATTENDANCE_SHEET_ID script property to the attendance sheet's ID (from its URL).");
+    ss = SpreadsheetApp.openById(sid);
+  }
   var keep = (props.getProperty("ALWAYS_KEEP_EDITORS") || "").toLowerCase()
     .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   // Never remove the file owner (null on Shared Drives) or whoever runs this.
