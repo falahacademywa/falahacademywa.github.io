@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#1e2a4a" />
+  <title>Accredited Academics | Falah Academy — Kent WA</title>
+  <meta name="description" content="Falah Academy delivers Washington-accredited academics — English, Math, Science and Social Studies — through Red Comet under the state's Alternative Learning Experience program." />
+  <link rel="canonical" href="https://falahacademywa.org/program-academics.html" />
+  <meta property="og:site_name" content="Falah Academy" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Accredited Academics | Falah Academy — Kent WA" />
+  <meta property="og:description" content="Falah Academy delivers Washington-accredited academics — English, Math, Science and Social Studies — through Red Comet under the state's Alternative Learning Experience program." />
+  <meta property="og:url" content="https://falahacademywa.org/program-academics.html" />
+  <meta property="og:image" content="https://falahacademywa.org/images/logo.jpg" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="js/analytics.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+  <style>
+    .prog-crumb { font-size:0.85rem; color:var(--text-muted); margin-bottom:0.4rem; }
+    .prog-crumb a { color:var(--royal); text-decoration:none; }
+    .lead { font-size:1.05rem; line-height:1.9; color:var(--text-muted); max-width:760px; }
+    .lead b { color:var(--navy); }
+    .accred { display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:1.3rem; }
+    .accred span { background:var(--silver); color:var(--navy); border-radius:20px; padding:6px 14px; font-size:0.82rem; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+    .accred span i { color:var(--success); }
+    .subj-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.1rem; margin-top:1.6rem; }
+    .subj { background:white; border:0.5px solid var(--border); border-radius:12px; padding:1.3rem; text-align:center; }
+    .subj i { font-size:1.9rem; color:var(--gold); }
+    .subj h4 { color:var(--navy); font-size:1rem; margin:0.5rem 0 0.35rem; }
+    .subj p { color:var(--text-muted); font-size:0.83rem; line-height:1.6; }
+    .grade-detail { display:grid; grid-template-columns:repeat(3,1fr); gap:1.1rem; margin-top:1.6rem; }
+    .gd { background:white; border:0.5px solid var(--border); border-radius:12px; padding:1.4rem; }
+    .gd .tag { display:inline-block; background:var(--navy); color:white; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px; margin-bottom:0.6rem; }
+    .gd h4 { color:var(--navy); font-size:1.05rem; margin-bottom:0.3rem; }
+    .gd .age { color:var(--royal); font-weight:700; font-size:0.82rem; margin-bottom:0.6rem; }
+    .gd p { color:var(--text-muted); font-size:0.85rem; line-height:1.7; }
+    .future { background:linear-gradient(120deg,#eef2fb,#f7f9fd); border:1px dashed var(--border); border-radius:14px; padding:1.5rem 1.7rem; margin-top:1.6rem; text-align:center; }
+    .future h3 { font-family:'Playfair Display',serif; color:var(--navy); font-size:1.2rem; margin-bottom:0.4rem; }
+    .future p { color:var(--text-muted); font-size:0.92rem; line-height:1.7; max-width:680px; margin:0 auto; }
+    .future .chips { display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:center; margin-top:0.9rem; }
+    .future .chips span { background:white; border:0.5px solid var(--border); color:var(--navy); border-radius:20px; padding:5px 13px; font-size:0.8rem; font-weight:600; }
+    .schol { background:linear-gradient(100deg,#1a2f5e,#2b5cb8); color:white; border-radius:14px; padding:1.6rem 1.8rem; margin-top:1.8rem; display:flex; flex-wrap:wrap; align-items:center; gap:1rem; justify-content:space-between; }
+    .schol p { font-size:0.95rem; line-height:1.6; max-width:640px; }
+    .schol b { color:var(--gold-light); }
+    .prog-subnav { position:sticky; top:60px; z-index:40; background:var(--navy-dark); border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); }
+    .prog-subnav-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:1rem; overflow-x:auto; padding:0 1rem; }
+    .psub-label { flex:0 0 auto; color:#fff; font-family:'Playfair Display',serif; font-size:1rem; font-weight:600; white-space:nowrap; letter-spacing:0.02em; }
+    .psub-links { display:flex; gap:0.2rem; flex:0 0 auto; }
+    .psub { flex:0 0 auto; padding:0.7rem 0.95rem; font-size:13px; font-weight:400; color:rgba(255,255,255,0.55); text-decoration:none; border-bottom:2px solid transparent; white-space:nowrap; transition:color .15s, border-color .15s; }
+    .psub:hover { color:#fff; }
+    .psub.active { color:#fff; font-weight:600; border-bottom-color:var(--gold); }
+    .prog-pager { display:flex; justify-content:space-between; gap:1rem; margin-top:2.5rem; border-top:1px solid var(--border); padding-top:1.4rem; }
+    .pager-link { display:flex; flex-direction:column; text-decoration:none; max-width:48%; }
+    .pager-link.next { text-align:right; margin-left:auto; align-items:flex-end; }
+    .pager-link .dir { font-size:0.74rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+    .pager-link .name { font-family:'Playfair Display',serif; font-size:1.08rem; color:var(--navy); font-weight:600; }
+    .pager-link:hover .name { color:var(--royal); }
+    .flag { background:#fff8e1; border:1px dashed #c9a84c; border-radius:8px; padding:0.5rem 0.8rem; font-size:0.8rem; color:#7a6320; margin-top:1rem; }
+    @media (max-width:900px){ .subj-grid{grid-template-columns:repeat(2,1fr);} .grade-detail{grid-template-columns:1fr;} }
+    @media (max-width:560px){ .subj-grid{grid-template-columns:1fr;} }
+  </style>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://falahacademywa.org/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Programs",
+      "item": "https://falahacademywa.org/programs.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Accredited Academics",
+      "item": "https://falahacademywa.org/program-academics.html"
+    }
+  ]
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "EducationalOccupationalProgram",
+  "name": "Accredited Academics",
+  "description": "Falah Academy delivers Washington-accredited academics — English, Math, Science and Social Studies — through Red Comet under the state's Alternative Learning Experience program.",
+  "programType": "Full-time day school",
+  "educationalProgramMode": "full-time",
+  "provider": {
+    "@type": "School",
+    "name": "Falah Academy",
+    "url": "https://falahacademywa.org/"
+  }
+}
+  </script>
+</head>
+<body>
+  <div id="announcement-banner"><span class="banner-text"></span><span class="banner-arrow">→</span><button class="banner-close">✕</button></div>
+  <nav class="navbar">
+    <a href="index.html" class="nav-logo"><img src="images/logo.jpg" alt="Falah Academy Logo" loading="lazy" /><div class="nav-brand"><span class="nav-brand-name">Falah Academy</span><span class="nav-brand-tagline">Kent's First Full-Time Islamic School</span></div></a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="about.html" class="nav-link">About Us</a>
+      <div class="nav-dropdown">
+        <a href="programs.html" class="nav-link nav-dropdown-toggle">Programs ▾</a>
+        <div class="nav-dropdown-menu">
+          <a href="program-quran.html" class="nav-dropdown-item">Qur'an Reading</a>
+          <a href="program-islamic-studies.html" class="nav-dropdown-item">Islamic Studies</a>
+          <a href="program-academics.html" class="nav-dropdown-item">Academics</a>
+          <a href="program-stem.html" class="nav-dropdown-item">STEM &amp; Coding</a>
+          <a href="partners.html" class="nav-dropdown-item">Our Partners</a>
+        </div>
+      </div>
+      <div class="nav-dropdown">
+        <a href="admissions.html" class="nav-link nav-dropdown-toggle">Admissions ▾</a>
+        <div class="nav-dropdown-menu">
+          <a href="#" onclick="openAdmissionPopup();return false;" class="nav-dropdown-item">Admission Form</a>
+          <a href="calendar.html" class="nav-dropdown-item">Academic Calendar</a>
+        </div>
+      </div>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="contact.html" class="nav-link">Contact</a>
+      <a href="platform/" class="nav-link">Family Portal</a>
+      <a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a>
+    </div>
+    <div class="hamburger"><span></span><span></span><span></span></div>
+  </nav>
+
+  <div class="prog-subnav">
+    <div class="prog-subnav-inner">
+      <span class="psub-label">Our Four Programs</span>
+      <div class="psub-links">
+        <a href="program-quran.html" class="psub">Qur'an Reading</a>
+        <a href="program-islamic-studies.html" class="psub">Islamic Studies</a>
+        <a href="program-academics.html" class="psub active">Academics</a>
+        <a href="program-stem.html" class="psub">STEM &amp; Coding</a>
+        <a href="partners.html" class="psub">Our Partners</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-hero">
+    <div class="page-hero-content">
+      <p class="prog-crumb"><a href="programs.html">Programs</a> › Accredited Academics</p>
+      <h1>Accredited Academics</h1>
+      <p>A full, Washington-recognized academic education — English, Math, Science and Social Studies — delivered through our accredited partner, Red Comet.</p>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="section-inner">
+      <p class="section-title">Real Academics, Fully Accredited</p>
+      <div class="section-divider"></div>
+      <p class="lead">Falah Academy delivers its core academic subjects through <b>Red Comet</b>, an accredited online school provider, under Washington State's <b>Alternative Learning Experience (ALE)</b> framework. This means your child receives a rigorous, standards-aligned education — with coursework, grades and records that are recognized and transferable — while learning in a nurturing, full-time Islamic environment.</p>
+      <div class="accred">
+        <span><i class="ti ti-circle-check-filled"></i> Cognia accredited</span>
+        <span><i class="ti ti-circle-check-filled"></i> NWAC accredited</span>
+        <span><i class="ti ti-circle-check-filled"></i> OSPI / Washington ALE</span>
+        <span><i class="ti ti-circle-check-filled"></i> Standards-aligned</span>
+        <span><i class="ti ti-circle-check-filled"></i> Transferable records</span>
+      </div>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-top:1.1rem;">Accreditations shown are those of <a href="https://redcomet.org/" target="_blank" rel="noopener" style="color:var(--royal);font-weight:600;">Red Comet</a>, Falah Academy's accredited academic provider, whose standards-aligned coursework we deliver under Washington's Alternative Learning Experience program.</p>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="section-inner">
+      <p class="section-title">Core Subjects</p>
+      <div class="section-divider"></div>
+      <div class="subj-grid">
+        <div class="subj"><i class="ti ti-abc"></i><h4>English / Language Arts</h4><p>Reading, writing, phonics and communication skills.</p></div>
+        <div class="subj"><i class="ti ti-math"></i><h4>Mathematics</h4><p>Number sense and problem-solving, built step by step.</p></div>
+        <div class="subj"><i class="ti ti-flask"></i><h4>Science</h4><p>Curiosity about the natural world Allah created.</p></div>
+        <div class="subj"><i class="ti ti-world"></i><h4>Social Studies</h4><p>Community, geography and the world around us.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-inner">
+      <p class="section-title">Grades This Year</p>
+      <div class="section-divider"></div>
+      <p class="section-sub">For Academic Year 2026–2027, Falah Academy offers the following grades. Every grade combines accredited academics with our Qur'an, Islamic Studies and STEM programs — all in one full-time day.</p>
+      <div class="grade-detail">
+        <div class="gd">
+          <span class="tag">PRE-K · AGE 4</span>
+          <h4>Pre-Kindergarten</h4>
+          <div class="age">Early learning foundations</div>
+          <p>Play-based early literacy, numeracy and social skills, alongside first Arabic letters and Islamic manners — a gentle, joyful start to school.</p>
+        </div>
+        <div class="gd">
+          <span class="tag">KG · AGE 5</span>
+          <h4>Kindergarten</h4>
+          <div class="age">Reading &amp; number readiness</div>
+          <p>Phonics, early reading and writing, foundational math and hands-on science, woven together with Qur'an and character education.</p>
+        </div>
+        <div class="gd">
+          <span class="tag">GRADE 1 · AGE 6</span>
+          <h4>Grade 1 <span style="color:var(--success);font-size:0.75rem;">• New this year</span></h4>
+          <div class="age">Accredited elementary begins</div>
+          <p>The first fully accredited elementary year through Red Comet — structured English, Math, Science and Social Studies with grades and records that carry forward.</p>
+        </div>
+      </div>
+
+      <div class="future">
+        <h3>Growing Toward K–12, One Grade at a Time</h3>
+        <p>Falah Academy adds a new grade each year as our founding students advance. Higher grades open as those cohorts grow — insha'Allah building toward a complete Pre-K through 12 Islamic school for Kent.</p>
+        <div class="chips">
+          <span>Grade 2 — upcoming</span><span>Grade 3 — upcoming</span><span>Grade 4 &amp; beyond — future</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="section-inner">
+      <p style="text-align:center;margin-top:0;">
+        <a href="admissions.html#enroll" class="btn-primary" style="font-size:14px;">Apply for 2026–2027 <i class="ti ti-arrow-right"></i></a>
+        &nbsp;
+        <a href="partners.html" class="btn-outline-navy" style="font-size:14px;">About Red Comet &amp; our partners</a>
+      </p>
+      <nav class="prog-pager">
+        <a href="program-islamic-studies.html" class="pager-link prev"><span class="dir">← Previous</span><span class="name">Islamic Studies</span></a>
+        <a href="program-stem.html" class="pager-link next"><span class="dir">Next program →</span><span class="name">STEM &amp; Coding</span></a>
+      </nav>
+    </div>
+  </section>
+
+  <footer class="footer"><div class="footer-inner"><div class="footer-grid"><div><div class="footer-brand">Falah Academy</div><p class="footer-text">Empowering Minds, Enlightening Futures.<br>Kent's First Full-Time Islamic School.<br><br>📍 Al Huda Islamic Center<br>25650 101st Ave SE, Kent, WA 98030</p><div class="footer-social">
+            <a href="https://chat.whatsapp.com/DERaJbJuJzDBLieC4ACPzM" target="_blank" rel="noopener" aria-label="WhatsApp Group"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+            <a href="https://www.facebook.com/FalahAcademyWA" target="_blank" rel="noopener" aria-label="Facebook Page"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+          </div></div><div><div class="footer-heading">Quick Links</div><a href="index.html" class="footer-link">Home</a><a href="about.html" class="footer-link">About Us</a><a href="programs.html" class="footer-link">Programs</a><a href="admissions.html" class="footer-link">Admissions</a><a href="events.html" class="footer-link">Events</a><a href="contact.html" class="footer-link">Contact</a><a href="platform/" class="footer-link">Family Portal</a></div><div><div class="footer-heading">Admissions</div><a href="admissions.html" class="footer-link">Apply Now</a><a href="admissions.html#calendar" class="footer-link">Academic Calendar</a><a href="programs.html" class="footer-link">Our Programs</a><a href="privacy.html" class="footer-link">Privacy Policy</a></div><div><div class="footer-heading">Contact Us</div><p class="footer-text">(301) 919-0106<br>falahacademywa@gmail.com</p><p class="footer-text" style="margin-top:0.8rem;">Mon–Thu<br>9:00 AM – 2:00 PM</p></div></div><div class="footer-bottom"><span class="footer-copy">© 2025–2026 Falah Academy. All rights reserved.</span><span class="footer-disc">Falah Academy admits students of any race, color, and national or ethnic origin.</span></div></div></footer>
+  <button id="back-to-top" aria-label="Back to top">↑</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    window.addEventListener('load', function() {
+      if (window.location.hash === '#enroll') {
+        setTimeout(function() { if(typeof openAdmissionPopup==='function') openAdmissionPopup(); }, 400);
+      }
+    });
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash === '#enroll') {
+        if(typeof openAdmissionPopup==='function') openAdmissionPopup();
+      }
+    });
+  </script>
+</body>
+</html>

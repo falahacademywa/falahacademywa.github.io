@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#1e2a4a" />
+  <title>Qur'an Reading Program | Falah Academy — Kent WA</title>
+  <meta name="description" content="Falah Academy's Qur'an reading program takes children from the Noorani Qaida to reading the whole Mushaf with correct Tajweed — a structured pathway from Pre-K to Grade 4 in Kent, WA." />
+  <link rel="canonical" href="https://falahacademywa.org/program-quran.html" />
+  <meta property="og:site_name" content="Falah Academy" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Qur'an Reading Program | Falah Academy — Kent WA" />
+  <meta property="og:description" content="Falah Academy's Qur'an reading program takes children from the Noorani Qaida to reading the whole Mushaf with correct Tajweed — a structured pathway from Pre-K to Grade 4 in Kent, WA." />
+  <meta property="og:url" content="https://falahacademywa.org/program-quran.html" />
+  <meta property="og:image" content="https://falahacademywa.org/images/logo.jpg" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="js/analytics.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+  <style>
+    .prog-crumb { font-size:0.85rem; color:var(--text-muted); margin-bottom:0.4rem; }
+    .prog-crumb a { color:var(--royal); text-decoration:none; }
+    .lead { font-size:1.05rem; line-height:1.9; color:var(--text-muted); max-width:760px; }
+    .lead b { color:var(--navy); }
+    .pillars { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-top:1.6rem; }
+    .pillar { background:white; border:0.5px solid var(--border); border-radius:12px; padding:1.2rem; text-align:center; }
+    .pillar i { font-size:1.8rem; color:var(--gold); }
+    .pillar h4 { color:var(--navy); font-size:0.98rem; margin:0.5rem 0 0.3rem; }
+    .pillar p { color:var(--text-muted); font-size:0.83rem; line-height:1.6; }
+    /* roadmap */
+    .roadmap { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-top:1.6rem; }
+    .year-card { background:white; border:0.5px solid var(--border); border-radius:12px; padding:1.2rem; position:relative; display:flex; flex-direction:column; }
+    .year-card.final { background:linear-gradient(160deg,#1a2f5e,#2b5cb8); border:none; }
+    .year-card.final .year-name, .year-card.final .year-juz, .year-card.final .year-desc { color:white; }
+    .year-card.final .year-tag { background:var(--gold); color:var(--navy); }
+    .year-tag { display:inline-block; background:var(--silver); color:var(--navy); font-size:0.72rem; font-weight:700; padding:3px 9px; border-radius:20px; align-self:flex-start; margin-bottom:0.6rem; }
+    .year-name { font-family:'Playfair Display',serif; font-size:1.05rem; color:var(--navy); font-weight:600; }
+    .year-juz { color:var(--royal); font-weight:700; font-size:0.85rem; margin:0.25rem 0 0.5rem; }
+    .year-desc { color:var(--text-muted); font-size:0.8rem; line-height:1.6; }
+    .method-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-top:1.6rem; }
+    .step { background:white; border:0.5px solid var(--border); border-radius:12px; padding:1.3rem; }
+    .step .n { font-family:'Playfair Display',serif; font-size:1.6rem; color:var(--gold); font-weight:700; }
+    .step h4 { color:var(--navy); font-size:1rem; margin:0.3rem 0 0.4rem; }
+    .step p { color:var(--text-muted); font-size:0.85rem; line-height:1.7; }
+    .pull { background:var(--silver); border-left:4px solid var(--gold); border-radius:0 12px 12px 0; padding:1.5rem 1.8rem; margin-top:1.8rem; }
+    .pull p { font-family:'Playfair Display',serif; font-size:1.15rem; color:var(--navy); font-style:italic; line-height:1.7; }
+    .qlist { list-style:none; margin-top:1rem; }
+    .qlist li { display:flex; gap:0.7rem; align-items:flex-start; padding:0.5rem 0; color:var(--text-muted); font-size:0.92rem; line-height:1.7; }
+    .qlist li i { color:var(--success); font-size:1.1rem; margin-top:2px; flex-shrink:0; }
+    .schol { background:linear-gradient(100deg,#1a2f5e,#2b5cb8); color:white; border-radius:14px; padding:1.6rem 1.8rem; margin-top:1.8rem; display:flex; flex-wrap:wrap; align-items:center; gap:1rem; justify-content:space-between; }
+    .schol p { font-size:0.95rem; line-height:1.6; max-width:640px; }
+    .schol b { color:var(--gold-light); }
+    .prog-subnav { position:sticky; top:60px; z-index:40; background:var(--navy-dark); border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); }
+    .prog-subnav-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:1rem; overflow-x:auto; padding:0 1rem; }
+    .psub-label { flex:0 0 auto; color:#fff; font-family:'Playfair Display',serif; font-size:1rem; font-weight:600; white-space:nowrap; letter-spacing:0.02em; }
+    .psub-links { display:flex; gap:0.2rem; flex:0 0 auto; }
+    .psub { flex:0 0 auto; padding:0.7rem 0.95rem; font-size:13px; font-weight:400; color:rgba(255,255,255,0.55); text-decoration:none; border-bottom:2px solid transparent; white-space:nowrap; transition:color .15s, border-color .15s; }
+    .psub:hover { color:#fff; }
+    .psub.active { color:#fff; font-weight:600; border-bottom-color:var(--gold); }
+    .prog-pager { display:flex; justify-content:space-between; gap:1rem; margin-top:2.5rem; border-top:1px solid var(--border); padding-top:1.4rem; }
+    .pager-link { display:flex; flex-direction:column; text-decoration:none; max-width:48%; }
+    .pager-link.next { text-align:right; margin-left:auto; align-items:flex-end; }
+    .pager-link .dir { font-size:0.74rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+    .pager-link .name { font-family:'Playfair Display',serif; font-size:1.08rem; color:var(--navy); font-weight:600; }
+    .pager-link:hover .name { color:var(--royal); }
+    .flag { background:#fff8e1; border:1px dashed #c9a84c; border-radius:8px; padding:0.5rem 0.8rem; font-size:0.8rem; color:#7a6320; margin-top:0.8rem; }
+    @media (max-width:900px){ .pillars,.roadmap,.method-steps{grid-template-columns:repeat(2,1fr);} }
+    @media (max-width:560px){ .pillars,.roadmap,.method-steps{grid-template-columns:1fr;} }
+  </style>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://falahacademywa.org/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Programs",
+      "item": "https://falahacademywa.org/programs.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Qur'an Reading",
+      "item": "https://falahacademywa.org/program-quran.html"
+    }
+  ]
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "EducationalOccupationalProgram",
+  "name": "Qur'an Reading",
+  "description": "Falah Academy's Qur'an reading program takes children from the Noorani Qaida to reading the whole Mushaf with correct Tajweed — a structured pathway from Pre-K to Grade 4 in Kent, WA.",
+  "programType": "Full-time day school",
+  "educationalProgramMode": "full-time",
+  "provider": {
+    "@type": "School",
+    "name": "Falah Academy",
+    "url": "https://falahacademywa.org/"
+  }
+}
+  </script>
+</head>
+<body>
+  <div id="announcement-banner"><span class="banner-text"></span><span class="banner-arrow">→</span><button class="banner-close">✕</button></div>
+  <nav class="navbar">
+    <a href="index.html" class="nav-logo"><img src="images/logo.jpg" alt="Falah Academy Logo" loading="lazy" /><div class="nav-brand"><span class="nav-brand-name">Falah Academy</span><span class="nav-brand-tagline">Kent's First Full-Time Islamic School</span></div></a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="about.html" class="nav-link">About Us</a>
+      <div class="nav-dropdown">
+        <a href="programs.html" class="nav-link nav-dropdown-toggle">Programs ▾</a>
+        <div class="nav-dropdown-menu">
+          <a href="program-quran.html" class="nav-dropdown-item">Qur'an Reading</a>
+          <a href="program-islamic-studies.html" class="nav-dropdown-item">Islamic Studies</a>
+          <a href="program-academics.html" class="nav-dropdown-item">Academics</a>
+          <a href="program-stem.html" class="nav-dropdown-item">STEM &amp; Coding</a>
+          <a href="partners.html" class="nav-dropdown-item">Our Partners</a>
+        </div>
+      </div>
+      <div class="nav-dropdown">
+        <a href="admissions.html" class="nav-link nav-dropdown-toggle">Admissions ▾</a>
+        <div class="nav-dropdown-menu">
+          <a href="#" onclick="openAdmissionPopup();return false;" class="nav-dropdown-item">Admission Form</a>
+          <a href="calendar.html" class="nav-dropdown-item">Academic Calendar</a>
+        </div>
+      </div>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="contact.html" class="nav-link">Contact</a>
+      <a href="platform/" class="nav-link">Family Portal</a>
+      <a href="admissions.html#enroll" class="nav-link nav-enroll">Apply Now</a>
+    </div>
+    <div class="hamburger"><span></span><span></span><span></span></div>
+  </nav>
+
+  <div class="prog-subnav">
+    <div class="prog-subnav-inner">
+      <span class="psub-label">Our Four Programs</span>
+      <div class="psub-links">
+        <a href="program-quran.html" class="psub active">Qur'an Reading</a>
+        <a href="program-islamic-studies.html" class="psub">Islamic Studies</a>
+        <a href="program-academics.html" class="psub">Academics</a>
+        <a href="program-stem.html" class="psub">STEM &amp; Coding</a>
+        <a href="partners.html" class="psub">Our Partners</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-hero">
+    <div class="page-hero-content">
+      <p class="prog-crumb"><a href="programs.html">Programs</a> › Qur'an Reading</p>
+      <h1>Qur'an Reading</h1>
+      <p>From the first letter to the whole Mushaf — a structured journey in reading the Book of Allah with correct Tajweed.</p>
+    </div>
+  </div>
+
+  <section style="background:var(--navy);padding:2rem;">
+    <div style="max-width:720px;margin:0 auto;text-align:center;">
+      <p style="color:#e8d5a0;font-size:1.35rem;line-height:1.9;direction:rtl;margin-bottom:0.5rem;">وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا</p>
+      <p style="color:#a0c4ff;font-style:italic;font-size:0.95rem;margin-bottom:0.3rem;">"And recite the Qur'an with measured recitation."</p>
+      <small style="color:#5a7090;font-size:0.8rem;">— Surah Al-Muzzammil (73:4)</small>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-inner">
+      <p class="section-title">A Reading Journey, Not a Race</p>
+      <div class="section-divider"></div>
+      <p class="lead">At Falah Academy, learning to read the Qur'an is the heart of every school day. Children begin with the <b>Noorani Qaida</b> — the letters, their sounds, and the rules of joining them — and move, step by step, toward reading the Qur'an fluently and beautifully. Our goal is not speed but <b>correct, confident recitation with Tajweed</b>, built on a foundation that lasts a lifetime, insha'Allah.</p>
+      <div class="pillars">
+        <div class="pillar"><i class="ti ti-abc"></i><h4>Recognition</h4><p>Every letter, its shapes, and its sound — mastered before moving on.</p></div>
+        <div class="pillar"><i class="ti ti-music"></i><h4>Tajweed</h4><p>The rules of pronunciation taught from the very first lessons.</p></div>
+        <div class="pillar"><i class="ti ti-book"></i><h4>Fluency</h4><p>Joining letters into words, then words into flowing recitation.</p></div>
+        <div class="pillar"><i class="ti ti-heart"></i><h4>Love</h4><p>A gentle, encouraging environment that builds a lasting bond with the Qur'an.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="section-inner">
+      <p class="section-title">The Journey Ahead — Pre-K to Grade 4</p>
+      <div class="section-divider"></div>
+      <p class="section-sub">As Falah grows one grade each year, here is the reading pathway a child follows — from their first Qaida lesson toward completing the recitation of the Qur'an. Each stage builds on the one before it.</p>
+      <div class="roadmap">
+        <div class="year-card">
+          <span class="year-tag">PRE-K &amp; KG</span>
+          <span class="year-name">Noorani Qaida</span>
+          <span class="year-juz">The Foundation</span>
+          <span class="year-desc">Arabic letters, their sounds and shapes, harakat, and joining letters — with Tajweed introduced from the start.</span>
+        </div>
+        <div class="year-card">
+          <span class="year-tag">GRADE 1</span>
+          <span class="year-name">Qaida to Qur'an</span>
+          <span class="year-juz">Juz 'Amma begins</span>
+          <span class="year-desc">Completing the Qaida and beginning to read short surahs from the 30th Juz with support.</span>
+        </div>
+        <div class="year-card">
+          <span class="year-tag">GRADE 2</span>
+          <span class="year-name">Fluent Reading</span>
+          <span class="year-juz">Reading from the Mushaf</span>
+          <span class="year-desc">Reading directly from the Qur'an with growing fluency and applied Tajweed rules.</span>
+        </div>
+        <div class="year-card">
+          <span class="year-tag">GRADE 3</span>
+          <span class="year-name">Tajweed Applied</span>
+          <span class="year-juz">Consistent recitation</span>
+          <span class="year-desc">Refining pronunciation, rhythm and the rules of stopping (waqf) across longer passages.</span>
+        </div>
+        <div class="year-card final">
+          <span class="year-tag">GRADE 4</span>
+          <span class="year-name">Confident Reciter</span>
+          <span class="year-juz">Reading the whole Mushaf</span>
+          <span class="year-desc">Reading any part of the Qur'an fluently and correctly — the goal of the reading journey, insha'Allah.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-inner">
+      <p class="section-title">How We Teach</p>
+      <div class="section-divider"></div>
+      <p class="section-sub">A simple, proven method repeated daily until it becomes second nature.</p>
+      <div class="method-steps">
+        <div class="step"><span class="n">1</span><h4>Listen</h4><p>The teacher recites; children hear correct pronunciation and Tajweed modeled clearly.</p></div>
+        <div class="step"><span class="n">2</span><h4>Repeat</h4><p>Children echo together and one by one, correcting sounds gently as they go.</p></div>
+        <div class="step"><span class="n">3</span><h4>Read</h4><p>Each child reads their lesson aloud to the teacher for individual feedback.</p></div>
+        <div class="step"><span class="n">4</span><h4>Revise</h4><p>Daily review locks in what was learned before moving to the next lesson.</p></div>
+      </div>
+      <div class="pull"><p>"The best among you are those who learn the Qur'an and teach it." — Prophet Muhammad ﷺ (Sahih al-Bukhari)</p></div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="section-inner">
+      <p class="section-title">What Makes It Work</p>
+      <div class="section-divider"></div>
+      <ul class="qlist">
+        <li><i class="ti ti-circle-check-filled"></i><span><b>Daily practice.</b> Qur'an reading is part of every school day — consistency is what builds fluent readers.</span></li>
+        <li><i class="ti ti-circle-check-filled"></i><span><b>Small, focused attention.</b> Every child reads to the teacher individually, so no one is left behind or held back.</span></li>
+        <li><i class="ti ti-circle-check-filled"></i><span><b>Tajweed from day one.</b> Correct pronunciation is built in from the first letter, not corrected later.</span></li>
+        <li><i class="ti ti-circle-check-filled"></i><span><b>A joyful atmosphere.</b> Encouragement, patience, and celebration of every milestone build a lasting love for the Qur'an.</span></li>
+        <li><i class="ti ti-circle-check-filled"></i><span><b>Parents kept in the loop.</b> Progress and Qur'an updates reach families through the Family Portal.</span></li>
+      </ul>
+
+      <p style="text-align:center;margin-top:1rem;">
+        <a href="admissions.html#enroll" class="btn-primary" style="font-size:14px;">Apply for 2026–2027 <i class="ti ti-arrow-right"></i></a>
+        &nbsp;
+        <a href="programs.html" class="btn-outline-navy" style="font-size:14px;">Back to all programs</a>
+      </p>
+      <nav class="prog-pager">
+        <a href="programs.html" class="pager-link prev"><span class="dir">← Overview</span><span class="name">All Programs</span></a>
+        <a href="program-islamic-studies.html" class="pager-link next"><span class="dir">Next program →</span><span class="name">Islamic Studies</span></a>
+      </nav>
+    </div>
+  </section>
+
+  <footer class="footer"><div class="footer-inner"><div class="footer-grid"><div><div class="footer-brand">Falah Academy</div><p class="footer-text">Empowering Minds, Enlightening Futures.<br>Kent's First Full-Time Islamic School.<br><br>📍 Al Huda Islamic Center<br>25650 101st Ave SE, Kent, WA 98030</p><div class="footer-social">
+            <a href="https://chat.whatsapp.com/DERaJbJuJzDBLieC4ACPzM" target="_blank" rel="noopener" aria-label="WhatsApp Group"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+            <a href="https://www.facebook.com/FalahAcademyWA" target="_blank" rel="noopener" aria-label="Facebook Page"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+          </div></div><div><div class="footer-heading">Quick Links</div><a href="index.html" class="footer-link">Home</a><a href="about.html" class="footer-link">About Us</a><a href="programs.html" class="footer-link">Programs</a><a href="admissions.html" class="footer-link">Admissions</a><a href="events.html" class="footer-link">Events</a><a href="contact.html" class="footer-link">Contact</a><a href="platform/" class="footer-link">Family Portal</a></div><div><div class="footer-heading">Admissions</div><a href="admissions.html" class="footer-link">Apply Now</a><a href="admissions.html#calendar" class="footer-link">Academic Calendar</a><a href="programs.html" class="footer-link">Our Programs</a><a href="privacy.html" class="footer-link">Privacy Policy</a></div><div><div class="footer-heading">Contact Us</div><p class="footer-text">(301) 919-0106<br>falahacademywa@gmail.com</p><p class="footer-text" style="margin-top:0.8rem;">Mon–Thu<br>9:00 AM – 2:00 PM</p></div></div><div class="footer-bottom"><span class="footer-copy">© 2025–2026 Falah Academy. All rights reserved.</span><span class="footer-disc">Falah Academy admits students of any race, color, and national or ethnic origin.</span></div></div></footer>
+  <button id="back-to-top" aria-label="Back to top">↑</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    window.addEventListener('load', function() {
+      if (window.location.hash === '#enroll') {
+        setTimeout(function() { if(typeof openAdmissionPopup==='function') openAdmissionPopup(); }, 400);
+      }
+    });
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash === '#enroll') {
+        if(typeof openAdmissionPopup==='function') openAdmissionPopup();
+      }
+    });
+  </script>
+</body>
+</html>
