@@ -34,6 +34,10 @@ export default function Fees() {
   const [payFor, setPayFor] = useState<string | null>(null);
   const [payForm, setPayForm] = useState({ amount: "", payment_method: "cash", reference_no: "", payment_date: todayStr() });
   const [planForm, setPlanForm] = useState({ enrollment_id: "", total_amount: "", billing_frequency: "monthly" });
+  // Correcting a recorded payment (wrong method/amount/date). Admin-only via
+  // RLS; every change is written to audit_log by the payments_audit trigger.
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ payment_date: "", amount: "", payment_method: "cash", reference_no: "" });
 
   async function load() {
     if (configMissing) return;
@@ -88,12 +92,35 @@ export default function Fees() {
     setMsg(null); load();
   }
 
+  type Payment = PlanRow["payments"][number];
+  function startEdit(p: Payment) {
+    setEditId(p.id);
+    setEditForm({ payment_date: p.payment_date, amount: String(p.amount), payment_method: p.payment_method, reference_no: p.reference_no ?? "" });
+  }
+  async function saveEdit() {
+    if (editId == null) return;
+    const { error } = await supabase.from("payments").update({
+      payment_date: editForm.payment_date,
+      amount: Number(editForm.amount),
+      payment_method: editForm.payment_method,
+      reference_no: editForm.reference_no || null,
+    }).eq("id", editId);
+    if (error) return setMsg("Update failed: " + error.message);
+    setEditId(null); setMsg(null); load();
+  }
+  async function deletePayment(p: Payment) {
+    if (!confirm(`Delete the $${Number(p.amount).toFixed(2)} payment dated ${p.payment_date}? This cannot be undone.`)) return;
+    const { error } = await supabase.from("payments").delete().eq("id", p.id);
+    if (error) return setMsg("Delete failed: " + error.message);
+    setMsg(null); load();
+  }
+
   return (
     <div className="max-w-4xl">
       <h1 className="mb-2 font-display text-2xl font-semibold text-navy">Fees</h1>
       <p className="mb-6 text-sm text-gray-500">
         One plan per enrollment (BR-010). Each student's fee can differ. $0 plans never trigger reminders (BR-121).
-        Recording a payment automatically notifies the family.
+        Recording a payment automatically notifies the family; editing or deleting one does not (changes are kept in the audit log).
       </p>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage fees.</p>}
@@ -187,12 +214,48 @@ export default function Fees() {
                 <table className="mt-2 w-full text-xs">
                   <tbody>
                     {[...r.payments].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).map((p) => (
-                      <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-1">{p.payment_date}</td>
-                        <td className="py-1 font-semibold">${Number(p.amount).toFixed(2)}</td>
-                        <td className="py-1">{p.payment_method}</td>
-                        <td className="py-1 text-gray-400">{p.reference_no ?? ""}</td>
-                      </tr>
+                      editId === p.id ? (
+                        <tr key={p.id} className="border-b bg-amber-50 last:border-0">
+                          <td className="py-1 pr-2">
+                            <input type="date" value={editForm.payment_date}
+                              onChange={(e) => setEditForm({ ...editForm, payment_date: e.target.value })}
+                              className="rounded border border-gray-300 px-1.5 py-1 text-xs" />
+                          </td>
+                          <td className="py-1 pr-2">
+                            <input type="number" min="1" step="0.01" value={editForm.amount}
+                              onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                              className="w-24 rounded border border-gray-300 px-1.5 py-1 text-xs" />
+                          </td>
+                          <td className="py-1 pr-2">
+                            <select value={editForm.payment_method}
+                              onChange={(e) => setEditForm({ ...editForm, payment_method: e.target.value })}
+                              className="rounded border border-gray-300 px-1.5 py-1 text-xs">
+                              {["cash", "check", "bank", "zelle", "other"].map((m) => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </td>
+                          <td className="py-1 pr-2">
+                            <input placeholder="Reference #" value={editForm.reference_no}
+                              onChange={(e) => setEditForm({ ...editForm, reference_no: e.target.value })}
+                              className="w-28 rounded border border-gray-300 px-1.5 py-1 text-xs" />
+                          </td>
+                          <td className="py-1 text-right whitespace-nowrap">
+                            <button onClick={saveEdit} disabled={!editForm.amount || !editForm.payment_date}
+                              className="rounded bg-navy px-2.5 py-1 text-xs font-semibold text-white hover:bg-royal disabled:opacity-50">Save</button>
+                            <button onClick={() => setEditId(null)} className="ml-2 text-xs text-gray-500 hover:text-navy">Cancel</button>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={p.id} className="border-b last:border-0">
+                          <td className="py-1">{p.payment_date}</td>
+                          <td className="py-1 font-semibold">${Number(p.amount).toFixed(2)}</td>
+                          <td className="py-1">{p.payment_method}</td>
+                          <td className="py-1 text-gray-400">{p.reference_no ?? ""}</td>
+                          <td className="py-1 text-right whitespace-nowrap">
+                            <button onClick={() => startEdit(p)} className="text-xs font-semibold text-royal hover:underline">Edit</button>
+                            <button onClick={() => deletePayment(p)} className="ml-3 text-xs text-red-600 hover:underline">Delete</button>
+                          </td>
+                        </tr>
+                      )
                     ))}
                   </tbody>
                 </table>
