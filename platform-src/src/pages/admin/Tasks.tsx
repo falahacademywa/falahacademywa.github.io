@@ -74,14 +74,25 @@ export default function Tasks() {
     });
   }, []);
 
+  // Column filters (dropdowns under Category / Assigned to / Status); "" = all.
+  const [catF, setCatF] = useState("");
+  const [whoF, setWhoF] = useState("");
+  const [statF, setStatF] = useState("");
+
   const pool = useMemo(() => rows.filter((r) => showDone || !r.is_done), [rows, showDone]);
+  const distinct = (pick: (r: Task) => string) => [...new Set(pool.map(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = useMemo(() => distinct((r) => r.category), [pool]);
+  const assignees = useMemo(() => distinct((r) => r.assigned_to), [pool]);
+  const statuses = useMemo(() => distinct((r) => r.status), [pool]);
+  const anyFilter = Boolean(filter || catF || whoF || statF);
+  const clearAll = () => { setFilter(""); setCatF(""); setWhoF(""); setStatF(""); };
 
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    const hit = needle
-      ? pool.filter((r) => [r.code, r.category, r.task, r.assigned_to, r.due_text, r.status, urgency(r).icon, urgency(r).label]
-          .join(" ").toLowerCase().includes(needle))
-      : pool;
+    const hit = pool.filter((r) =>
+      (!catF || r.category === catF) && (!whoF || r.assigned_to === whoF) && (!statF || r.status === statF) &&
+      (!needle || [r.code, r.category, r.task, r.assigned_to, r.due_text, r.status, urgency(r).icon, urgency(r).label]
+        .join(" ").toLowerCase().includes(needle)));
     const dir = asc ? 1 : -1;
     const cmp = (a: Task, b: Task): number => {
       switch (sortKey) {
@@ -99,7 +110,7 @@ export default function Tasks() {
       }
     };
     return [...hit].sort((a, b) => cmp(a, b) * dir);
-  }, [pool, filter, sortKey, asc]);
+  }, [pool, filter, catF, whoF, statF, sortKey, asc]);
 
   function sortBy(k: SortKey) {
     if (k === sortKey) setAsc(!asc);
@@ -135,7 +146,7 @@ export default function Tasks() {
         <span className="text-sm font-medium text-gray-600">
           ({shown} out of {total} items{shown === total ? " displayed" : ""})
         </span>
-        {filter && <button onClick={() => setFilter("")} className="text-xs text-royal hover:underline">Clear</button>}
+        {anyFilter && <button onClick={clearAll} className="text-xs text-royal hover:underline">Clear filters</button>}
       </div>
 
       {configMissing && <p className="text-sm text-gray-500">Connect the database to see the task list.</p>}
@@ -151,6 +162,31 @@ export default function Tasks() {
               <Th k="assigned_to" className="w-44">Assigned to</Th>
               <Th k="due" className="w-28">Due</Th>
               <Th k="status" className="w-28">Status</Th>
+            </tr>
+            <tr className="border-t border-gray-200 bg-white">
+              <td colSpan={3} className="px-3 pb-2 pt-1">
+                <select value={catF} onChange={(e) => setCatF(e.target.value)} title="Filter by category"
+                  className="w-full max-w-[13rem] rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
+                  <option value="">All categories</option>
+                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </td>
+              <td className="px-3 pb-2 pt-1" />
+              <td className="px-3 pb-2 pt-1">
+                <select value={whoF} onChange={(e) => setWhoF(e.target.value)} title="Filter by assignee"
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
+                  <option value="">Everyone</option>
+                  {assignees.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </td>
+              <td className="px-3 pb-2 pt-1" />
+              <td className="px-3 pb-2 pt-1">
+                <select value={statF} onChange={(e) => setStatF(e.target.value)} title="Filter by status"
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
+                  <option value="">Any status</option>
+                  {statuses.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </td>
             </tr>
           </thead>
           <tbody>
