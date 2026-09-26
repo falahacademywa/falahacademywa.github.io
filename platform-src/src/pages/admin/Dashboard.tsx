@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr } from "../../lib/dates";
+import { type Task, urgency, BUCKETS } from "../../lib/tasks";
 
 interface Widget {
   label: string;
@@ -16,6 +17,19 @@ export default function Dashboard() {
     { label: "Parent Accounts", value: "—", to: "/admin/parents" },
     { label: "Teachers", value: "—", to: "/admin/teachers" },
   ]);
+
+  // Open tasks from the school's to-do list, bucketed by urgency (same rules as the Tasks page).
+  const [taskBuckets, setTaskBuckets] = useState<Record<string, number> | null>(null);
+  const openTasks = taskBuckets ? Object.values(taskBuckets).reduce((s, n) => s + n, 0) : null;
+
+  useEffect(() => {
+    if (configMissing) return;
+    supabase.from("admin_tasks").select("*").eq("is_done", false).then(({ data }) => {
+      const counts: Record<string, number> = Object.fromEntries(BUCKETS.map((b) => [b.icon, 0]));
+      for (const t of (data as Task[]) ?? []) counts[urgency(t).icon] = (counts[urgency(t).icon] ?? 0) + 1;
+      setTaskBuckets(counts);
+    });
+  }, []);
 
   useEffect(() => {
     if (configMissing) return;
@@ -75,6 +89,27 @@ export default function Dashboard() {
             <div className="mt-1 text-sm text-gray-500">{w.label}</div>
           </Link>
         ))}
+
+        <Link to="/admin/tasks"
+          className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+            <div className="min-w-[8rem]">
+              <div className="font-display text-5xl font-semibold text-navy">{openTasks ?? "—"}</div>
+              <div className="mt-1 text-sm text-gray-500">Open tasks</div>
+            </div>
+            <div className="flex flex-1 flex-wrap gap-2">
+              {BUCKETS.map((b) => (
+                <div key={b.icon} className={`flex min-w-[6.5rem] flex-1 items-center gap-2 rounded-lg border px-3 py-2 ${b.className}`}>
+                  <span className="text-lg">{b.icon}</span>
+                  <div>
+                    <div className="font-display text-2xl font-semibold leading-none">{taskBuckets ? taskBuckets[b.icon] ?? 0 : "—"}</div>
+                    <div className="text-[11px] font-medium">{b.name}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Link>
       </div>
     </div>
   );

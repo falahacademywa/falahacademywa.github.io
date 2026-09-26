@@ -1,40 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import { type Task, urgency } from "../../lib/tasks";
 
 // The school's working to-do list (mirror of the hub's TODO.md, phase 15).
 // Read-only grid: sort on any column, filter box, "x out of y items" counter.
 
-interface Task {
-  code: string;
-  task_no: number | null;
-  is_done: boolean;
-  category: string;
-  task: string;
-  assigned_to: string;
-  due_text: string;
-  due_date: string | null;
-  status: string;
-  done_on: string | null;
-  updated_at: string;
-}
-
 type SortKey = "urgency" | "code" | "category" | "task" | "assigned_to" | "due" | "status";
-
-const DAY = 86400000;
-
-// Same rules as TODO.md: 🔴 ≤7 days or overdue · 🟠 ≤3 weeks · 🟡 ≤6 weeks · 🟢 later · 🔵 waiting · ⚪ parked · ✅ done
-function urgency(t: Task): { icon: string; rank: number; label: string } {
-  if (t.is_done) return { icon: "✅", rank: 9, label: "Done" };
-  const st = t.status.toLowerCase();
-  if (st === "parked" || st === "on hold") return { icon: "⚪", rank: 8, label: "Parked" };
-  if (st === "waiting") return { icon: "🔵", rank: 7, label: "Waiting on someone else" };
-  if (!t.due_date) return { icon: "🟢", rank: 4, label: "No fixed date" };
-  const days = Math.round((new Date(t.due_date + "T12:00:00").getTime() - Date.now()) / DAY);
-  if (days <= 7) return { icon: "🔴", rank: 1, label: days < 0 ? `${-days} days overdue` : `due in ${days} days` };
-  if (days <= 21) return { icon: "🟠", rank: 2, label: `due in ${days} days` };
-  if (days <= 45) return { icon: "🟡", rank: 3, label: `due in ${days} days` };
-  return { icon: "🟢", rank: 4, label: `due in ${days} days` };
-}
 
 // TODO.md uses **bold** and `code`; render them lightly instead of showing the markers.
 function renderTask(text: string) {
