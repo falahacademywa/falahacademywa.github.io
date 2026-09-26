@@ -20,6 +20,7 @@ import ParentActivity from "./pages/admin/ParentActivity";
 import AssignmentsAdmin from "./pages/admin/AssignmentsAdmin";
 import ClassUpdates from "./pages/admin/ClassUpdates";
 import Feedback from "./pages/admin/Feedback";
+import Tasks from "./pages/admin/Tasks";
 import ParentHome from "./pages/parent/ParentHome";
 
 // HashRouter so deep links work on GitHub Pages without server rewrites.
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="announcements" element={<AnnouncementsAdmin />} />
             <Route path="feedback" element={<Feedback />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="tasks" element={<Tasks />} />
             <Route path="parent-activity" element={<ParentActivity />} />
             <Route path="settings" element={<Settings />} />
           </Route>

@@ -17,6 +17,7 @@ const nav = [
   { to: "/admin/announcements", label: "Announcements" },
   { to: "/admin/feedback", label: "Feedback" },
   { to: "/admin/reports", label: "Reports" },
+  { to: "/admin/tasks", label: "Tasks" },
   { to: "/admin/settings", label: "Settings" },
 ];
 
