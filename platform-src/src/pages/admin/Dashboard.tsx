@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr } from "../../lib/dates";
-import { type Task, urgency, BUCKETS } from "../../lib/tasks";
+import { type Task, urgency, BUCKETS, bucketLabels } from "../../lib/tasks";
 
 interface Widget {
   label: string;
@@ -21,6 +21,7 @@ export default function Dashboard() {
   // Open tasks from the school's to-do list, bucketed by urgency (same rules as the Tasks page).
   const [taskBuckets, setTaskBuckets] = useState<Record<string, number> | null>(null);
   const openTasks = taskBuckets ? Object.values(taskBuckets).reduce((s, n) => s + n, 0) : null;
+  const labels = bucketLabels();
 
   useEffect(() => {
     if (configMissing) return;
@@ -103,7 +104,7 @@ export default function Dashboard() {
                   <span className="text-lg">{b.icon}</span>
                   <div>
                     <div className="font-display text-2xl font-semibold leading-none">{taskBuckets ? taskBuckets[b.icon] ?? 0 : "—"}</div>
-                    <div className="text-[11px] font-medium">{b.name}</div>
+                    <div className="text-[11px] font-medium" title={b.name}>{labels[b.icon]}</div>
                   </div>
                 </div>
               ))}

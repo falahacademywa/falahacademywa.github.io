@@ -32,7 +32,22 @@ export function urgency(t: Task): Urgency {
   return { icon: "🟢", rank: 4, label: `due in ${days} days`, name: "Later" };
 }
 
-// Order and styling of the six buckets shown on the Dashboard tile.
+// Order and styling of the six buckets shown on the Dashboard tile. Labels carry the
+// actual cut-off dates for today, e.g. "by Oct 3" · "Oct 4 – Oct 17" · "Oct 18 – Nov 10" · "after Nov 10".
+const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const plus = (days: number) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + days); return d; };
+
+export function bucketLabels(): Record<string, string> {
+  return {
+    "🔴": `by ${fmt(plus(7))}`,
+    "🟠": `${fmt(plus(8))} – ${fmt(plus(21))}`,
+    "🟡": `${fmt(plus(22))} – ${fmt(plus(45))}`,
+    "🟢": `after ${fmt(plus(45))}`,
+    "🔵": "Waiting",
+    "⚪": "Parked",
+  };
+}
+
 export const BUCKETS: { icon: string; name: string; className: string }[] = [
   { icon: "🔴", name: "This week", className: "bg-red-50 text-red-700 border-red-200" },
   { icon: "🟠", name: "3 weeks", className: "bg-orange-50 text-orange-700 border-orange-200" },
