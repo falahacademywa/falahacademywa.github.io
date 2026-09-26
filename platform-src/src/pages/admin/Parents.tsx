@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
+import { usPhone } from "../../lib/format";
 
 interface GuardianRow {
   id: string;
@@ -169,7 +170,7 @@ export default function Parents() {
                     <span className="font-semibold text-navy">{f.name}</span>
                     <span className="ml-2 text-xs capitalize text-gray-400">({f.relationship})</span>
                   </td>
-                  <td className="px-4 py-2.5 text-gray-600">{accountFor(f.email)?.phone ?? f.phone ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{usPhone(accountFor(f.email)?.phone ?? f.phone)}</td>
                   <td className="px-4 py-2.5 text-gray-600">
                     {f.email ?? "—"}
                     {f.email && addrMap[f.email.toLowerCase()] && (

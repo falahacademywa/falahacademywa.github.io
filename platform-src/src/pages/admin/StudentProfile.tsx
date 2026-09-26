@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
+import { usDate, usPhone } from "../../lib/format";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
@@ -220,7 +221,7 @@ export default function StudentProfile() {
           <h1 className="font-display text-2xl font-semibold text-navy">{s.first_name} {s.last_name}</h1>
           <div className="mt-1 text-sm text-gray-500">
             Student ID <span className="font-mono font-semibold">{String(s.student_no).padStart(5, "0")}</span>
-            {s.date_of_birth && <> · DOB {s.date_of_birth}</>}
+            {s.date_of_birth && <> · DOB {usDate(s.date_of_birth)}</>}
             {s.gender && <> · {s.gender}</>}
             {s.archived && <span className="ml-2 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Archived</span>}
           </div>
@@ -401,7 +402,7 @@ export default function StudentProfile() {
                       {badge(g.email)}
                     </div>
                     <div className="mt-0.5 text-gray-600">
-                      {g.phone && <span className="mr-3">📞 {g.phone}</span>}
+                      {g.phone && <span className="mr-3">📞 {usPhone(g.phone)}</span>}
                       {g.email && <span>✉️ {g.email}</span>}
                     </div>
                     {g.email && addrMap[g.email.toLowerCase()] && (
@@ -415,7 +416,7 @@ export default function StudentProfile() {
                     <span className="font-semibold text-navy">{a.full_name}</span>
                     <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">portal account</span>
                     <div className="mt-0.5 text-gray-600">
-                      {a.phone && <span className="mr-3">📞 {a.phone}</span>}
+                      {a.phone && <span className="mr-3">📞 {usPhone(a.phone)}</span>}
                       {a.email && <span>✉️ {a.email}</span>}
                     </div>
                     {a.email && addrMap[a.email.toLowerCase()] && (
@@ -436,7 +437,7 @@ export default function StudentProfile() {
           {s.emergency_contacts.length ? s.emergency_contacts.map((c) => (
             <div key={c.id} className="py-1 text-sm">
               <span className="font-semibold text-navy">{c.name}</span>
-              <span className="ml-2 text-gray-500">{c.phone}</span>
+              <span className="ml-2 text-gray-500">{usPhone(c.phone)}</span>
               {c.relationship && <span className="ml-2 text-gray-400">({c.relationship})</span>}
               {c.is_primary && <span className="ml-2 rounded-full bg-gold/20 px-2 py-0.5 text-xs text-navy">Primary</span>}
             </div>
