@@ -164,7 +164,10 @@ export default function Tasks() {
                     <td className="px-3 py-2 font-semibold text-navy">{r.code}</td>
                     <td className="px-3 py-2" title={u.label}>{u.icon}</td>
                     <td className="px-3 py-2 text-xs">{r.category}</td>
-                    <td className={`px-3 py-2 leading-snug ${isOpen ? "" : "line-clamp-2"}`}>{renderTask(r.task)}</td>
+                    <td className="px-3 py-2 leading-snug">
+                      <div className={isOpen ? "" : "line-clamp-3"}>{renderTask(r.task)}</div>
+                      {!isOpen && r.task.length > 160 && <div className="mt-0.5 text-[11px] text-royal">click for full text</div>}
+                    </td>
                     <td className="px-3 py-2 text-xs">{r.assigned_to}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-xs">{r.is_done ? r.done_on : r.due_text}</td>
                     <td className="px-3 py-2">
