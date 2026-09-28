@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
+import { usDate } from "../../lib/format";
+import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_SHORT, FORM_DOC_TYPE, MEDICAL_COLS, CONSENT_COLS } from "../../components/StudentForms";
+import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 
 interface Child {
   student_id: string;
@@ -70,7 +73,26 @@ export default function ParentHome() {
   const [fbMessage, setFbMessage] = useState("");
   const [fbState, setFbState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [myOpen, setMyOpen] = useState(false);
-  const [famTab, setFamTab] = useState<"students" | "parents" | "contacts" | "documents">("students");
+  const [famTab, setFamTab] = useState<"students" | "parents" | "contacts" | "forms" | "documents">("students");
+  // Digital forms (phase 18): per child, the medical_info + media_consent rows
+  const [formRows, setFormRows] = useState<Record<string, { med: MedicalRow | null; con: ConsentRow | null }>>({});
+  const [formOpen, setFormOpen] = useState<{ kind: FormKind; child: Child } | null>(null);
+  async function loadForms(kids: Child[]) {
+    const sids = kids.map((c) => c.students.id);
+    if (!sids.length || configMissing) { setFormRows({}); return; }
+    const [{ data: mi }, { data: mc }] = await Promise.all([
+      supabase.from("medical_info").select(MEDICAL_COLS).in("student_id", sids),
+      supabase.from("media_consent").select(CONSENT_COLS).in("student_id", sids),
+    ]);
+    const m: Record<string, { med: MedicalRow | null; con: ConsentRow | null }> = {};
+    sids.forEach((id) => { m[id] = { med: null, con: null }; });
+    ((mi as unknown as MedicalRow[]) ?? []).forEach((r) => { if (m[r.student_id]) m[r.student_id].med = r; });
+    ((mc as unknown as ConsentRow[]) ?? []).forEach((r) => { if (m[r.student_id]) m[r.student_id].con = r; });
+    setFormRows(m);
+  }
+  const formsTodo = children
+    .map((c) => ({ child: c, missing: missingForms(formRows[c.students.id]?.med, formRows[c.students.id]?.con) }))
+    .filter((x) => x.missing.length > 0);
   const [famEdit, setFamEdit] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null);
   const [myPhone, setMyPhone] = useState("");
@@ -173,6 +195,7 @@ export default function ParentHome() {
       const c = (kids as unknown as Child[]) ?? [];
       setChildren(c);
       setActive(c[0] ?? null);
+      loadForms(c);
       setEvents(evs ?? []);
       setAnns((as as unknown as Ann[]) ?? []);
       const { data: n } = await supabase.from("notifications")
@@ -329,7 +352,7 @@ export default function ParentHome() {
     if (famDirty) setConfirmDiscard(() => closeFamily);
     else closeFamily();
   }
-  function switchFamTab(t: "students" | "parents" | "contacts" | "documents") {
+  function switchFamTab(t: "students" | "parents" | "contacts" | "forms" | "documents") {
     if (t === famTab) return;
     const go = () => {
       setFamEdit(false); setMyState("idle"); setConfirmDiscard(null);
@@ -445,6 +468,7 @@ export default function ParentHome() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
+      if (formOpen) { setFormOpen(null); return; }
       if (confirmDiscard) { setConfirmDiscard(null); return; }
       if (myOpen) { requestCloseFamily(); return; }
       if (fbOpen) { setFbOpen(false); return; }
@@ -623,6 +647,27 @@ export default function ParentHome() {
           </div>
         )}
 
+        {/* School forms reminder: shown until every child's three forms are completed */}
+        {formsTodo.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
+            <div className="text-sm font-semibold text-amber-800">📝 Please complete the school forms below — it takes about two minutes each.</div>
+            <div className="mt-2 space-y-1.5">
+              {formsTodo.map(({ child, missing }) => (
+                <div key={child.student_id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="w-28 shrink-0 font-semibold text-navy">{child.students.first_name}:</span>
+                  {missing.map((k) => (
+                    <button key={k} onClick={() => { track("open_form", `${k}:${child.students.first_name}`); setFormOpen({ kind: k, child }); }}
+                      className="rounded-full border border-amber-400 bg-white px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                      {FORM_SHORT[k]} →
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5 text-[11px] text-amber-700">Already handed in a paper form? It may not be entered yet — filling it in here takes precedence and the office is notified.</div>
+          </div>
+        )}
+
         {/* How-to-pay dialog */}
         {payOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPayOpen(false)}>
@@ -654,11 +699,12 @@ export default function ParentHome() {
               {/* Side tabs */}
               <div className="flex w-28 shrink-0 flex-col gap-1 border-r bg-silver/60 p-2 sm:w-44 sm:p-3">
                 <div className="hidden px-2 pb-3 pt-1 font-display text-sm font-semibold leading-tight text-navy sm:block">Family Information</div>
-                {([["students", "🎓", "Students"], ["parents", "👤", "Parents"], ["contacts", "🚑", "Emergency"], ["documents", "📄", "Documents"]] as const).map(([key, icon, label]) => (
+                {([["students", "🎓", "Students"], ["parents", "👤", "Parents"], ["contacts", "🚑", "Emergency"], ["forms", "📝", "Forms"], ["documents", "📄", "Documents"]] as const).map(([key, icon, label]) => (
                   <button key={key} onClick={() => switchFamTab(key)}
                     className={`rounded-lg px-2 py-2 text-left text-xs font-semibold transition sm:px-3 sm:text-sm ${
                       famTab === key ? "bg-navy text-white shadow" : "text-gray-600 hover:bg-white"}`}>
                     {icon} {label}
+                    {key === "forms" && formsTodo.length > 0 && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-amber-400 align-middle" />}
                   </button>
                 ))}
               </div>
@@ -668,10 +714,10 @@ export default function ParentHome() {
                 <div className="mb-4 flex items-center justify-between gap-2">
                   <h3 className="font-display text-lg font-semibold text-navy">
                     {famTab === "students" ? "Student Information" : famTab === "parents" ? "Parents"
-                      : famTab === "contacts" ? "Emergency Contacts" : "Documents"}
+                      : famTab === "contacts" ? "Emergency Contacts" : famTab === "forms" ? "School Forms" : "Documents"}
                   </h3>
                   <div className="flex items-center gap-2">
-                    {famTab !== "documents" && !famEdit && (
+                    {famTab !== "documents" && famTab !== "forms" && !famEdit && (
                       <button onClick={() => { setFamEdit(true); setMyState("idle"); }}
                         className="flex items-center gap-1 rounded-full border-2 border-royal px-3 py-1 text-xs font-bold text-royal transition hover:bg-royal hover:text-white">
                         ✏️ Edit
@@ -833,19 +879,56 @@ export default function ParentHome() {
                   </div>
                 )}
 
+                {famTab === "forms" && (
+                  <div className="space-y-4 text-sm">
+                    {children.map((c) => {
+                      const rows = formRows[c.students.id];
+                      return (
+                        <div key={c.student_id}>
+                          <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">For {c.students.first_name}</div>
+                          {(["allergy", "medical", "consent"] as FormKind[]).map((k) => {
+                            const st = formStatus(k, rows?.med, rows?.con);
+                            return (
+                              <div key={k} className="mb-1.5 flex flex-wrap items-center gap-2.5 rounded-lg bg-silver/60 px-3 py-2">
+                                <span className={st.done ? "text-emerald-deep" : "text-amber-500"}>{st.done ? "✅" : "📝"}</span>
+                                <span className="font-semibold text-navy">{FORM_TITLE[k]}</span>
+                                <span className={`text-[11px] ${st.done ? "text-gray-500" : "font-semibold text-amber-700"}`}>
+                                  {st.done ? `completed ${usDate(st.date)}${st.by ? ` by ${st.by}` : ""}` : "not completed"}
+                                </span>
+                                <button onClick={() => { track("open_form", `${k}:${c.students.first_name}`); setFormOpen({ kind: k, child: c }); }}
+                                  className={`ml-auto shrink-0 rounded-full px-3 py-0.5 text-xs font-semibold ${
+                                    st.done ? "border border-royal text-royal hover:bg-royal hover:text-white" : "bg-navy text-white hover:bg-royal"}`}>
+                                  {st.done ? "View / update" : "Fill in now"}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                    <p className="pt-1 text-[11px] text-gray-400">
+                      These replace the paper forms. You can update an answer any time — the school is notified immediately, and right away by e-mail when an allergy, condition or medication is added.
+                    </p>
+                  </div>
+                )}
+
                 {famTab === "documents" && (
                   <div className="space-y-4 text-sm">
                     {children.map((c) => {
                       const refs = docRefs.filter((r) => r.student_id === c.students.id);
+                      const rows = formRows[c.students.id];
                       return (
                         <div key={c.student_id}>
                           <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">For {c.students.first_name}</div>
                           {docTypes.map((t) => {
                             const sub = refs.find((r) => r.document_type === t.name);
+                            const kinds = FORM_DOC_TYPE[t.name] ?? [];
+                            const online = kinds.length > 0 && kinds.every((k) => formStatus(k, rows?.med, rows?.con).done);
+                            const ok = !!sub || online;
                             return (
                               <div key={t.id} className="mb-1.5 flex items-center gap-2.5 rounded-lg bg-silver/60 px-3 py-2">
-                                <span className={sub ? "text-emerald-deep" : "text-gray-300"}>{sub ? "✅" : "⬜"}</span>
-                                <span className={sub ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
+                                <span className={ok ? "text-emerald-deep" : "text-gray-300"}>{ok ? "✅" : "⬜"}</span>
+                                <span className={ok ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
                                 {sub && (sub.storage_path || sub.file_url) ? (
                                   <button onClick={() => viewDoc(sub)}
                                     className="ml-auto shrink-0 rounded-full border border-royal px-2.5 py-0.5 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
@@ -853,6 +936,10 @@ export default function ParentHome() {
                                   </button>
                                 ) : sub ? (
                                   <span className="ml-auto shrink-0 text-[10px] text-gray-400">on file at office</span>
+                                ) : online ? (
+                                  <button onClick={() => switchFamTab("forms")} className="ml-auto shrink-0 text-[10px] font-semibold text-emerald-deep hover:underline">completed online</button>
+                                ) : kinds.length ? (
+                                  <button onClick={() => switchFamTab("forms")} className="ml-auto shrink-0 text-[10px] font-semibold text-amber-700 hover:underline">fill in under Forms →</button>
                                 ) : (
                                   <span className="ml-auto shrink-0 text-[10px] text-gray-400">not submitted</span>
                                 )}
@@ -863,7 +950,7 @@ export default function ParentHome() {
                       );
                     })}
                     <p className="pt-1 text-[11px] text-gray-400">
-                      Submit forms at the school office — the office marks them received and uploads scans here for your records.
+                      Allergy, medical and photo-consent forms are completed under Forms. Other documents are handed in at the school office, which marks them received and uploads scans here for your records.
                     </p>
                   </div>
                 )}
@@ -904,6 +991,14 @@ export default function ParentHome() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Digital form dialog (allergy / medical / consent) */}
+        {formOpen && (
+          <StudentFormDialog kind={formOpen.kind} studentId={formOpen.child.students.id}
+            studentName={`${formOpen.child.students.first_name} ${formOpen.child.students.last_name}`}
+            isAdmin={false} signerName={profile?.full_name ?? ""}
+            onClose={() => setFormOpen(null)} onSaved={() => loadForms(children)} />
         )}
 
         {/* Feedback dialog */}

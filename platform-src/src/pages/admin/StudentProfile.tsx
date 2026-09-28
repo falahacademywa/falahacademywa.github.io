@@ -4,6 +4,8 @@ import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { usDate, usPhone } from "../../lib/format";
 import { RelBadge } from "./ParentProfile";
+import { StudentFormDialog, consentBadge, formStatus, allergySummary, medicalSummary, MEDICAL_COLS, CONSENT_COLS, FORM_TITLE, FORM_DOC_TYPE } from "../../components/StudentForms";
+import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
@@ -25,44 +27,9 @@ interface Student {
   parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; must_change_password: boolean } }[];
   guardians: { id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[];
   emergency_contacts: { id: string; name: string; phone: string; relationship: string | null; is_primary: boolean }[];
-  medical_info: { allergies: string | null; medical_conditions: string | null; medications: string | null } | null;
   document_references: { id: string; document_type: string; file_url: string | null; storage_path: string | null; uploaded_date: string }[];
 }
 type DocRef = Student["document_references"][number];
-
-// Photo / video / media consent (phase 17) — mirrors the five boxes on the
-// signed consent form. null = not answered / no form on file.
-interface Consent {
-  internal_use: boolean | null; parent_comms: boolean | null; website_print: boolean | null;
-  social_media: boolean | null; external_media: boolean | null;
-  name_preference: string | null; signed_by: string | null; signed_date: string | null; notes: string | null;
-}
-type ConsentKey = "internal_use" | "parent_comms" | "website_print" | "social_media" | "external_media";
-const CONSENT_ITEMS: [ConsentKey, string, string][] = [
-  ["internal_use", "Internal use", "classroom displays, student records, internal newsletters"],
-  ["parent_comms", "Parent communications", "class WhatsApp groups, Family Portal class updates"],
-  ["website_print", "Website & print", "falahacademywa.org, brochures, flyers, banners"],
-  ["social_media", "Social media", "Facebook, Instagram, YouTube"],
-  ["external_media", "External media", "press, partner organisations, third-party sites"],
-];
-const EMPTY_CONSENT: Consent = {
-  internal_use: null, parent_comms: null, website_print: null, social_media: null, external_media: null,
-  name_preference: null, signed_by: null, signed_date: null, notes: null,
-};
-// One-line verdict for the header badge: what may staff do with this child's picture?
-function consentBadge(c: Consent | null): { label: string; cls: string; title: string } {
-  if (!c) return { label: "Media consent: not on file", cls: "bg-gray-200 text-gray-600", title: "No consent form recorded — treat as no permission." };
-  const pub = [c.website_print, c.social_media, c.external_media];
-  const allowed = CONSENT_ITEMS.filter(([k]) => c[k] === true).map(([, l]) => l);
-  const title = allowed.length ? "Allowed: " + allowed.join(", ") : "No photo or video use permitted.";
-  if (pub.every((v) => v === true)) return { label: "Photos OK: public", cls: "bg-green-100 text-green-700", title };
-  if (pub.every((v) => v !== true)) {
-    return c.internal_use || c.parent_comms
-      ? { label: "No public photos", cls: "bg-red-100 text-red-700", title }
-      : { label: "No photos at all", cls: "bg-red-100 text-red-700", title };
-  }
-  return { label: "Limited photo consent", cls: "bg-amber-100 text-amber-800", title };
-}
 
 export default function StudentProfile() {
   const { id } = useParams();
@@ -77,17 +44,10 @@ export default function StudentProfile() {
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
   const [docTypes, setDocTypes] = useState<{ id: number; name: string }[]>([]);
   const nav = useNavigate();
-  // Media consent: saved row + the draft being edited in the panel
-  const [consent, setConsent] = useState<Consent | null>(null);
-  const [draft, setDraft] = useState<Consent>(EMPTY_CONSENT);
-  const [consentMsg, setConsentMsg] = useState<string | null>(null);
-  async function saveConsent() {
-    if (!s) return;
-    setConsentMsg(null);
-    const { error } = await supabase.from("media_consent").upsert({ student_id: s.id, ...draft }, { onConflict: "student_id" });
-    if (error) { setConsentMsg("Save failed: " + error.message); return; }
-    setConsentMsg("Saved."); load();
-  }
+  // Digital forms (phase 18): allergy + medical live in medical_info, consent in media_consent
+  const [med, setMed] = useState<MedicalRow | null>(null);
+  const [consent, setConsent] = useState<ConsentRow | null>(null);
+  const [formOpen, setFormOpen] = useState<FormKind | null>(null);
   // Right-click menu on a guardian row (make primary contact / open profile)
   const [menu, setMenu] = useState<{ x: number; y: number; g: Student["guardians"][number] } | null>(null);
   async function makePrimary(g: Student["guardians"][number]) {
@@ -165,7 +125,6 @@ export default function StudentProfile() {
         parent_students ( profiles ( full_name, email, phone, must_change_password ) ),
         guardians ( id, name, relationship, phone, email, sort ),
         emergency_contacts ( id, name, phone, relationship, is_primary ),
-        medical_info ( allergies, medical_conditions, medications ),
         document_references ( id, document_type, file_url, storage_path, uploaded_date )`)
       .eq("id", id)
       .single();
@@ -179,12 +138,13 @@ export default function StudentProfile() {
     ((addr as unknown as { profiles: { email: string | null; address: string | null } }[]) ?? [])
       .forEach((r) => { if (r.profiles?.email && r.profiles.address) m[r.profiles.email.toLowerCase()] = r.profiles.address; });
     setAddrMap(m);
-    // Media consent (phase 17). Guarded so a project without the table still renders.
-    const { data: mc } = await supabase.from("media_consent")
-      .select("internal_use, parent_comms, website_print, social_media, external_media, name_preference, signed_by, signed_date, notes")
-      .eq("student_id", id).maybeSingle();
-    setConsent((mc as Consent | null) ?? null);
-    setDraft((mc as Consent | null) ?? EMPTY_CONSENT);
+    // Digital forms (phases 17–18). Guarded: a project without the tables still renders.
+    const [{ data: mi }, { data: mc }] = await Promise.all([
+      supabase.from("medical_info").select(MEDICAL_COLS).eq("student_id", id).maybeSingle(),
+      supabase.from("media_consent").select(CONSENT_COLS).eq("student_id", id).maybeSingle(),
+    ]);
+    setMed((mi as unknown as MedicalRow | null) ?? null);
+    setConsent((mc as unknown as ConsentRow | null) ?? null);
   }
   useEffect(() => { load(); }, [id]);
 
@@ -287,10 +247,10 @@ export default function StudentProfile() {
             {s.archived && <span className="ml-2 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Archived</span>}
           </div>
           {(() => { const b = consentBadge(consent); return (
-            <a href="#media-consent" title={b.title}
-              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>
+            <button onClick={() => setFormOpen("consent")} title={b.title + " — click to open the consent form"}
+              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold hover:ring-2 hover:ring-royal/40 ${b.cls}`}>
               📷 {b.label}
-            </a>
+            </button>
           ); })()}
         </div>
         </div>
@@ -539,84 +499,48 @@ export default function StudentProfile() {
           )) : <p className="text-sm font-semibold text-red-500">⚠ No emergency contact on file (BR-007).</p>}
         </section>
 
+        {/* Digital forms: Allergy, Medical, Media consent — open in the shared dialog */}
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Medical Information</h2>
-          {s.medical_info ? (
-            <dl className="space-y-1 text-sm">
-              <div><dt className="inline font-semibold text-navy">Allergies: </dt><dd className="inline text-gray-600">{s.medical_info.allergies || "None recorded"}</dd></div>
-              <div><dt className="inline font-semibold text-navy">Conditions: </dt><dd className="inline text-gray-600">{s.medical_info.medical_conditions || "None recorded"}</dd></div>
-              <div><dt className="inline font-semibold text-navy">Medications: </dt><dd className="inline text-gray-600">{s.medical_info.medications || "None recorded"}</dd></div>
-            </dl>
-          ) : <p className="text-sm text-gray-400">No medical information recorded.</p>}
-        </section>
-
-        {/* Media consent — the signed Photo / Video / Media Consent Form, box by box */}
-        <section id="media-consent" className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">Photo, Video &amp; Media Consent</h2>
-            {(() => { const b = consentBadge(consent); return (
-              <span title={b.title} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>📷 {b.label}</span>
-            ); })()}
-          </div>
-          <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-            {CONSENT_ITEMS.map(([k, label, hint]) => (
-              <label key={k} className="flex items-center justify-between gap-3 border-b py-1.5 text-sm last:border-0">
-                <span>
-                  <span className="font-semibold text-navy">{label}</span>
-                  <span className="block text-xs text-gray-400">{hint}</span>
-                </span>
-                <select value={draft[k] == null ? "" : draft[k] ? "yes" : "no"}
-                  onChange={(e) => setDraft({ ...draft, [k]: e.target.value === "" ? null : e.target.value === "yes" })}
-                  className={`rounded border px-2 py-1 text-sm font-semibold ${
-                    draft[k] === true ? "border-green-300 bg-green-50 text-green-700" :
-                    draft[k] === false ? "border-red-300 bg-red-50 text-red-700" : "border-gray-300 text-gray-500"}`}>
-                  <option value="">—</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              </label>
-            ))}
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-4">
-            <label className="text-xs text-gray-500">Name may be shown as
-              <select value={draft.name_preference ?? ""} onChange={(e) => setDraft({ ...draft, name_preference: e.target.value || null })}
-                className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800">
-                <option value="">—</option>
-                <option value="none">No name</option>
-                <option value="first_name">First name only</option>
-                <option value="full_name">Full name</option>
-              </select>
-            </label>
-            <label className="text-xs text-gray-500">Signed by
-              <input value={draft.signed_by ?? ""} onChange={(e) => setDraft({ ...draft, signed_by: e.target.value || null })}
-                placeholder="Parent / guardian" className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800" />
-            </label>
-            <label className="text-xs text-gray-500">Signed on
-              <input type="date" value={draft.signed_date ?? ""} onChange={(e) => setDraft({ ...draft, signed_date: e.target.value || null })}
-                className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800" />
-            </label>
-            <label className="text-xs text-gray-500">Notes
-              <input value={draft.notes ?? ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value || null })}
-                placeholder="e.g. no close-ups of face" className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800" />
-            </label>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button onClick={saveConsent}
-              className="rounded-lg bg-navy px-4 py-1.5 text-xs font-semibold text-white hover:bg-royal">Save consent</button>
-            {consentMsg && <span className={`text-xs ${consentMsg.startsWith("Save failed") ? "text-red-600" : "text-green-700"}`}>{consentMsg}</span>}
-            <span className="text-[11px] text-gray-400">Copy the answers from the signed form (Required Documents → Photo/Video Consent). Anything left "—" counts as no permission.</span>
-          </div>
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Health &amp; Consent Forms</h2>
+          {(["allergy", "medical", "consent"] as FormKind[]).map((k) => {
+            const st = formStatus(k, med, consent);
+            const summary = k === "allergy" ? allergySummary(med) : k === "medical" ? medicalSummary(med) : consentBadge(consent).title;
+            return (
+              <div key={k} className="border-b py-2 text-sm last:border-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={() => setFormOpen(k)} className="font-semibold text-navy hover:text-royal hover:underline">{FORM_TITLE[k]}</button>
+                  {st.done
+                    ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Completed {usDate(st.date)}</span>
+                    : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">Not on file</span>}
+                  {st.done && st.needsReview && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">Updated by parent — review</span>}
+                  {k === "consent" && st.done && (() => { const b = consentBadge(consent); return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${b.cls}`}>📷 {b.label}</span>; })()}
+                  <button onClick={() => setFormOpen(k)}
+                    className="ml-auto rounded-full border border-royal px-2.5 py-0.5 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
+                    {st.done ? "View / edit" : "Fill in"}
+                  </button>
+                </div>
+                <div className={`mt-0.5 text-xs ${st.done ? "text-gray-600" : "text-gray-400"}`}>{st.done ? summary : "Parents are reminded on their portal home page until this is completed."}</div>
+              </div>
+            );
+          })}
+          <p className="mt-2 text-[11px] text-gray-400">Parents fill these in the Family Portal (Family Information → Forms). When a parent changes a medical answer every admin is notified; allergies, conditions or medication trigger an immediate e-mail.</p>
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Required Documents</h2>
           {docTypes.map((t) => {
             const sub = s.document_references.find((d) => d.document_type === t.name);
+            // a completed digital form satisfies its paper counterpart
+            const kinds = FORM_DOC_TYPE[t.name] ?? [];
+            const online = kinds.length > 0 && kinds.every((k) => formStatus(k, med, consent).done)
+              ? kinds.map((k) => formStatus(k, med, consent).date!).sort().pop()! : null;
+            const ok = !!sub || !!online;
             return (
               <div key={t.id} className="flex flex-wrap items-center gap-2.5 border-b py-2 text-sm last:border-0">
-                <span className={sub ? "text-emerald-deep" : "text-gray-300"}>{sub ? "✅" : "⬜"}</span>
-                <span className={sub ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
+                <span className={ok ? "text-emerald-deep" : "text-gray-300"}>{ok ? "✅" : "⬜"}</span>
+                <span className={ok ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
                 {sub && <span className="text-xs text-gray-400">{new Date(sub.uploaded_date).toLocaleDateString()}</span>}
+                {!sub && online && <span className="text-xs text-emerald-deep">completed online {usDate(online)}</span>}
                 <span className="ml-auto flex items-center gap-2">
                   {sub && (sub.storage_path || sub.file_url) && (
                     <button onClick={() => viewDoc(sub)}
@@ -627,7 +551,7 @@ export default function StudentProfile() {
                     <input type="file" accept="application/pdf,image/*" className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDoc(t.name, f); e.target.value = ""; }} />
                   </label>
-                  {!sub ? (
+                  {!sub && online ? null : !sub ? (
                     <button onClick={() => markDoc(t.name)}
                       className="rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-semibold text-gray-600 hover:bg-silver">Mark received</button>
                   ) : (
@@ -648,6 +572,11 @@ export default function StudentProfile() {
           <p className="mt-2 text-[11px] text-gray-400">Manage the required-forms list in Settings. Parents see this checklist (and any uploaded scans) in their portal.</p>
         </section>
       </div>
+
+      {formOpen && (
+        <StudentFormDialog kind={formOpen} studentId={s.id} studentName={`${s.first_name} ${s.last_name}`} isAdmin signerName=""
+          onClose={() => setFormOpen(null)} onSaved={load} />
+      )}
     </div>
   );
 }
