@@ -57,6 +57,9 @@ returns trigger language plpgsql as $$
 begin
   new.updated_at := now();
   new.updated_by := auth.uid();
+  -- an admin saving the form has seen it: stamp the review with the same clock
+  -- as updated_at so the "updated by parent — review" flag does not trip
+  if public.is_admin() then new.reviewed_at := now(); new.reviewed_by := auth.uid(); end if;
   -- keep the original free-text column meaningful for older views/exports
   if new.has_allergies is true then
     new.allergies := nullif(concat_ws('; ',
@@ -71,6 +74,27 @@ end; $$;
 drop trigger if exists medical_info_touch on public.medical_info;
 create trigger medical_info_touch before insert or update on public.medical_info
   for each row execute function public.medical_info_touch();
+
+-- same rule for the consent row (replaces the phase-17 touch function)
+create or replace function public.media_consent_touch()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at := now();
+  new.updated_by := auth.uid();
+  if public.is_admin() then new.reviewed_at := now(); new.reviewed_by := auth.uid(); end if;
+  return new;
+end; $$;
+drop trigger if exists media_consent_touch on public.media_consent;
+create trigger media_consent_touch before insert or update on public.media_consent
+  for each row execute function public.media_consent_touch();
+
+-- rows last saved by the office (or by a script) count as reviewed
+update public.medical_info m set reviewed_at = m.updated_at
+where (m.reviewed_at is null or m.reviewed_at < m.updated_at)
+  and (m.updated_by is null or exists (select 1 from public.profiles p where p.id = m.updated_by and p.role = 'admin'));
+update public.media_consent c set reviewed_at = c.updated_at
+where (c.reviewed_at is null or c.reviewed_at < c.updated_at)
+  and (c.updated_by is null or exists (select 1 from public.profiles p where p.id = c.updated_by and p.role = 'admin'));
 
 -- ---------- 3. audit trail (insert/update/delete) ----------
 create or replace function public.row_audit()
