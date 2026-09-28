@@ -7,6 +7,7 @@ import Dashboard from "./pages/admin/Dashboard";
 import Students from "./pages/admin/Students";
 import Admissions from "./pages/admin/Admissions";
 import Parents from "./pages/admin/Parents";
+import ParentProfile from "./pages/admin/ParentProfile";
 import Teachers from "./pages/admin/Teachers";
 import StudentProfile from "./pages/admin/StudentProfile";
 import TeacherProfile from "./pages/admin/TeacherProfile";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="students/:id" element={<StudentProfile />} />
             <Route path="admissions" element={<Admissions />} />
             <Route path="parents" element={<Parents />} />
+            <Route path="parents/:id" element={<ParentProfile />} />
             <Route path="teachers" element={<Teachers />} />
             <Route path="teachers/:id" element={<TeacherProfile />} />
             <Route path="fees" element={<Fees />} />

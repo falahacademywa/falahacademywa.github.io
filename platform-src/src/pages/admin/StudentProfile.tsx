@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { usDate, usPhone } from "../../lib/format";
+import { RelBadge } from "./ParentProfile";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
@@ -41,6 +42,15 @@ export default function StudentProfile() {
   const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
   const [docTypes, setDocTypes] = useState<{ id: number; name: string }[]>([]);
+  const nav = useNavigate();
+  // Right-click menu on a guardian row (make primary contact / open profile)
+  const [menu, setMenu] = useState<{ x: number; y: number; g: Student["guardians"][number] } | null>(null);
+  async function makePrimary(g: Student["guardians"][number]) {
+    if (!s) return;
+    await supabase.from("guardians").update({ sort: 2 }).eq("student_id", s.id).neq("id", g.id);
+    await supabase.from("guardians").update({ sort: 1 }).eq("id", g.id);
+    setMenu(null); load();
+  }
 
   useEffect(() => {
     if (configMissing) return;
@@ -382,9 +392,14 @@ export default function StudentProfile() {
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Parents &amp; Guardians</h2>
           {(() => {
             const accounts = s.parent_students.map((ps) => ps.profiles);
+            const accOf = (email: string | null) => email ? accounts.find((a) => a.email?.toLowerCase() === email.toLowerCase()) : undefined;
+            // "no portal account" is only worth saying when NO parent in the
+            // family has one; if one parent holds the login, stay quiet on the other.
+            const familyHasAccount = s.guardians.some((g) => accOf(g.email));
             const badge = (email: string | null) => {
-              const acc = email ? accounts.find((a) => a.email?.toLowerCase() === email.toLowerCase()) : undefined;
-              if (!acc) return <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">no portal account</span>;
+              const acc = accOf(email);
+              if (!acc) return familyHasAccount ? null
+                : <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">no portal account</span>;
               return acc.must_change_password
                 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">invited — hasn't signed in</span>
                 : <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">account active</span>;
@@ -395,19 +410,27 @@ export default function StudentProfile() {
             return (
               <>
                 {rows.map((g) => (
-                  <div key={g.id} className="border-b py-2 text-sm last:border-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-navy">{g.name}</span>
-                      <span className="text-xs capitalize text-gray-400">({g.relationship})</span>
-                      {badge(g.email)}
+                  <div key={g.id} className="border-b py-2 text-sm last:border-0"
+                    onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, g }); }}
+                    title="Right-click for options">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link to={`/admin/parents/${g.id}`} className="font-semibold text-navy hover:text-royal hover:underline">{g.name}</Link>
+                          <span className="text-xs capitalize text-gray-400">({g.relationship})</span>
+                          {g.sort === 1 && <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold text-navy">Primary contact</span>}
+                          {badge(g.email)}
+                        </div>
+                        <div className="mt-0.5 text-gray-600">
+                          {g.phone && <span className="mr-3">📞 {usPhone(g.phone)}</span>}
+                          {g.email && <span>✉️ {g.email}</span>}
+                        </div>
+                        {g.email && addrMap[g.email.toLowerCase()] && (
+                          <div className="mt-0.5 text-xs text-gray-500">🏠 {addrMap[g.email.toLowerCase()]}</div>
+                        )}
+                      </div>
+                      <RelBadge r={g.relationship} size="lg" />
                     </div>
-                    <div className="mt-0.5 text-gray-600">
-                      {g.phone && <span className="mr-3">📞 {usPhone(g.phone)}</span>}
-                      {g.email && <span>✉️ {g.email}</span>}
-                    </div>
-                    {g.email && addrMap[g.email.toLowerCase()] && (
-                      <div className="mt-0.5 text-xs text-gray-500">🏠 {addrMap[g.email.toLowerCase()]}</div>
-                    )}
                   </div>
                 ))}
                 {/* accounts that exist but aren't in the guardians registry */}
@@ -429,6 +452,21 @@ export default function StudentProfile() {
           })()}
           {s.notes && (
             <p className="mt-3 whitespace-pre-wrap rounded-lg bg-silver/60 p-3 text-xs text-gray-600">{s.notes}</p>
+          )}
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+              <div className="fixed z-50 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-xl"
+                style={{ left: Math.min(menu.x, window.innerWidth - 240), top: Math.min(menu.y, window.innerHeight - 100) }}>
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{menu.g.name}</div>
+                <button onClick={() => makePrimary(menu.g)} disabled={menu.g.sort === 1}
+                  className="block w-full px-3 py-2 text-left hover:bg-silver disabled:cursor-default disabled:text-gray-400">
+                  {menu.g.sort === 1 ? "✓ Already the primary contact" : "Make primary contact"}
+                </button>
+                <button onClick={() => { setMenu(null); nav(`/admin/parents/${menu.g.id}`); }}
+                  className="block w-full px-3 py-2 text-left hover:bg-silver">Open parent profile</button>
+              </div>
+            </>
           )}
         </section>
 

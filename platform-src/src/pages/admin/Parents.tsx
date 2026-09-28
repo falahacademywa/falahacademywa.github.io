@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { usPhone } from "../../lib/format";
+import { RelBadge } from "./ParentProfile";
 
 interface GuardianRow {
   id: string;
+  student_id: string;
   name: string;
   relationship: string;
   phone: string | null;
   email: string | null;
   sort: number;
-  students: { id: string; first_name: string; last_name: string };
+  students: { id: string; first_name: string; last_name: string; archived: boolean };
 }
 interface ParentAccount {
   id: string;
@@ -22,6 +24,8 @@ interface ParentAccount {
   parent_students: { student_id: string; students: { first_name: string; last_name: string } }[];
 }
 interface StudentOpt { id: string; first_name: string; last_name: string }
+interface Member { id: string; name: string; relationship: string; phone: string | null; email: string | null }
+interface Family { primary: Member; members: Member[]; kids: { id: string; label: string }[] }
 
 type SortKey = "name" | "children" | "status";
 
@@ -41,27 +45,24 @@ export default function Parents() {
   async function load() {
     if (configMissing) return;
     const [{ data: g }, { data: p }, { data: s }] = await Promise.all([
+      // ALL guardians (not just the primary) so a family's portal account is
+      // found whichever parent holds it.
       supabase.from("guardians")
-        .select("id, name, relationship, phone, email, sort, students ( id, first_name, last_name )")
-        .eq("sort", 1),
+        .select("id, student_id, name, relationship, phone, email, sort, students ( id, first_name, last_name, archived )"),
       supabase.from("profiles")
         .select("id, full_name, email, phone, suspended, must_change_password, parent_students ( student_id, students ( first_name, last_name ) )")
         .eq("role", "parent").order("full_name"),
       supabase.from("students").select("id, first_name, last_name").eq("archived", false).order("last_name"),
     ]);
-    setGuardians((g as unknown as GuardianRow[]) ?? []);
+    setGuardians(((g as unknown as GuardianRow[]) ?? []).filter((r) => r.students && !r.students.archived));
     setAccounts((p as unknown as ParentAccount[]) ?? []);
     setStudents(s ?? []);
-    // Home addresses (profiles.address, phase 10) — guarded separately so
-    // environments without the column still render the page.
     const { data: addr } = await supabase.from("profiles")
       .select("email, address").eq("role", "parent").not("address", "is", null);
     const m: Record<string, string> = {};
     ((addr as { email: string | null; address: string | null }[]) ?? [])
       .forEach((r) => { if (r.email && r.address) m[r.email.toLowerCase()] = r.address; });
     setAddrMap(m);
-    // Real last-login times from auth (phase 12 RPC) — guarded so the page
-    // still renders where the function isn't installed yet.
     const { data: logins } = await supabase.rpc("admin_parent_logins");
     const lm: Record<string, string> = {};
     ((logins as { email: string | null; last_sign_in_at: string | null }[]) ?? [])
@@ -70,22 +71,34 @@ export default function Parents() {
   }
   useEffect(() => { load(); }, []);
 
-  // One row per family (unique primary-contact email)
-  const families = useMemo(() => {
-    const m = new Map<string, { name: string; relationship: string; phone: string | null; email: string | null; kids: { id: string; label: string }[] }>();
-    guardians.forEach((g) => {
-      const key = (g.email ?? g.name).toLowerCase();
-      const fam = m.get(key) ?? { name: g.name, relationship: g.relationship, phone: g.phone, email: g.email, kids: [] };
-      fam.kids.push({ id: g.students.id, label: `${g.students.first_name} ${g.students.last_name}` });
-      m.set(key, fam);
-    });
-    return [...m.values()];
-  }, [guardians]);
-
-  const accountFor = (email: string | null) =>
+  const accountFor = (email: string | null | undefined) =>
     email ? accounts.find((a) => a.email?.toLowerCase() === email.toLowerCase()) : undefined;
 
-  const lastLogin = (email: string | null) => {
+  // One row per family. A family = a student's set of guardians; families are
+  // merged when they share the same primary contact (by email, else name).
+  const families = useMemo<Family[]>(() => {
+    const byStudent = new Map<string, GuardianRow[]>();
+    guardians.forEach((g) => byStudent.set(g.student_id, [...(byStudent.get(g.student_id) ?? []), g]));
+    const fams = new Map<string, Family>();
+    byStudent.forEach((gs, studentId) => {
+      const sorted = [...gs].sort((a, b) => a.sort - b.sort);
+      const primary = sorted[0];
+      const key = (primary.email ?? primary.name).toLowerCase();
+      const fam = fams.get(key) ?? { primary, members: [], kids: [] };
+      sorted.forEach((g) => {
+        const mk = (g.email ?? g.name).toLowerCase();
+        if (!fam.members.some((m) => (m.email ?? m.name).toLowerCase() === mk)) fam.members.push(g);
+      });
+      fam.kids.push({ id: studentId, label: `${primary.students.first_name} ${primary.students.last_name}` });
+      fams.set(key, fam);
+    });
+    return [...fams.values()];
+  }, [guardians]);
+
+  // The family's account = whichever member has a portal login.
+  const holderOf = (f: Family) => f.members.find((m) => accountFor(m.email));
+
+  const lastLogin = (email: string | null | undefined) => {
     const iso = email ? loginMap[email.toLowerCase()] : undefined;
     if (!iso) return { label: "never", cls: "text-gray-400" };
     const d = new Date(iso);
@@ -94,8 +107,8 @@ export default function Parents() {
     return { label, cls: days <= 7 ? "text-emerald-deep" : "text-gray-500", full: d.toLocaleString() };
   };
 
-  const statusOf = (email: string | null) => {
-    const a = accountFor(email);
+  const statusOf = (f: Family) => {
+    const a = accountFor(holderOf(f)?.email);
     if (!a) return { label: "no account", cls: "bg-gray-200 text-gray-600", rank: 0 };
     if (a.suspended) return { label: "suspended", cls: "bg-red-100 text-red-700", rank: 1 };
     if (a.must_change_password) return { label: "invited", cls: "bg-amber-100 text-amber-800", rank: 2 };
@@ -105,16 +118,17 @@ export default function Parents() {
   const rows = useMemo(() => {
     const q = search.toLowerCase();
     const list = families.filter((f) =>
-      !q || f.name.toLowerCase().includes(q) || (f.email ?? "").toLowerCase().includes(q)
+      !q || f.members.some((m) => m.name.toLowerCase().includes(q) || (m.email ?? "").toLowerCase().includes(q))
       || f.kids.some((k) => k.label.toLowerCase().includes(q)));
     const dir = sortAsc ? 1 : -1;
     return [...list].sort((a, b) => {
       switch (sortKey) {
         case "children": return (a.kids.length - b.kids.length) * dir;
-        case "status": return (statusOf(a.email).rank - statusOf(b.email).rank) * dir;
-        default: return a.name.localeCompare(b.name) * dir;
+        case "status": return (statusOf(a).rank - statusOf(b).rank) * dir;
+        default: return a.primary.name.localeCompare(b.primary.name) * dir;
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [families, accounts, search, sortKey, sortAsc]);
 
   function sortBy(k: SortKey) {
@@ -154,28 +168,47 @@ export default function Parents() {
             <tr className="border-b bg-silver text-left text-xs uppercase tracking-wide text-gray-500">
               <th className="cursor-pointer px-4 py-3 hover:text-navy" onClick={() => sortBy("name")}>Primary Contact{arrow("name")}</th>
               <th className="px-4 py-3">Phone</th>
-              <th className="px-4 py-3">Email (login)</th>
+              <th className="px-4 py-3">Portal login</th>
               <th className="cursor-pointer px-4 py-3 hover:text-navy" onClick={() => sortBy("children")}>Children{arrow("children")}</th>
               <th className="cursor-pointer px-4 py-3 hover:text-navy" onClick={() => sortBy("status")}>Account{arrow("status")}</th>
               <th className="px-4 py-3">Last Login</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((f, i) => {
-              const st = statusOf(f.email);
+            {rows.map((f) => {
+              const st = statusOf(f);
+              const holder = holderOf(f);
+              const others = f.members.filter((m) => m.id !== f.primary.id);
               return (
-                <tr key={i} onClick={() => f.kids.length && nav(`/admin/students/${f.kids[0].id}`)}
+                <tr key={f.primary.id} onClick={() => nav(`/admin/parents/${f.primary.id}`)}
                   className="cursor-pointer border-b last:border-0 hover:bg-silver/60">
                   <td className="px-4 py-2.5">
-                    <span className="font-semibold text-navy">{f.name}</span>
-                    <span className="ml-2 text-xs capitalize text-gray-400">({f.relationship})</span>
+                    <div className="flex items-center gap-2">
+                      <Link to={`/admin/parents/${f.primary.id}`} onClick={(e) => e.stopPropagation()}
+                        className="font-semibold text-navy hover:text-royal hover:underline">{f.primary.name}</Link>
+                      <RelBadge r={f.primary.relationship} />
+                    </div>
+                    {others.map((o) => (
+                      <div key={o.id} className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500">
+                        <Link to={`/admin/parents/${o.id}`} onClick={(e) => e.stopPropagation()} className="hover:text-navy hover:underline">{o.name}</Link>
+                        <RelBadge r={o.relationship} />
+                      </div>
+                    ))}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-600">{usPhone(accountFor(f.email)?.phone ?? f.phone)}</td>
                   <td className="px-4 py-2.5 text-gray-600">
-                    {f.email ?? "—"}
-                    {f.email && addrMap[f.email.toLowerCase()] && (
-                      <div className="mt-0.5 text-xs text-gray-400">🏠 {addrMap[f.email.toLowerCase()]}</div>
-                    )}
+                    <div>{usPhone(f.primary.phone)}</div>
+                    {others.map((o) => o.phone && <div key={o.id} className="text-xs text-gray-400">{usPhone(o.phone)}</div>)}
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-600">
+                    {holder ? (
+                      <>
+                        <div>{holder.email}</div>
+                        {holder.id !== f.primary.id && <div className="text-xs text-gray-400">held by the {holder.relationship}</div>}
+                        {holder.email && addrMap[holder.email.toLowerCase()] && (
+                          <div className="mt-0.5 text-xs text-gray-400">🏠 {addrMap[holder.email.toLowerCase()]}</div>
+                        )}
+                      </>
+                    ) : <span className="text-gray-400">{f.primary.email ?? "—"}</span>}
                   </td>
                   <td className="px-4 py-2.5">
                     {f.kids.map((k) => (
@@ -189,7 +222,7 @@ export default function Parents() {
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
                   </td>
                   <td className="px-4 py-2.5">
-                    {(() => { const l = lastLogin(f.email); return <span className={`text-xs ${l.cls}`} title={l.full ?? ""}>{l.label}</span>; })()}
+                    {(() => { const l = lastLogin(holder?.email); return <span className={`text-xs ${l.cls}`} title={l.full ?? ""}>{l.label}</span>; })()}
                   </td>
                 </tr>
               );
@@ -201,7 +234,6 @@ export default function Parents() {
         </table>
       </div>
 
-      {/* Account management tools (for when portal accounts exist) */}
       <details className="mt-6">
         <summary className="cursor-pointer text-sm font-semibold text-royal hover:underline">
           Account management tools ({accounts.length} portal account{accounts.length === 1 ? "" : "s"})
@@ -247,7 +279,7 @@ export default function Parents() {
           ))}
           {!accounts.length && (
             <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-400">
-              No portal accounts yet — create them in the Supabase dashboard, then run the linking script.
+              No portal accounts yet — create them in the Supabase dashboard, then link children from each parent's profile.
             </p>
           )}
         </div>
