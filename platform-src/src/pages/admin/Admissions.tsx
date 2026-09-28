@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { usDate, usPhone, ageYears } from "../../lib/format";
+import { monthStr } from "../../lib/dates";
 
 // `details` is the free-form block the website admission form sends
 // (js/popup.js): address, mother + phone, emergency contact, etc.
@@ -33,6 +34,9 @@ interface Applicant {
   grades: { name: string } | null;
 }
 // One row per enrolled student + guardian, used to spot siblings already here.
+// The sibling's fee plan + payments ride along so the second-child rate and any
+// arrears are visible before Accept → Enroll (#69).
+interface FeePlanLite { total_amount: number; billing_frequency: string; start_date: string | null; status: string; payments: { payment_date: string; amount: number }[] }
 interface GuardianRow {
   name: string;
   relationship: string;
@@ -40,10 +44,40 @@ interface GuardianRow {
   email: string | null;
   students: {
     student_no: number; first_name: string; last_name: string;
-    enrollments: { grade_name: string; status: string }[];
+    enrollments: { grade_name: string; status: string; fee_plans: FeePlanLite | FeePlanLite[] | null }[];
   };
 }
-interface Sibling { student_no: number; name: string; grade: string; via: string }
+// Payment picture for one sibling: months owed so far this school year vs months
+// with at least one payment recorded (a month counts as paid by any payment in it).
+interface SiblingFee { amount: number; frequency: string; startsLater: string | null; expected: number; paid: number; thisMonthPaid: boolean; lastPayment: string | null }
+interface Sibling { student_no: number; name: string; grade: string; via: string; fee: SiblingFee | null }
+
+function feeSummary(plan: FeePlanLite | FeePlanLite[] | null | undefined): SiblingFee | null {
+  const p = Array.isArray(plan) ? plan.find((x) => x.status === "active") ?? plan[0] : plan;
+  if (!p) return null;
+  const now = monthStr();
+  const start = (p.start_date ?? "2026-09-01").slice(0, 7);
+  const amount = Number(p.total_amount);
+  const paidMonths = new Set((p.payments ?? []).map((x) => x.payment_date.slice(0, 7)).filter((m) => m >= start));
+  const lastPayment = (p.payments ?? []).map((x) => x.payment_date).sort().pop() ?? null;
+  if (start > now) return { amount, frequency: p.billing_frequency, startsLater: p.start_date, expected: 0, paid: paidMonths.size, thisMonthPaid: false, lastPayment };
+  // count months from start through the current month inclusive
+  const [sy, sm] = start.split("-").map(Number), [ny, nm] = now.split("-").map(Number);
+  const expected = p.billing_frequency === "monthly" && amount > 0 ? (ny - sy) * 12 + (nm - sm) + 1 : 0;
+  return { amount, frequency: p.billing_frequency, startsLater: null, expected, paid: Math.min(paidMonths.size, expected || paidMonths.size), thisMonthPaid: paidMonths.has(now), lastPayment };
+}
+
+// Short pill text: "$300/mo · Sep paid ✓" / "$300/mo · Sep unpaid · 1 mo behind"
+function feeLine(f: SiblingFee): { text: string; cls: string } {
+  if (f.amount === 0) return { text: "no fee ($0 plan)", cls: "bg-gray-100 text-gray-600" };
+  const per = f.frequency === "monthly" ? "/mo" : "/" + f.frequency.replace("ly", "");
+  if (f.startsLater) return { text: `$${f.amount.toFixed(0)}${per} · starts ${usDate(f.startsLater)}`, cls: "bg-blue-100 text-blue-700" };
+  const month = new Date(monthStr() + "-15").toLocaleDateString("en-US", { month: "short" });
+  const behind = f.expected - f.paid;
+  if (f.thisMonthPaid && behind <= 0) return { text: `$${f.amount.toFixed(0)}${per} · ${month} paid ✓`, cls: "bg-green-100 text-green-700" };
+  const tail = behind > 0 ? ` · ${behind} mo behind` : "";
+  return { text: `$${f.amount.toFixed(0)}${per} · ${month} unpaid${tail}`, cls: behind > 1 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800" };
+}
 
 const STATUSES = [
   ["under_review", "Under Review"],
@@ -72,9 +106,8 @@ export default function Admissions() {
   const [msg, setMsg] = useState<string | null>(null);
   const [open, setOpen] = useState<Applicant | null>(null);
   // Monthly fee typed on each applicant card before Accept → Enroll ($300 default;
-  // $200 for a second child of the same family; 0 = no fee).
+  // $200 when an enrolled sibling is detected — two children pay $500 together; 0 = no fee).
   const [fees, setFees] = useState<Record<string, string>>({});
-  const feeFor = (a: Applicant) => fees[a.id] ?? "300";
 
   async function load() {
     if (configMissing) return;
@@ -85,7 +118,7 @@ export default function Admissions() {
         .order("application_date", { ascending: false }),
       supabase.from("grades").select("id, name").eq("is_active", true).order("level_order"),
       supabase.from("guardians")
-        .select("name, relationship, phone, email, students ( student_no, first_name, last_name, enrollments ( grade_name, status ) )"),
+        .select("name, relationship, phone, email, students ( student_no, first_name, last_name, enrollments ( grade_name, status, fee_plans ( total_amount, billing_frequency, start_date, status, payments ( payment_date, amount ) ) ) )"),
     ]);
     setRows((data as unknown as Applicant[]) ?? []);
     setGrades(g ?? []);
@@ -111,11 +144,12 @@ export default function Admissions() {
         else if (mPhone && digits(g.phone) === mPhone) via = "mother's phone";
         else if (mName && norm(g.name) === mName) via = "mother's name";
         if (via && !seen.has(s.student_no))
-          seen.set(s.student_no, { student_no: s.student_no, name: `${s.first_name} ${s.last_name}`, grade: active.grade_name, via });
+          seen.set(s.student_no, { student_no: s.student_no, name: `${s.first_name} ${s.last_name}`, grade: active.grade_name, via, fee: feeSummary(active.fee_plans) });
       }
       return [...seen.values()];
     };
   }, [guardians]);
+  const feeFor = (a: Applicant) => fees[a.id] ?? (siblingsFor(a).some((s) => s.fee && s.fee.amount > 0) ? "200" : "300");
 
   async function setStatus(a: Applicant, status: string) {
     setMsg(null);
@@ -191,6 +225,12 @@ export default function Admissions() {
                       Sibling enrolled: {sibs.map((s) => s.name.split(" ")[0]).join(", ")}
                     </span>
                   )}
+                  {sibs.filter((s) => s.fee).map((s) => { const f = feeLine(s.fee!); return (
+                    <span key={s.student_no} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${f.cls}`}
+                      title={`${s.name}: ${s.fee!.paid} of ${s.fee!.expected} months paid this school year${s.fee!.lastPayment ? ` · last payment ${usDate(s.fee!.lastPayment)}` : ""}`}>
+                      {s.name.split(" ")[0]}: {f.text}
+                    </span>
+                  ); })}
                 </div>
                 <div className="text-xs text-gray-400">Applied {usDate(a.application_date)}</div>
               </div>
@@ -211,11 +251,14 @@ export default function Admissions() {
                   {a.applied_grade_text && <span className="text-gray-400">(applied for: {a.applied_grade_text})</span>}
                 </label>
                 {a.status !== "accepted" && (
-                  <label className="flex items-center gap-2 text-xs text-gray-500" title="$300 one child · $200 second child of the same family · 0 = no fee">
+                  <label className="flex items-center gap-2 text-xs text-gray-500" title="$300 one child · $200 second child of the same family ($500 together) · 0 = no fee">
                     Monthly fee: $
                     <input type="number" min={0} step={50} value={feeFor(a)}
                       onChange={(e) => setFees({ ...fees, [a.id]: e.target.value })}
                       className="w-20 rounded border border-gray-300 px-2 py-1 text-sm" />
+                    {sibs.some((s) => s.fee && s.fee.amount > 0) && fees[a.id] == null && (
+                      <span className="text-royal">family rate — $200 suggested</span>
+                    )}
                   </label>
                 )}
                 <div className="ml-auto flex gap-2">
@@ -338,13 +381,27 @@ function ApplicantDialog({ a, siblings, grades, onClose, onStatus, genderLabel }
             {siblings.length ? (
               <ul className="space-y-1">
                 {siblings.map((s) => (
-                  <li key={s.student_no} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="rounded-full bg-royal/10 px-2 py-0.5 text-xs font-semibold text-royal">#{String(s.student_no).padStart(5, "0")}</span>
-                    <span className="font-medium text-gray-800">{s.name}</span>
-                    <span className="text-gray-500">· {s.grade}</span>
-                    <span className="text-xs text-gray-400">matched by {s.via}</span>
+                  <li key={s.student_no} className="rounded-lg border border-gray-100 bg-silver/40 p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-royal/10 px-2 py-0.5 text-xs font-semibold text-royal">#{String(s.student_no).padStart(5, "0")}</span>
+                      <span className="font-medium text-gray-800">{s.name}</span>
+                      <span className="text-gray-500">· {s.grade}</span>
+                      <span className="text-xs text-gray-400">matched by {s.via}</span>
+                    </div>
+                    {s.fee ? (() => { const f = feeLine(s.fee!); return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className={`rounded-full px-2 py-0.5 font-semibold ${f.cls}`}>{f.text}</span>
+                        {s.fee!.amount > 0 && !s.fee!.startsLater && (
+                          <span className="text-gray-600">{s.fee!.paid} of {s.fee!.expected} month{s.fee!.expected === 1 ? "" : "s"} paid this school year</span>
+                        )}
+                        {s.fee!.lastPayment && <span className="text-gray-400">· last payment {usDate(s.fee!.lastPayment)}</span>}
+                      </div>
+                    ); })() : <div className="mt-2 text-xs text-gray-400">No fee plan on the sibling's enrollment.</div>}
                   </li>
                 ))}
+                {siblings.some((s) => s.fee && s.fee.amount > 0) && (
+                  <li className="text-xs text-royal">Family rate: two children from one family pay $500/month together, so this applicant's monthly fee should be $200 (already suggested on the card).</li>
+                )}
               </ul>
             ) : <p className="text-sm text-gray-500">None found — no enrolled student shares this family's phone, email or mother's name.</p>}
           </section>

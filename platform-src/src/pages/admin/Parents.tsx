@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { usPhone } from "../../lib/format";
-import { RelBadge } from "./ParentProfile";
 
 interface GuardianRow {
   id: string;
@@ -186,12 +185,10 @@ export default function Parents() {
                     <div className="flex items-center gap-2">
                       <Link to={`/admin/parents/${f.primary.id}`} onClick={(e) => e.stopPropagation()}
                         className="font-semibold text-navy hover:text-royal hover:underline">{f.primary.name}</Link>
-                      <RelBadge r={f.primary.relationship} />
                     </div>
                     {others.map((o) => (
                       <div key={o.id} className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500">
                         <Link to={`/admin/parents/${o.id}`} onClick={(e) => e.stopPropagation()} className="hover:text-navy hover:underline">{o.name}</Link>
-                        <RelBadge r={o.relationship} />
                       </div>
                     ))}
                   </td>

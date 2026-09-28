@@ -30,6 +30,40 @@ interface Student {
 }
 type DocRef = Student["document_references"][number];
 
+// Photo / video / media consent (phase 17) — mirrors the five boxes on the
+// signed consent form. null = not answered / no form on file.
+interface Consent {
+  internal_use: boolean | null; parent_comms: boolean | null; website_print: boolean | null;
+  social_media: boolean | null; external_media: boolean | null;
+  name_preference: string | null; signed_by: string | null; signed_date: string | null; notes: string | null;
+}
+type ConsentKey = "internal_use" | "parent_comms" | "website_print" | "social_media" | "external_media";
+const CONSENT_ITEMS: [ConsentKey, string, string][] = [
+  ["internal_use", "Internal use", "classroom displays, student records, internal newsletters"],
+  ["parent_comms", "Parent communications", "class WhatsApp groups, Family Portal class updates"],
+  ["website_print", "Website & print", "falahacademywa.org, brochures, flyers, banners"],
+  ["social_media", "Social media", "Facebook, Instagram, YouTube"],
+  ["external_media", "External media", "press, partner organisations, third-party sites"],
+];
+const EMPTY_CONSENT: Consent = {
+  internal_use: null, parent_comms: null, website_print: null, social_media: null, external_media: null,
+  name_preference: null, signed_by: null, signed_date: null, notes: null,
+};
+// One-line verdict for the header badge: what may staff do with this child's picture?
+function consentBadge(c: Consent | null): { label: string; cls: string; title: string } {
+  if (!c) return { label: "Media consent: not on file", cls: "bg-gray-200 text-gray-600", title: "No consent form recorded — treat as no permission." };
+  const pub = [c.website_print, c.social_media, c.external_media];
+  const allowed = CONSENT_ITEMS.filter(([k]) => c[k] === true).map(([, l]) => l);
+  const title = allowed.length ? "Allowed: " + allowed.join(", ") : "No photo or video use permitted.";
+  if (pub.every((v) => v === true)) return { label: "Photos OK: public", cls: "bg-green-100 text-green-700", title };
+  if (pub.every((v) => v !== true)) {
+    return c.internal_use || c.parent_comms
+      ? { label: "No public photos", cls: "bg-red-100 text-red-700", title }
+      : { label: "No photos at all", cls: "bg-red-100 text-red-700", title };
+  }
+  return { label: "Limited photo consent", cls: "bg-amber-100 text-amber-800", title };
+}
+
 export default function StudentProfile() {
   const { id } = useParams();
   const [s, setS] = useState<Student | null>(null);
@@ -43,6 +77,17 @@ export default function StudentProfile() {
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
   const [docTypes, setDocTypes] = useState<{ id: number; name: string }[]>([]);
   const nav = useNavigate();
+  // Media consent: saved row + the draft being edited in the panel
+  const [consent, setConsent] = useState<Consent | null>(null);
+  const [draft, setDraft] = useState<Consent>(EMPTY_CONSENT);
+  const [consentMsg, setConsentMsg] = useState<string | null>(null);
+  async function saveConsent() {
+    if (!s) return;
+    setConsentMsg(null);
+    const { error } = await supabase.from("media_consent").upsert({ student_id: s.id, ...draft }, { onConflict: "student_id" });
+    if (error) { setConsentMsg("Save failed: " + error.message); return; }
+    setConsentMsg("Saved."); load();
+  }
   // Right-click menu on a guardian row (make primary contact / open profile)
   const [menu, setMenu] = useState<{ x: number; y: number; g: Student["guardians"][number] } | null>(null);
   async function makePrimary(g: Student["guardians"][number]) {
@@ -134,6 +179,12 @@ export default function StudentProfile() {
     ((addr as unknown as { profiles: { email: string | null; address: string | null } }[]) ?? [])
       .forEach((r) => { if (r.profiles?.email && r.profiles.address) m[r.profiles.email.toLowerCase()] = r.profiles.address; });
     setAddrMap(m);
+    // Media consent (phase 17). Guarded so a project without the table still renders.
+    const { data: mc } = await supabase.from("media_consent")
+      .select("internal_use, parent_comms, website_print, social_media, external_media, name_preference, signed_by, signed_date, notes")
+      .eq("student_id", id).maybeSingle();
+    setConsent((mc as Consent | null) ?? null);
+    setDraft((mc as Consent | null) ?? EMPTY_CONSENT);
   }
   useEffect(() => { load(); }, [id]);
 
@@ -235,6 +286,12 @@ export default function StudentProfile() {
             {s.gender && <> · {s.gender}</>}
             {s.archived && <span className="ml-2 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Archived</span>}
           </div>
+          {(() => { const b = consentBadge(consent); return (
+            <a href="#media-consent" title={b.title}
+              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>
+              📷 {b.label}
+            </a>
+          ); })()}
         </div>
         </div>
         <button onClick={toggleArchive}
@@ -491,6 +548,64 @@ export default function StudentProfile() {
               <div><dt className="inline font-semibold text-navy">Medications: </dt><dd className="inline text-gray-600">{s.medical_info.medications || "None recorded"}</dd></div>
             </dl>
           ) : <p className="text-sm text-gray-400">No medical information recorded.</p>}
+        </section>
+
+        {/* Media consent — the signed Photo / Video / Media Consent Form, box by box */}
+        <section id="media-consent" className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">Photo, Video &amp; Media Consent</h2>
+            {(() => { const b = consentBadge(consent); return (
+              <span title={b.title} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>📷 {b.label}</span>
+            ); })()}
+          </div>
+          <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+            {CONSENT_ITEMS.map(([k, label, hint]) => (
+              <label key={k} className="flex items-center justify-between gap-3 border-b py-1.5 text-sm last:border-0">
+                <span>
+                  <span className="font-semibold text-navy">{label}</span>
+                  <span className="block text-xs text-gray-400">{hint}</span>
+                </span>
+                <select value={draft[k] == null ? "" : draft[k] ? "yes" : "no"}
+                  onChange={(e) => setDraft({ ...draft, [k]: e.target.value === "" ? null : e.target.value === "yes" })}
+                  className={`rounded border px-2 py-1 text-sm font-semibold ${
+                    draft[k] === true ? "border-green-300 bg-green-50 text-green-700" :
+                    draft[k] === false ? "border-red-300 bg-red-50 text-red-700" : "border-gray-300 text-gray-500"}`}>
+                  <option value="">—</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+            ))}
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            <label className="text-xs text-gray-500">Name may be shown as
+              <select value={draft.name_preference ?? ""} onChange={(e) => setDraft({ ...draft, name_preference: e.target.value || null })}
+                className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800">
+                <option value="">—</option>
+                <option value="none">No name</option>
+                <option value="first_name">First name only</option>
+                <option value="full_name">Full name</option>
+              </select>
+            </label>
+            <label className="text-xs text-gray-500">Signed by
+              <input value={draft.signed_by ?? ""} onChange={(e) => setDraft({ ...draft, signed_by: e.target.value || null })}
+                placeholder="Parent / guardian" className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800" />
+            </label>
+            <label className="text-xs text-gray-500">Signed on
+              <input type="date" value={draft.signed_date ?? ""} onChange={(e) => setDraft({ ...draft, signed_date: e.target.value || null })}
+                className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800" />
+            </label>
+            <label className="text-xs text-gray-500">Notes
+              <input value={draft.notes ?? ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value || null })}
+                placeholder="e.g. no close-ups of face" className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-800" />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button onClick={saveConsent}
+              className="rounded-lg bg-navy px-4 py-1.5 text-xs font-semibold text-white hover:bg-royal">Save consent</button>
+            {consentMsg && <span className={`text-xs ${consentMsg.startsWith("Save failed") ? "text-red-600" : "text-green-700"}`}>{consentMsg}</span>}
+            <span className="text-[11px] text-gray-400">Copy the answers from the signed form (Required Documents → Photo/Video Consent). Anything left "—" counts as no permission.</span>
+          </div>
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
