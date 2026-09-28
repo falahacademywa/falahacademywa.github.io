@@ -12,7 +12,10 @@ export interface Task {
   status: string;
   done_on: string | null;
   updated_at: string;
+  attachments?: TaskDoc[];   // phase 16: files in the private "task-docs" bucket
 }
+
+export interface TaskDoc { name: string; path: string; size?: number }
 
 export interface Urgency { icon: string; rank: number; label: string; name: string }
 

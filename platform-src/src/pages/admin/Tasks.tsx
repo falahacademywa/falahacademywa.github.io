@@ -83,6 +83,13 @@ export default function Tasks() {
     return [...hit].sort((a, b) => cmp(a, b) * dir);
   }, [pool, filter, catF, whoF, statF, sortKey, asc]);
 
+  // Attachments live in the private "task-docs" bucket; open through a 10-minute signed URL.
+  async function openDoc(path: string) {
+    const { data, error } = await supabase.storage.from("task-docs").createSignedUrl(path, 600);
+    if (error || !data?.signedUrl) { alert("Could not open the document: " + (error?.message ?? "no URL")); return; }
+    window.open(data.signedUrl, "_blank", "noopener");
+  }
+
   function sortBy(k: SortKey) {
     if (k === sortKey) setAsc(!asc);
     else { setSortKey(k); setAsc(true); }
@@ -192,6 +199,21 @@ export default function Tasks() {
                         </div>
                         <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Full task</div>
                         <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{renderTask(r.task)}</p>
+                        {(r.attachments?.length ?? 0) > 0 && (
+                          <div className="mt-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Documents</div>
+                            <ul className="mt-1 flex flex-wrap gap-2">
+                              {r.attachments!.map((d) => (
+                                <li key={d.path}>
+                                  <button onClick={(e) => { e.stopPropagation(); openDoc(d.path); }}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:border-royal hover:text-royal">
+                                    📎 {d.name}{d.size ? <span className="font-normal text-gray-400">· {(d.size / 1024).toFixed(0)} KB</span> : null}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
