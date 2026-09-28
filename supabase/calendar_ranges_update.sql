@@ -10,12 +10,12 @@ where title in ('Winter Break Begins - No School', 'Winter Break - No School')
   and start_date = date '2026-12-24';
 
 update public.calendar_events
-set title = 'Eid / Spring Break - No School', end_date = date '2027-03-13'
+set title = 'Eid / Spring Break - No School', end_date = date '2027-03-14'
 where title in ('Eid / Spring Break Begins', 'Eid / Spring Break - No School')
   and start_date = date '2027-03-01';
 
 update public.calendar_events
-set end_date = date '2027-05-17'
+set end_date = date '2027-05-18'
 where title = 'Eid al-Adha Break (Subject to Moon Sighting)'
   and start_date = date '2027-05-15';
 

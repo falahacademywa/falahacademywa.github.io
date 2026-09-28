@@ -296,7 +296,7 @@
         <div>
           <div class="footer-heading">Admissions</div>
           <a href="admissions.html" class="footer-link">Apply Now</a>
-          <a href="admissions.html#calendar" class="footer-link">Academic Calendar</a>
+          <a href="calendar.html" class="footer-link">Academic Calendar</a>
           <a href="programs.html" class="footer-link">Our Programs</a>
           <a href="privacy.html" class="footer-link">Privacy Policy</a>
         </div>
@@ -627,21 +627,8 @@
   </div>
 
   <script>
-    // Auto-open popup if navigated with #enroll hash
-    window.addEventListener('load', function() {
-      if (window.location.hash === '#enroll') {
-        setTimeout(() => openAdmissionPopup(), 300);
-      }
-      // Also listen for hash changes when already on the page
-      window.addEventListener('hashchange', function() {
-        if (window.location.hash === '#enroll') {
-          openAdmissionPopup();
-        }
-      });
-    });
-  </script>
-
-  <script>
+    // Auto-open the admission popup when the page is reached with #enroll
+    // (nav "Apply Now" links, flyers and QR codes point here).
     window.addEventListener('load', function() {
       if (window.location.hash === '#enroll') {
         setTimeout(function() { if(typeof openAdmissionPopup==='function') openAdmissionPopup(); }, 400);
@@ -655,4 +642,3 @@
   </script>
 </body>
 </html>
-<!-- regex fix -->

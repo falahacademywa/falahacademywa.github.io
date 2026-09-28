@@ -127,7 +127,7 @@
 
     /* Print styles */
     @media print {
-      .navbar, .page-hero, .footer, #back-to-top, .cal-actions, .year-tabs, .announcement-banner { display: none !important; }
+      .navbar, .page-hero, .footer, #back-to-top, .cal-actions, .year-tabs, #announcement-banner { display: none !important; }
       .months-grid { grid-template-columns: repeat(2, 1fr); }
       .cal-cell { min-height: 50px; }
       .cal-cell .cal-event-label { font-size: 8px; }
@@ -191,7 +191,7 @@
       <div class="nav-dropdown">
         <a href="admissions.html" class="nav-link nav-dropdown-toggle">Admissions ▾</a>
         <div class="nav-dropdown-menu">
-          <a href="#" onclick="openAdmissionPopup();return false;" class="nav-dropdown-item">Admission Form</a>
+          <a href="admissions.html#enroll" class="nav-dropdown-item">Admission Form</a>
           <a href="calendar.html" class="nav-dropdown-item">Academic Calendar</a>
         </div>
       </div>

@@ -100,17 +100,17 @@ TRANSP:TRANSPARENT
 END:VEVENT
 BEGIN:VEVENT
 DTSTART;VALUE=DATE:20270301
-DTEND;VALUE=DATE:20270314
+DTEND;VALUE=DATE:20270315
 SUMMARY:Eid / Spring Break — No School — Falah Academy
-DESCRIPTION:Eid celebration and Spring Break (Mar 1-13). Subject to moon sighting. School resumes March 14.
+DESCRIPTION:Eid celebration and Spring Break (Mar 1-14). Subject to moon sighting. School resumes Monday March 15.
 LOCATION:Al Huda Islamic Center\, 25650 101st Ave SE\, Kent\, WA 98030
 UID:2027-03-01-eid/springbreakbegins@falahacademywa.org
 STATUS:CONFIRMED
 TRANSP:TRANSPARENT
 END:VEVENT
 BEGIN:VEVENT
-DTSTART;VALUE=DATE:20270314
-DTEND;VALUE=DATE:20270315
+DTSTART;VALUE=DATE:20270315
+DTEND;VALUE=DATE:20270316
 SUMMARY:Spring Break Ends — School Resumes — Falah Academy
 DESCRIPTION:School resumes after Eid/Spring Break.
 LOCATION:Al Huda Islamic Center\, 25650 101st Ave SE\, Kent\, WA 98030
@@ -130,17 +130,17 @@ TRANSP:TRANSPARENT
 END:VEVENT
 BEGIN:VEVENT
 DTSTART;VALUE=DATE:20270515
-DTEND;VALUE=DATE:20270518
+DTEND;VALUE=DATE:20270519
 SUMMARY:Eid al-Adha Break (Subject to Moon Sighting) — Falah Academy
-DESCRIPTION:Eid al-Adha Break (May 15-17). Subject to moon sighting. School resumes May 18.
+DESCRIPTION:Eid al-Adha Break (May 15-18). Subject to moon sighting. School resumes Wednesday May 19.
 LOCATION:Al Huda Islamic Center\, 25650 101st Ave SE\, Kent\, WA 98030
 UID:2027-05-15-eidal-adhabreak(subjecttomoonsighting)@falahacademywa.org
 STATUS:CONFIRMED
 TRANSP:TRANSPARENT
 END:VEVENT
 BEGIN:VEVENT
-DTSTART;VALUE=DATE:20270518
-DTEND;VALUE=DATE:20270519
+DTSTART;VALUE=DATE:20270519
+DTEND;VALUE=DATE:20270520
 SUMMARY:Eid al-Adha Break Ends — School Resumes — Falah Academy
 DESCRIPTION:School resumes after Eid al-Adha Break.
 LOCATION:Al Huda Islamic Center\, 25650 101st Ave SE\, Kent\, WA 98030

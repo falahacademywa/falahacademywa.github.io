@@ -1,7 +1,8 @@
 -- ================================================================
--- FALAH ACADEMY — Academic Calendar 2026-2027 (from the website ics)
--- Run in falah-platform-prod (dev already has these). Re-runnable:
--- each insert is guarded by title + start_date.
+-- FALAH ACADEMY — Academic Calendar 2026-2027 (matches the published PDF
+-- and the website .ics; Eid resume dates corrected 2026-09-28, see
+-- calendar_eid_fix_2027.sql for projects that already hold the old rows).
+-- Re-runnable: each insert is guarded by title + start_date.
 -- ================================================================
 
 with ev(title, event_type, start_date, end_date) as (
@@ -15,11 +16,11 @@ with ev(title, event_type, start_date, end_date) as (
   ('School Resumes After Winter Break',            'academic', date '2027-01-04', null),
   ('MLK Day - No School',                          'holiday',  date '2027-01-18', null),
   ('Start of Ramadan (Subject to Moon Sighting)',  'event',    date '2027-02-07', null),
-  ('Eid / Spring Break - No School',               'holiday',  date '2027-03-01', date '2027-03-13'),
-  ('Spring Break Ends - School Resumes',           'academic', date '2027-03-14', null),
+  ('Eid / Spring Break - No School',               'holiday',  date '2027-03-01', date '2027-03-14'),
+  ('Spring Break Ends - School Resumes',           'academic', date '2027-03-15', null),
   ('PTA Meeting',                                  'academic', date '2027-05-06', null),
-  ('Eid al-Adha Break (Subject to Moon Sighting)', 'holiday',  date '2027-05-15', date '2027-05-17'),
-  ('Eid al-Adha Break Ends - School Resumes',      'academic', date '2027-05-18', null),
+  ('Eid al-Adha Break (Subject to Moon Sighting)', 'holiday',  date '2027-05-15', date '2027-05-18'),
+  ('Eid al-Adha Break Ends - School Resumes',      'academic', date '2027-05-19', null),
   ('Memorial Day - No School',                     'holiday',  date '2027-05-31', null),
   ('Last Day of School',                           'academic', date '2027-06-24', null)
 )
