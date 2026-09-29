@@ -33,7 +33,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
 
-          <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminLayout /></RequireRole>}>
+          <Route path="/admin" element={<RequireRole roles={["admin", "staff"]}><AdminLayout /></RequireRole>}>
             <Route index element={<Dashboard />} />
             <Route path="students" element={<Students />} />
             <Route path="students/:id" element={<StudentProfile />} />

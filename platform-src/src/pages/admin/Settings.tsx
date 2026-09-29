@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
+import StaffPermissions from "./StaffPermissions";
 
 interface Year { id: number; label: string; is_current: boolean }
 interface Grade { id: number; name: string; level_order: number; is_active: boolean }
@@ -134,6 +135,8 @@ export default function Settings() {
           <button className="rounded-lg bg-navy px-4 py-1.5 text-sm font-semibold text-white hover:bg-royal">Add form</button>
         </form>
       </section>
+
+      <StaffPermissions />
     </div>
   );
 }

@@ -4,18 +4,22 @@ import type { Session } from "@supabase/supabase-js";
 import { Navigate } from "react-router-dom";
 import { supabase, configMissing } from "./supabase";
 
-export type Role = "admin" | "parent";
+export type Role = "admin" | "parent" | "staff";
+export type Level = "view" | "edit";
 
 export interface Profile {
   id: string;
   full_name: string;
   role: Role;
   must_change_password: boolean;
+  title?: string | null;   // display title for staff ("Office Staff", "Principal")
 }
 
 interface AuthState {
   session: Session | null;
   profile: Profile | null;
+  perms: Record<string, Level>;                 // staff module permissions (phase 19); admins pass everything
+  can: (module: string, level?: Level) => boolean;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -24,6 +28,8 @@ interface AuthState {
 const AuthContext = createContext<AuthState>({
   session: null,
   profile: null,
+  perms: {},
+  can: () => false,
   loading: true,
   signOut: async () => {},
   refreshProfile: async () => {},
@@ -32,6 +38,7 @@ const AuthContext = createContext<AuthState>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [perms, setPerms] = useState<Record<string, Level>>({});
   // booted: the stored session has been read from the browser. Until then we
   // must NOT redirect anyone to /login — that race was signing users out on refresh.
   const [booted, setBooted] = useState(configMissing);
@@ -53,12 +60,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function loadProfile(uid: string) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, role, must_change_password")
-      .eq("id", uid)
-      .single();
-    setProfile((data as Profile) ?? null);
+    // `title` arrives with phase 19; fall back so an un-migrated project still signs in.
+    let r = await supabase.from("profiles").select("id, full_name, role, must_change_password, title").eq("id", uid).single();
+    if (r.error) r = await supabase.from("profiles").select("id, full_name, role, must_change_password").eq("id", uid).single();
+    const p = (r.data as Profile) ?? null;
+    setProfile(p);
+    if (p?.role === "staff") {
+      const { data } = await supabase.from("staff_permissions").select("module, level").eq("user_id", uid);
+      const m: Record<string, Level> = {};
+      ((data as { module: string; level: Level }[]) ?? []).forEach((x) => { m[x.module] = x.level; });
+      setPerms(m);
+    } else {
+      setPerms({});
+    }
   }
 
   useEffect(() => {
@@ -78,9 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = async () => {
     if (session) await loadProfile(session.user.id);
   };
+  // Admins may do everything; staff only what staff_permissions grants.
+  const can = (module: string, level: Level = "view") => {
+    if (profile?.role === "admin") return true;
+    if (profile?.role !== "staff") return false;
+    const l = perms[module];
+    return level === "view" ? l === "view" || l === "edit" : l === "edit";
+  };
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, profile, perms, can, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
@@ -92,7 +113,7 @@ export function useAuth() {
 }
 
 export function homeFor(role: Role | undefined) {
-  return role === "admin" ? "/admin" : "/parent";
+  return role === "parent" ? "/parent" : "/admin";
 }
 
 export function Splash() {

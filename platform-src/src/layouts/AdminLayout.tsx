@@ -1,31 +1,41 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase, configMissing } from "../lib/supabase";
+import { moduleForPath } from "../lib/permissions";
 
+// module = the staff permission that unlocks the entry (phase 19); admins see all
 const nav = [
-  { to: "/admin", label: "Dashboard", end: true },
-  { to: "/admin/students", label: "Students" },
-  { to: "/admin/admissions", label: "Admissions" },
-  { to: "/admin/parents", label: "Parents" },
-  { to: "/admin/teachers", label: "Teachers" },
-  { to: "/admin/fees", label: "Fees" },
-  { to: "/admin/academics", label: "Academics & Qur'an" },
-  { to: "/admin/assignments", label: "Assignments" },
-  { to: "/admin/updates", label: "Class Updates" },
-  { to: "/admin/calendar", label: "Calendar" },
-  { to: "/admin/announcements", label: "Announcements" },
-  { to: "/admin/feedback", label: "Feedback" },
-  { to: "/admin/reports", label: "Reports" },
-  { to: "/admin/tasks", label: "Tasks" },
-  { to: "/admin/settings", label: "Settings" },
+  { to: "/admin", label: "Dashboard", end: true, module: null },
+  { to: "/admin/students", label: "Students", module: "students" },
+  { to: "/admin/admissions", label: "Admissions", module: "admissions" },
+  { to: "/admin/parents", label: "Parents", module: "parents" },
+  { to: "/admin/teachers", label: "Teachers", module: "teachers" },
+  { to: "/admin/fees", label: "Fees", module: "fees" },
+  { to: "/admin/academics", label: "Academics & Qur'an", module: "academics" },
+  { to: "/admin/assignments", label: "Assignments", module: "academics" },
+  { to: "/admin/updates", label: "Class Updates", module: "academics" },
+  { to: "/admin/calendar", label: "Calendar", module: "calendar" },
+  { to: "/admin/announcements", label: "Announcements", module: "announcements" },
+  { to: "/admin/feedback", label: "Feedback", module: "feedback" },
+  { to: "/admin/reports", label: "Reports", module: "reports" },
+  { to: "/admin/tasks", label: "Tasks", module: "tasks" },
+  { to: "/admin/settings", label: "Settings", module: "settings" },
 ];
 
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; link_path: string | null; created_at: string }
 
 export default function AdminLayout() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, can } = useAuth();
   const nav2 = useNavigate();
+  const loc = useLocation();
+  const isStaff = profile?.role === "staff";
+  const portalLabel = isStaff ? (profile?.title?.trim() || "Office Staff") : "Administration Portal";
+  const visibleNav = nav.filter((n) => !n.module || can(n.module));
+  // Staff with view-only access to the current module: the page renders, nothing submits.
+  const mod = moduleForPath(loc.pathname);
+  const viewOnly = isStaff && !!mod && can(mod.key) && !can(mod.key, "edit");
+  const noAccess = isStaff && !!mod && !can(mod.key);
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
@@ -70,7 +80,7 @@ export default function AdminLayout() {
           <img src="../images/logo.jpg" alt="" className="h-8 w-8 rounded-full object-cover" />
           <div>
             <div className="font-display text-sm font-semibold leading-tight">Falah Academy</div>
-            <div className="text-[10px] font-semibold text-emerald-300">Administration Portal</div>
+            <div className="text-[10px] font-semibold text-emerald-300">{portalLabel}</div>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -116,14 +126,14 @@ export default function AdminLayout() {
           <img src="../images/logo.jpg" alt="" className="h-9 w-9 rounded-full object-cover" />
           <div className="flex-1">
             <div className="font-display text-sm font-semibold leading-tight">Falah Academy</div>
-            <div className="text-[11px] font-semibold text-emerald-300">Administration Portal</div>
+            <div className="text-[11px] font-semibold text-emerald-300">{portalLabel}</div>
           </div>
           <span className="hidden lg:block">{bellButton}</span>
           <button onClick={() => setOpen(false)} aria-label="Close menu"
             className="text-white/60 hover:text-white lg:hidden">✕</button>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-          {nav.map((n) => (
+          {visibleNav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setOpen(false)}
               className={({ isActive }) =>
                 `block rounded-lg px-3 py-2 text-sm transition ${
@@ -134,13 +144,28 @@ export default function AdminLayout() {
           ))}
         </nav>
         <div className="border-t border-white/10 p-4 text-sm">
-          <div className="mb-2 truncate text-white/70">{profile?.full_name}</div>
+          <div className="mb-2 truncate text-white/70">{profile?.full_name}{isStaff && <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-300">staff</span>}</div>
           <button onClick={signOut} className="text-white/60 underline hover:text-white">Sign out</button>
         </div>
       </aside>
 
       <main className="min-w-0 flex-1 overflow-x-auto p-4 lg:p-8">
-        <Outlet />
+        {noAccess ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+            You do not have access to this section. Ask the school office if you need it.
+          </div>
+        ) : (
+          <>
+            {viewOnly && (
+              <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-800">
+                👁 View only — you can read this section but not change it.
+              </div>
+            )}
+            <div className={viewOnly ? "view-only" : undefined}>
+              <Outlet />
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

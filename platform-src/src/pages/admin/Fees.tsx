@@ -16,9 +16,14 @@ interface PlanRow {
     grade_name: string;
     school_year: string;
     status: string;
-    students: { first_name: string; last_name: string; student_no: number };
+    students: { id: string; first_name: string; last_name: string; student_no: number };
   };
   payments: { id: number; payment_date: string; amount: number; payment_method: string; reference_no: string | null }[];
+}
+// Zelle alerts read from the school Gmail (phase 21): pending ones need a match
+interface ZelleRow {
+  id: number; received_at: string; payer: string; amount: number; memo: string | null; status: string;
+  matched_student_ids: string[]; match_note: string | null; resolved_at: string | null;
 }
 interface EnrollmentOpt {
   id: string;
@@ -38,17 +43,26 @@ export default function Fees() {
   // RLS; every change is written to audit_log by the payments_audit trigger.
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ payment_date: "", amount: "", payment_method: "cash", reference_no: "" });
+  // Zelle review queue (phase 21)
+  const [zelle, setZelle] = useState<ZelleRow[]>([]);
+  const [zPick, setZPick] = useState<Record<number, string[]>>({});   // inbox id -> chosen student ids
+  const [zBusy, setZBusy] = useState<number | null>(null);
 
   async function load() {
     if (configMissing) return;
-    const [{ data: p }, { data: e }] = await Promise.all([
+    const [{ data: p }, { data: e }, { data: z }] = await Promise.all([
       supabase.from("fee_plans")
-        .select("*, enrollments!inner ( id, grade_name, school_year, status, students ( first_name, last_name, student_no ) ), payments ( id, payment_date, amount, payment_method, reference_no )")
+        .select("*, enrollments!inner ( id, grade_name, school_year, status, students ( id, first_name, last_name, student_no ) ), payments ( id, payment_date, amount, payment_method, reference_no )")
         .eq("enrollments.status", "active"),
       supabase.from("enrollments")
         .select("id, grade_name, students ( first_name, last_name ), fee_plans ( id )")
         .eq("status", "active"),
+      supabase.from("zelle_inbox").select("id, received_at, payer, amount, memo, status, matched_student_ids, match_note, resolved_at")
+        .order("received_at", { ascending: false }).limit(60),
     ]);
+    const zr = (z as ZelleRow[]) ?? [];
+    setZelle(zr);
+    setZPick((prev) => { const m = { ...prev }; zr.forEach((r) => { if (!m[r.id]) m[r.id] = r.matched_student_ids ?? []; }); return m; });
     setPlans(((p as unknown as PlanRow[]) ?? []).sort((a, b) =>
       a.enrollments.students.last_name.localeCompare(b.enrollments.students.last_name)));
     // fee_plans.enrollment_id is UNIQUE, so PostgREST embeds it as a to-one
@@ -92,6 +106,27 @@ export default function Fees() {
     setMsg(null); load();
   }
 
+  async function postZelle(z: ZelleRow) {
+    const ids = zPick[z.id] ?? [];
+    if (!ids.length) return setMsg("Tick the student(s) this payment is for.");
+    setZBusy(z.id);
+    const { error } = await supabase.rpc("post_zelle", { p_inbox: z.id, p_students: ids, p_note: "matched by the office" });
+    setZBusy(null);
+    if (error) return setMsg("Could not post: " + error.message);
+    setMsg(null); load();
+  }
+  async function ignoreZelle(z: ZelleRow) {
+    if (!confirm(`Ignore the $${Number(z.amount).toFixed(2)} from ${z.payer}? (Use for non-tuition money such as donations.)`)) return;
+    await supabase.from("zelle_inbox").update({ status: "ignored", resolved_at: new Date().toISOString(), resolved_by: profile?.id }).eq("id", z.id);
+    load();
+  }
+  const studentName = (sid: string) => {
+    const r = plans.find((p) => p.enrollments.students.id === sid);
+    return r ? `${r.enrollments.students.first_name} ${r.enrollments.students.last_name}` : "student";
+  };
+  const zPending = zelle.filter((z) => z.status === "pending");
+  const zRecent = zelle.filter((z) => z.status !== "pending").slice(0, 8);
+
   type Payment = PlanRow["payments"][number];
   function startEdit(p: Payment) {
     setEditId(p.id);
@@ -120,10 +155,69 @@ export default function Fees() {
       <h1 className="mb-2 font-display text-2xl font-semibold text-navy">Fees</h1>
       <p className="mb-6 text-sm text-gray-500">
         One plan per enrollment (BR-010). Each student's fee can differ. $0 plans never trigger reminders (BR-121).
-        Recording a payment automatically notifies the family; editing or deleting one does not (changes are kept in the audit log).
+        Zelle receipts are read from the school Gmail every hour and posted automatically when the sender and amount are certain;
+        the rest wait below. Every change to a payment is kept in the audit log. Parents are not notified of payments.
       </p>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage fees.</p>}
+
+      {zPending.length > 0 && (
+        <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h2 className="text-sm font-bold text-amber-800">💸 Zelle received — needs a match ({zPending.length})</h2>
+          <p className="mb-3 text-xs text-amber-700">Tick the student(s) the money is for and post. The sender is remembered, so next month it posts by itself.</p>
+          <div className="space-y-3">
+            {zPending.map((z) => (
+              <div key={z.id} className="rounded-lg border border-amber-200 bg-white p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-navy">{z.payer}</span>
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-deep">${Number(z.amount).toFixed(2)}</span>
+                  {z.memo && <span className="text-xs text-gray-500">"{z.memo}"</span>}
+                  <span className="ml-auto text-xs text-gray-400">{new Date(z.received_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</span>
+                </div>
+                {z.match_note && <div className="mt-1 text-xs text-amber-700">{z.match_note}</div>}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {plans.filter((p) => Number(p.total_amount) > 0).map((p) => {
+                    const sid = p.enrollments.students.id;
+                    const on = (zPick[z.id] ?? []).includes(sid);
+                    return (
+                      <label key={p.id} className={`flex items-center gap-1.5 text-xs ${on ? "font-semibold text-navy" : "text-gray-600"}`}>
+                        <input type="checkbox" checked={on}
+                          onChange={(e) => setZPick({ ...zPick, [z.id]: e.target.checked ? [...(zPick[z.id] ?? []), sid] : (zPick[z.id] ?? []).filter((x) => x !== sid) })} />
+                        {p.enrollments.students.first_name} {p.enrollments.students.last_name} <span className="text-gray-400">${Number(p.total_amount).toFixed(0)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => postZelle(z)} disabled={zBusy === z.id}
+                    className="rounded-lg bg-emerald-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-deep disabled:opacity-50">
+                    {zBusy === z.id ? "Posting…" : `Post $${Number(z.amount).toFixed(0)} to ${(zPick[z.id] ?? []).length || "…"} student${(zPick[z.id] ?? []).length === 1 ? "" : "s"}`}
+                  </button>
+                  <button onClick={() => ignoreZelle(z)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">Not tuition — ignore</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {zRecent.length > 0 && (
+        <details className="mb-6 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
+          <summary className="cursor-pointer text-xs font-semibold text-gray-500 hover:text-navy">Recent Zelle alerts handled ({zRecent.length})</summary>
+          <table className="mt-2 w-full text-xs">
+            <tbody>
+              {zRecent.map((z) => (
+                <tr key={z.id} className="border-b last:border-0">
+                  <td className="py-1 text-gray-500">{new Date(z.received_at).toLocaleDateString()}</td>
+                  <td className="py-1 font-semibold text-navy">{z.payer}</td>
+                  <td className="py-1">${Number(z.amount).toFixed(2)}</td>
+                  <td className="py-1 text-gray-500">{z.status === "posted" ? "posted → " + (z.matched_student_ids ?? []).map(studentName).join(", ") : "ignored"}</td>
+                  <td className="py-1 text-gray-400">{z.match_note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
 
       {unplanned.length > 0 && (
         <form onSubmit={addPlan} className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">

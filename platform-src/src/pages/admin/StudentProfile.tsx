@@ -4,6 +4,7 @@ import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { usDate, usPhone } from "../../lib/format";
 import { RelBadge } from "./ParentProfile";
+import { useAuth } from "../../lib/auth";
 import { StudentFormDialog, consentBadge, formStatus, allergySummary, medicalSummary, MEDICAL_COLS, CONSENT_COLS, FORM_TITLE, FORM_DOC_TYPE } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 
@@ -44,6 +45,7 @@ export default function StudentProfile() {
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
   const [docTypes, setDocTypes] = useState<{ id: number; name: string }[]>([]);
   const nav = useNavigate();
+  const { can } = useAuth();   // staff need the "health" module for the forms below (phase 19)
   // Digital forms (phase 18): allergy + medical live in medical_info, consent in media_consent
   const [med, setMed] = useState<MedicalRow | null>(null);
   const [consent, setConsent] = useState<ConsentRow | null>(null);
@@ -502,7 +504,8 @@ export default function StudentProfile() {
         {/* Digital forms: Allergy, Medical, Media consent — open in the shared dialog */}
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Health &amp; Consent Forms</h2>
-          {(["allergy", "medical", "consent"] as FormKind[]).map((k) => {
+          {!can("health") && <p className="text-sm text-gray-400">Health and consent forms are not part of your access.</p>}
+          {can("health") && (["allergy", "medical", "consent"] as FormKind[]).map((k) => {
             const st = formStatus(k, med, consent);
             const summary = k === "allergy" ? allergySummary(med) : k === "medical" ? medicalSummary(med) : consentBadge(consent).title;
             return (
@@ -574,7 +577,7 @@ export default function StudentProfile() {
       </div>
 
       {formOpen && (
-        <StudentFormDialog kind={formOpen} studentId={s.id} studentName={`${s.first_name} ${s.last_name}`} isAdmin signerName=""
+        <StudentFormDialog kind={formOpen} studentId={s.id} studentName={`${s.first_name} ${s.last_name}`} isAdmin={can("health", "edit")} signerName=""
           onClose={() => setFormOpen(null)} onSaved={load} />
       )}
     </div>

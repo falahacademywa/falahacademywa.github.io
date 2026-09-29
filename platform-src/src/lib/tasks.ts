@@ -13,7 +13,19 @@ export interface Task {
   done_on: string | null;
   updated_at: string;
   attachments?: TaskDoc[];   // phase 16: files in the private "task-docs" bucket
+  source?: string;           // 'TODO.md' (synced from the hub) or 'portal' (created here, phase 20)
+  notes?: string | null;
+  created_at?: string;
 }
+
+// Priority picker on the phone form → due date (the tracker's urgency comes from the date)
+export const PRIORITIES: { key: string; label: string; days: number | null }[] = [
+  { key: "urgent", label: "🔴 Urgent — within 3 days", days: 3 },
+  { key: "week", label: "🟠 This week", days: 7 },
+  { key: "month", label: "🟡 This month", days: 30 },
+  { key: "later", label: "🟢 Later — in about 2 months", days: 60 },
+  { key: "someday", label: "⚪ Someday / parked", days: null },
+];
 
 export interface TaskDoc { name: string; path: string; size?: number }
 

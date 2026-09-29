@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr } from "../../lib/dates";
 import { type Task, urgency, BUCKETS, bucketLabels } from "../../lib/tasks";
+import { useAuth } from "../../lib/auth";
+import { moduleForPath } from "../../lib/permissions";
 
 interface Widget {
   label: string;
@@ -11,6 +13,9 @@ interface Widget {
 }
 
 export default function Dashboard() {
+  const { can } = useAuth();
+  // staff only see the tiles of modules they may view (phase 19)
+  const allowed = (w: Widget) => { const m = moduleForPath(w.to); return !m || can(m.key); };
   const [widgets, setWidgets] = useState<Widget[]>([
     { label: "Total Students", value: "—", to: "/admin/students" },
     { label: "New Applications", value: "—", to: "/admin/admissions" },
@@ -83,7 +88,7 @@ export default function Dashboard() {
         </div>
       )}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {widgets.map((w) => (
+        {widgets.filter(allowed).map((w) => (
           <Link key={w.label} to={w.to}
             className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md">
             <div className="font-display text-3xl font-semibold text-navy">{w.value}</div>
@@ -91,7 +96,7 @@ export default function Dashboard() {
           </Link>
         ))}
 
-        <Link to="/admin/tasks"
+        {can("tasks") && <Link to="/admin/tasks"
           className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
             <div className="min-w-[8rem]">
@@ -110,7 +115,7 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-        </Link>
+        </Link>}
       </div>
     </div>
   );

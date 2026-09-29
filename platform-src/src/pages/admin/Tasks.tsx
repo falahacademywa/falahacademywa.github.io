@@ -1,6 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
-import { type Task, urgency } from "../../lib/tasks";
+import { type Task, urgency, PRIORITIES } from "../../lib/tasks";
+import { useAuth } from "../../lib/auth";
+import { todayStr } from "../../lib/dates";
+import { usDate } from "../../lib/format";
+
+const ASSIGNEES = ["Muneeb (President)", "Muneeb (accountant)", "Muneeb (Principal)", "Claude", "Nuruddin (Treasurer)"];
+const CATEGORIES = ["Portal", "Website", "Records", "Bookkeeping", "Compliance", "Governance", "Marketing", "Admissions", "W-2 payroll", "Operations"];
 
 // The school's working to-do list (mirror of the hub's TODO.md, phase 15).
 // Read-only grid: sort on any column, filter box, "x out of y items" counter.
@@ -27,6 +33,7 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function Tasks() {
+  const { can, session } = useAuth();
   const [rows, setRows] = useState<Task[]>([]);
   const [filter, setFilter] = useState("");
   const [showDone, setShowDone] = useState(false);
@@ -34,8 +41,21 @@ export default function Tasks() {
   const [asc, setAsc] = useState(true);
   const [loaded, setLoaded] = useState<string | null>(null);
   const [openCode, setOpenCode] = useState<string | null>(null);   // row expanded for details
+  // "+ New task" (phase 20): saved with source = 'portal' and a P-code, pulled into the office records within the hour
+  const [newOpen, setNewOpen] = useState(false);
+  const [nText, setNText] = useState("");
+  const [nCat, setNCat] = useState("Operations");
+  const [nCatOther, setNCatOther] = useState("");
+  const [nWho, setNWho] = useState(ASSIGNEES[0]);
+  const [nWhoOther, setNWhoOther] = useState("");
+  const [nPrio, setNPrio] = useState("week");
+  const [nDate, setNDate] = useState("");
+  const [nNotes, setNNotes] = useState("");
+  const [nFiles, setNFiles] = useState<File[]>([]);
+  const [nBusy, setNBusy] = useState(false);
+  const [nMsg, setNMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     if (configMissing) return;
     supabase.from("admin_tasks").select("*").then(({ data }) => {
       const list = (data as Task[]) ?? [];
@@ -43,7 +63,59 @@ export default function Tasks() {
       const latest = list.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), "");
       setLoaded(latest ? new Date(latest).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : null);
     });
-  }, []);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function saveNew() {
+    setNMsg(null);
+    const text = nText.trim();
+    if (!text) return setNMsg("Describe the task first.");
+    const category = nCat === "Other" ? nCatOther.trim() || "Operations" : nCat;
+    const who = nWho === "Other" ? nWhoOther.trim() || "Muneeb (President)" : nWho;
+    let due_date: string | null = null, due_text = "someday", status = "Not started";
+    if (nPrio === "date") {
+      if (!nDate) return setNMsg("Pick the due date.");
+      due_date = nDate; due_text = nDate;
+    } else {
+      const p = PRIORITIES.find((x) => x.key === nPrio)!;
+      if (p.days == null) { status = "Parked"; }
+      else { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + p.days); due_date = d.toISOString().slice(0, 10); due_text = due_date; }
+    }
+    for (const f of nFiles) if (f.size > 25 * 1024 * 1024) return setNMsg(`${f.name} is over 25 MB.`);
+    setNBusy(true);
+    try {
+      const { data: code, error: e1 } = await supabase.rpc("next_portal_task_code");
+      if (e1 || !code) throw new Error(e1?.message ?? "no code");
+      const attachments: { name: string; path: string; size: number }[] = [];
+      for (const f of nFiles) {
+        const key = f.name.normalize("NFKD").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-|-$/g, "") || "file";
+        const path = `inbox/${code}/${key}`;
+        const { error: e2 } = await supabase.storage.from("task-docs").upload(path, f, { upsert: true });
+        if (e2) throw new Error("Upload failed for " + f.name + ": " + e2.message);
+        attachments.push({ name: f.name, path, size: f.size });
+      }
+      const { error: e3 } = await supabase.from("admin_tasks").insert({
+        code, task_no: null, is_done: false, category, task: text, assigned_to: who,
+        due_text, due_date, status, done_on: null, source: "portal",
+        notes: nNotes.trim() || null, created_by: session?.user.id ?? null, attachments,
+      });
+      if (e3) throw new Error(e3.message);
+      setNewOpen(false); setNText(""); setNNotes(""); setNFiles([]); setNPrio("week"); setNDate("");
+      load();
+    } catch (err) {
+      setNMsg(String((err as Error).message ?? err));
+    } finally {
+      setNBusy(false);
+    }
+  }
+
+  async function deletePortalTask(t: Task) {
+    if (!confirm(`Delete task ${t.code}? (Only tasks not yet pulled into the records can be deleted here.)`)) return;
+    const paths = (t.attachments ?? []).map((d) => d.path);
+    if (paths.length) await supabase.storage.from("task-docs").remove(paths);
+    await supabase.from("admin_tasks").delete().eq("code", t.code);
+    setOpenCode(null); load();
+  }
 
   // Column filters (dropdowns under Category / Assigned to / Status); "" = all.
   const [catF, setCatF] = useState("");
@@ -109,13 +181,76 @@ export default function Tasks() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold text-navy">Tasks</h1>
-          <p className="text-xs text-gray-500">The school's working to-do list. Read-only here; it is maintained in the office records{loaded ? ` · last updated ${loaded}` : ""}.</p>
+          <p className="text-xs text-gray-500">The school's working to-do list, maintained in the office records{loaded ? ` · last updated ${loaded}` : ""}. Tasks added here (P-numbers) are pulled into the records within the hour and get their real number.</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
-          Show done
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+            Show done
+          </label>
+          {can("tasks", "edit") && (
+            <button onClick={() => { setNewOpen(true); setNMsg(null); }}
+              className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-royal">+ New task</button>
+          )}
+        </div>
       </div>
+
+      {newOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={() => !nBusy && setNewOpen(false)}>
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-display text-lg font-semibold text-navy">New task</h2>
+              <button onClick={() => setNewOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">What needs doing
+                <textarea autoFocus rows={3} value={nText} onChange={(e) => setNText(e.target.value)} placeholder="e.g. Pay the ESD late fee · Reply to the parent about pickup · File the letter that came today"
+                  className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Category
+                  <select value={nCat} onChange={(e) => setNCat(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
+                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}<option>Other</option>
+                  </select>
+                  {nCat === "Other" && <input value={nCatOther} onChange={(e) => setNCatOther(e.target.value)} placeholder="Category" className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">For
+                  <select value={nWho} onChange={(e) => setNWho(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
+                    {ASSIGNEES.map((c) => <option key={c}>{c}</option>)}<option>Other</option>
+                  </select>
+                  {nWho === "Other" && <input value={nWhoOther} onChange={(e) => setNWhoOther(e.target.value)} placeholder="Name (role)" className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
+                </label>
+              </div>
+              <div className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Priority
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {PRIORITIES.map((p) => (
+                    <button key={p.key} type="button" onClick={() => setNPrio(p.key)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold normal-case tracking-normal ${nPrio === p.key ? "border-navy bg-navy text-white" : "border-gray-300 bg-white text-gray-600"}`}>{p.label}</button>
+                  ))}
+                  <button type="button" onClick={() => setNPrio("date")}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold normal-case tracking-normal ${nPrio === "date" ? "border-navy bg-navy text-white" : "border-gray-300 bg-white text-gray-600"}`}>📅 Exact date</button>
+                </div>
+                {nPrio === "date" && <input type="date" value={nDate} onChange={(e) => setNDate(e.target.value)} min={todayStr()} className="mt-2 rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
+              </div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Notes (optional)
+                <textarea rows={2} value={nNotes} onChange={(e) => setNNotes(e.target.value)} placeholder="Where the paper is, who to call, anything Claude should know"
+                  className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800" />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Photo or file (optional)
+                <input type="file" multiple accept="image/*,application/pdf" onChange={(e) => setNFiles(Array.from(e.target.files ?? []))}
+                  className="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:rounded-full file:border-0 file:bg-silver file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-navy" />
+                {nFiles.length > 0 && <div className="mt-1 text-[11px] font-normal normal-case tracking-normal text-gray-500">{nFiles.map((f) => `${f.name} (${(f.size / 1024).toFixed(0)} KB)`).join(" · ")}</div>}
+              </label>
+              {nMsg && <p className="text-xs text-red-600">{nMsg}</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={saveNew} disabled={nBusy} className="rounded-full bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-royal disabled:opacity-40">{nBusy ? "Saving…" : "Add task"}</button>
+                <button onClick={() => setNewOpen(false)} disabled={nBusy} className="rounded-full border border-gray-300 px-5 py-2 text-sm font-semibold text-gray-600 hover:bg-silver">Cancel</button>
+              </div>
+              <p className="text-[11px] font-normal normal-case tracking-normal text-gray-400">Files land in the office's OneDrive Inbox within the hour and are filed from there; the portal copy is removed once filed.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <input type="search" value={filter} onChange={(e) => setFilter(e.target.value)}
@@ -183,7 +318,7 @@ export default function Tasks() {
                       {!isOpen && r.task.length > 160 && <div className="mt-0.5 text-[11px] text-royal">click for full text</div>}
                     </td>
                     <td className="px-3 py-2 text-xs">{r.assigned_to}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">{r.is_done ? r.done_on : r.due_text}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">{r.is_done ? r.done_on : (r.due_date ? usDate(r.due_date) : r.due_text)}</td>
                     <td className="px-3 py-2">
                       <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusStyles[r.status.toLowerCase()] ?? "bg-gray-100 text-gray-600"}`}>{r.status}</span>
                     </td>
@@ -195,10 +330,17 @@ export default function Tasks() {
                           <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Urgency</div><div>{u.icon} {u.label}</div></div>
                           <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Assigned to</div><div>{r.assigned_to || "—"}</div></div>
                           <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.is_done ? "Done on" : "Due"}</div><div>{r.is_done ? r.done_on ?? "—" : r.due_text || "—"}</div></div>
-                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Last synced</div><div>{new Date(r.updated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</div></div>
+                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.source === "portal" ? "Added here" : "Last synced"}</div><div>{new Date(r.source === "portal" && r.created_at ? r.created_at : r.updated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</div></div>
                         </div>
+                        {r.source === "portal" && (
+                          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            📱 Added from the portal. It keeps the code {r.code} until the office pull copies it into the records (hourly) and gives it a real number.
+                            {can("tasks", "edit") && <button onClick={(e) => { e.stopPropagation(); deletePortalTask(r); }} className="ml-3 font-semibold text-red-600 hover:underline">Delete</button>}
+                          </div>
+                        )}
                         <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Full task</div>
                         <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{renderTask(r.task)}</p>
+                        {r.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-gray-600"><span className="font-semibold">Notes:</span> {r.notes}</p>}
                         {(r.attachments?.length ?? 0) > 0 && (
                           <div className="mt-3">
                             <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Documents</div>

@@ -19,3 +19,11 @@ body {
   font-family: var(--font-sans);
   @apply bg-silver text-gray-800;
 }
+
+/* Staff with view-only access to a module (phase 19): the page renders as
+   usual but nothing on it can be submitted. Links keep working. */
+.view-only button, .view-only input, .view-only select, .view-only textarea, .view-only label:has(input[type="file"]) {
+  pointer-events: none;
+  opacity: 0.55;
+}
+.view-only a { pointer-events: auto; opacity: 1; }
