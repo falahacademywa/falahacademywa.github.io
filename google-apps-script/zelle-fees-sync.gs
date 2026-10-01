@@ -16,14 +16,20 @@
  * 2. Project Settings > Script properties:
  *      SUPABASE_URL          e.g. https://xxxx.supabase.co   (the PROD project)
  *      SUPABASE_SERVICE_KEY  the SECRET service key (never in the website)
+ *      START_AFTER           (optional) yyyy/mm/dd — alerts on or before this day are
+ *                            ignored; default 2026/09/30 because September's fees were
+ *                            recorded by hand before this script existed.
  * 3. Run syncZelle once by hand (authorise Gmail access), check the log.
  * 4. Triggers > Add trigger: syncZelle | Time-driven | Hour timer | Every hour.
  * Processed alerts get the Gmail label "Zelle/Processed"; remove the label
  * from an alert to make the script look at it again.
  */
 
-var ALERT_QUERY = 'from:(ealerts.bankofamerica.com) subject:"sent you $" -label:Zelle-Processed newer_than:90d';
 var LABEL = "Zelle/Processed";
+function alertQuery_(props) {
+  var after = props.getProperty("START_AFTER") || "2026/09/30";
+  return 'from:(ealerts.bankofamerica.com) subject:"sent you $" -label:Zelle-Processed after:' + after;
+}
 
 function syncZelle() {
   var props = PropertiesService.getScriptProperties();
@@ -31,7 +37,7 @@ function syncZelle() {
   var key = props.getProperty("SUPABASE_SERVICE_KEY");
   if (!url || !key) throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_KEY in Script properties.");
   var label = GmailApp.getUserLabelByName(LABEL) || GmailApp.createLabel(LABEL);
-  var threads = GmailApp.search(ALERT_QUERY, 0, 50);
+  var threads = GmailApp.search(alertQuery_(props), 0, 50);
   var seen = 0, posted = 0, pending = 0;
 
   threads.forEach(function (thread) {
