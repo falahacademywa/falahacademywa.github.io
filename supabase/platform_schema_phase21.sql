@@ -92,7 +92,7 @@ $$;
 -- plan by plan (each plan gets up to its monthly amount, the last one the rest).
 create or replace function public.post_zelle(p_inbox bigint, p_students uuid[], p_note text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare z record; f record; remaining numeric; share numeric; n int := 0; pid bigint; pids bigint[] := '{}';
+declare z record; pl record; remaining numeric; share numeric; n int := 0; pid bigint; pids bigint[] := '{}';
         total int; k text;
 begin
   if not (auth.role() = 'service_role' or public.can_edit('fees')) then
@@ -104,20 +104,20 @@ begin
   if p_students is null or array_length(p_students, 1) is null then raise exception 'choose at least one student'; end if;
   remaining := z.amount;
   select count(*) into total
-  from public.fee_plans f join public.enrollments e on e.id = f.enrollment_id
-  where e.status = 'active' and f.status = 'active' and e.student_id = any(p_students);
+  from public.fee_plans fp join public.enrollments e on e.id = fp.enrollment_id
+  where e.status = 'active' and fp.status = 'active' and e.student_id = any(p_students);
   if total = 0 then raise exception 'no active fee plan for the chosen student(s)'; end if;
-  for f in
-    select f.id, f.total_amount
-    from public.fee_plans f join public.enrollments e on e.id = f.enrollment_id
-    where e.status = 'active' and f.status = 'active' and e.student_id = any(p_students)
-    order by f.total_amount desc, f.id
+  for pl in
+    select fp.id, fp.total_amount
+    from public.fee_plans fp join public.enrollments e on e.id = fp.enrollment_id
+    where e.status = 'active' and fp.status = 'active' and e.student_id = any(p_students)
+    order by fp.total_amount desc, fp.id
   loop
     n := n + 1;
-    share := case when n = total then remaining else least(remaining, f.total_amount) end;
+    share := case when n = total then remaining else least(remaining, pl.total_amount) end;
     if share <= 0 then continue; end if;
     insert into public.payments (fee_plan_id, payment_date, amount, payment_method, reference_no, notes, recorded_by)
-    values (f.id, (z.received_at at time zone 'America/Los_Angeles')::date, share, 'zelle',
+    values (pl.id, (z.received_at at time zone 'America/Los_Angeles')::date, share, 'zelle',
             'Zelle ' || to_char(z.received_at at time zone 'America/Los_Angeles', 'YYYY-MM-DD HH24:MI'),
             'Zelle from ' || z.payer || coalesce(' — "' || z.memo || '"', '') || ' · ' || coalesce(p_note, 'posted from the bank alert'),
             auth.uid())
