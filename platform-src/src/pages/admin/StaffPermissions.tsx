@@ -15,6 +15,7 @@ export default function StaffPermissions() {
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [grid, setGrid] = useState<Grid>({});
   const [titles, setTitles] = useState<Record<string, string>>({});
+  const [names, setNames] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export default function StaffPermissions() {
     const rows = (s as StaffRow[]) ?? [];
     setStaff(rows);
     const t: Record<string, string> = {}; rows.forEach((r) => { t[r.id] = r.title ?? ""; }); setTitles(t);
+    const n: Record<string, string> = {}; rows.forEach((r) => { n[r.id] = r.full_name ?? ""; }); setNames(n);
     const g: Grid = {};
     rows.forEach((r) => { g[r.id] = Object.fromEntries(MODULES.map((m) => [m.key, "none"])); });
     if (rows.length) {
@@ -62,7 +64,7 @@ export default function StaffPermissions() {
       .map(([module, level]) => ({ user_id: uid, module, level, granted_by: session?.user.id ?? null }));
     const del = await supabase.from("staff_permissions").delete().eq("user_id", uid);
     const ins = rows.length ? await supabase.from("staff_permissions").insert(rows) : { error: null };
-    const tit = await supabase.from("profiles").update({ title: titles[uid]?.trim() || null }).eq("id", uid);
+    const tit = await supabase.from("profiles").update({ title: titles[uid]?.trim() || null, ...(names[uid]?.trim() ? { full_name: names[uid].trim() } : {}) }).eq("id", uid);
     setBusy(null);
     const err = del.error ?? ins.error ?? tit.error;
     if (err) return setMsg("Save failed: " + err.message);
@@ -89,8 +91,11 @@ export default function StaffPermissions() {
         <div key={s.id} className="mb-4 rounded-xl border border-gray-200 p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="min-w-0 flex-1">
-              <div className="font-semibold text-navy">{s.full_name}</div>
-              <div className="text-xs text-gray-500">{s.email}</div>
+              <label className="text-xs text-gray-500">Name
+                <input value={names[s.id] ?? ""} onChange={(e) => { setNames({ ...names, [s.id]: e.target.value }); setDirty({ ...dirty, [s.id]: true }); }}
+                  placeholder="Full name" className="mt-1 block w-56 rounded border border-gray-300 px-2 py-1 text-sm font-semibold text-navy" />
+              </label>
+              <div className="mt-1 text-xs text-gray-500">{s.email}</div>
             </div>
             <label className="text-xs text-gray-500">Title shown in the portal
               <input value={titles[s.id] ?? ""} onChange={(e) => { setTitles({ ...titles, [s.id]: e.target.value }); setDirty({ ...dirty, [s.id]: true }); }}
