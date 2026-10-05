@@ -21,6 +21,7 @@ interface Widget {
   label: string;
   value: string | number;
   to: string;
+  pair?: { paid: number; unpaid: number };   // two-number tile (fees this month)
 }
 
 export default function Dashboard() {
@@ -93,16 +94,17 @@ export default function Dashboard() {
           .then(({ data }) => data ?? []),
         count("volunteer_applications", (q) => q.in("status", ["new", "contacted", "screening"])).catch(() => 0),
       ]);
-      const outstanding = (plans as { start_date: string | null; payments: { payment_date: string }[] }[])
-        .filter((p) => !p.start_date || p.start_date <= today)  // plans not yet started don't count
-        .filter((p) => !p.payments.some((x) => x.payment_date.startsWith(month))).length;
+      const due = (plans as { start_date: string | null; payments: { payment_date: string }[] }[])
+        .filter((p) => !p.start_date || p.start_date <= today);  // plans not yet started don't count
+      const outstanding = due.filter((p) => !p.payments.some((x) => x.payment_date.startsWith(month))).length;
+      const paid = due.length - outstanding;
       setWidgets([
         { label: "Total Students", value: students, to: "/admin/students" },
         { label: "New Applications", value: applicants, to: "/admin/admissions" },
         { label: "Volunteers in progress", value: volunteers, to: "/admin/volunteers" },
         { label: "Present Today", value: presentToday, to: "/admin/attendance" },
         { label: "Absent Today", value: absentToday, to: "/admin/attendance" },
-        { label: "Fees Unpaid (this month)", value: outstanding, to: "/admin/fees" },
+        { label: "Fees this month", value: `${paid}/${due.length}`, to: "/admin/fees", pair: { paid, unpaid: outstanding } },
         { label: "Parent Accounts", value: parents, to: "/admin/parents" },
         { label: "Teachers", value: teachers, to: "/admin/teachers" },
       ]);
@@ -125,7 +127,14 @@ export default function Dashboard() {
         {widgets.filter(allowed).map((w) => (
           <Link key={w.label} to={w.to}
             className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md">
-            <div className="font-display text-3xl font-semibold text-navy">{w.value}</div>
+            {w.pair ? (
+              <div className="flex items-end gap-4">
+                <div><div className="font-display text-3xl font-semibold text-green-600">{w.pair.paid}</div><div className="text-xs font-semibold text-green-700">Paid</div></div>
+                <div><div className={`font-display text-3xl font-semibold ${w.pair.unpaid ? "text-red-600" : "text-gray-300"}`}>{w.pair.unpaid}</div><div className={`text-xs font-semibold ${w.pair.unpaid ? "text-red-700" : "text-gray-400"}`}>Unpaid</div></div>
+              </div>
+            ) : (
+              <div className="font-display text-3xl font-semibold text-navy">{w.value}</div>
+            )}
             <div className="mt-1 text-sm text-gray-500">{w.label}</div>
           </Link>
         ))}
