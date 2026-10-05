@@ -122,20 +122,20 @@ export default function Attendance() {
           </div>
           <div className="grid grid-cols-7 gap-1">
             {cells.map((d, i) => {
-              if (!d) return <div key={i} className="min-h-[5.5rem] rounded-lg bg-silver/60" />;
+              if (!d) return <div key={i} className="min-h-[8rem] rounded-lg bg-silver/60" />;
               const c = byDay[d];
               return (
                 <button key={d} onClick={() => setDay(day === d ? null : d)}
-                  className={`min-h-[5.5rem] rounded-lg border p-1 text-left align-top transition hover:border-royal ${day === d ? "border-royal ring-2 ring-royal/30" : "border-gray-100"} ${isWeekend(d) ? "bg-silver/40" : "bg-white"} ${d > today ? "opacity-60" : ""}`}>
+                  className={`min-h-[8rem] cursor-pointer rounded-lg border p-1.5 text-left align-top transition hover:border-royal ${day === d ? "border-royal ring-2 ring-royal/30" : "border-gray-100"} ${isWeekend(d) ? "bg-silver/40" : "bg-white"} ${d > today ? "opacity-60" : ""}`}>
                   <div className={`mb-1 text-xs font-semibold ${d === today ? "inline-block rounded-full bg-navy px-1.5 text-white" : "text-gray-500"}`}>{Number(d.slice(-2))}</div>
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-1">
                     {c && selEnr && c.mine && (
                       <span className={`rounded border px-1 text-[10px] font-semibold leading-4 ${ATT_STATUS[c.mine.status].chip}`}>{ATT_STATUS[c.mine.status].label}</span>
                     )}
                     {c && !selEnr && Object.entries(c.grades).sort(([a], [b]) => Number(a) - Number(b)).map(([gid, v]) => {
                       const rec = v.present + v.late + v.absent;
                       return (
-                        <span key={gid} className={`flex items-center justify-between gap-1 rounded border px-1 text-[10px] font-semibold leading-4 ${gradeColor(grades, Number(gid)).chip}`}
+                        <span key={gid} className={`flex items-center justify-between gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold leading-4 ${gradeColor(grades, Number(gid)).chip}`}
                           title={`${gradeName(Number(gid))}: ${v.present} present, ${v.late} late, ${v.absent} absent`}>
                           <span>{gradeShort(gradeName(Number(gid)))} {v.present + v.late}/{rec}</span>
                           {v.absent > 0 && <span className="rounded bg-red-500 px-1 text-[9px] text-white">{v.absent}</span>}

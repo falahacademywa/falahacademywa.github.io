@@ -147,9 +147,9 @@ export default function Dashboard() {
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {grades.map((g) => { const subs = weekSubjects?.[g.id] ?? []; const c = gradeColor(grades, g.id); return (
-              <div key={g.id} className={`rounded-lg border p-3 ${subs.length ? c.chip : "border-dashed border-gray-200 bg-silver/40 text-gray-400"}`}>
-                <div className="flex items-center gap-2 text-sm font-bold"><span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />{g.name}</div>
-                <div className="mt-1 text-sm">{weekSubjects == null ? "…" : subs.length ? subs.join(", ") : "no updates yet"}</div>
+              <div key={g.id} className={`rounded-lg border p-3 ${subs.length ? "border-gray-200 bg-silver/50" : "border-dashed border-gray-200"}`}>
+                <div className="flex items-center gap-2 text-sm font-bold text-navy"><span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />{g.name}</div>
+                <div className={`mt-1 text-sm ${subs.length ? "text-gray-700" : "text-gray-400"}`}>{weekSubjects == null ? "…" : subs.length ? subs.join(", ") : "no updates yet"}</div>
               </div>
             ); })}
             {!grades.length && <div className="text-sm text-gray-400">{weekSubjects == null ? "Loading…" : "No active grades."}</div>}

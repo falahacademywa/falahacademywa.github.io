@@ -110,23 +110,20 @@ export default function ClassUpdates() {
         </div>
         <div className="grid grid-cols-7 gap-1">
           {cells.map((d, i) => {
-            if (!d) return <div key={i} className="min-h-[5.5rem] rounded-lg bg-silver/60" />;
+            if (!d) return <div key={i} className="min-h-[9rem] rounded-lg bg-silver/60" />;
             const list = byDay[d] ?? [];
-            const shown = list.slice(0, 4);
+            const shown = list;
             return (
-              <div key={d} className={`min-h-[5.5rem] rounded-lg border border-gray-100 p-1 ${isWeekend(d) ? "bg-silver/40" : "bg-white"} ${d > today ? "opacity-60" : ""}`}>
+              <div key={d} className={`min-h-[9rem] rounded-lg border border-gray-100 p-1.5 ${isWeekend(d) ? "bg-silver/40" : "bg-white"} ${d > today ? "opacity-60" : ""}`}>
                 <div className={`mb-1 text-xs font-semibold ${d === today ? "inline-block rounded-full bg-navy px-1.5 text-white" : "text-gray-500"}`}>{Number(d.slice(-2))}</div>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-1">
                   {shown.map((u) => { const g = gradeOf(u); const c = gradeColor(grades, g); return (
                     <button key={u.id} onClick={() => jump(u.id)}
                       title={`${gradeName(g)} · ${u.subject}${u.enrollments ? ` · ${u.enrollments.students.first_name} ${u.enrollments.students.last_name}` : ""}\n${u.note.slice(0, 160)}`}
-                      className={`truncate rounded border px-1 text-left text-[10px] font-semibold leading-4 hover:ring-2 ${c.chip} ${c.ring}`}>
+                      className={`cursor-pointer rounded border px-1.5 py-0.5 text-left text-[11px] font-semibold leading-4 hover:ring-2 ${c.chip} ${c.ring}`}>
                       {gradeShort(gradeName(g))}: {u.subject}{u.enrollments ? ` (${u.enrollments.students.first_name})` : ""}{u.homework_due ? " ★" : ""}
                     </button>
                   ); })}
-                  {list.length > shown.length && (
-                    <button onClick={() => jump(list[shown.length].id)} className="text-left text-[10px] font-semibold text-gray-500 hover:text-navy">+{list.length - shown.length} more</button>
-                  )}
                 </div>
               </div>
             );
