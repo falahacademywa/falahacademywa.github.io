@@ -235,6 +235,19 @@ p { line-height: 1.8; }
 .countdown-message { color: #c0d4f0; font-size: 1.1rem; padding: 1.5rem; background: rgba(255,255,255,0.06); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); }
 .countdown-message strong { color: white; }
 
+/* In-session rotator (three standing messages, js/main.js initRotator) */
+.rotator { position: relative; min-height: 230px; }
+.rotator-slide { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.7s ease; pointer-events: none; }
+.rotator-slide.active { opacity: 1; pointer-events: auto; }
+.rotator-text { color: #c0d4f0; font-size: 1rem; margin: 0.5rem auto 1.3rem; max-width: 560px; line-height: 1.6; }
+.rotator-cta { display: inline-block; }
+.rotator-dots { display: flex; justify-content: center; gap: 10px; margin-top: 1rem; }
+.rotator-dot { width: 10px; height: 10px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: rgba(255,255,255,0.3); transition: background 0.3s, transform 0.3s; }
+.rotator-dot:hover { background: rgba(255,255,255,0.6); }
+.rotator-dot.active { background: var(--gold); transform: scale(1.25); }
+@media (prefers-reduced-motion: reduce) { .rotator-slide { transition: none; } }
+@media (max-width: 640px) { .rotator { min-height: 300px; } .rotator-text { font-size: 0.92rem; } }
+
 /* ---- LOCATION ---- */
 .location-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
 .location-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 1.5rem; }

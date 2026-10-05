@@ -22,6 +22,8 @@ import AssignmentsAdmin from "./pages/admin/AssignmentsAdmin";
 import ClassUpdates from "./pages/admin/ClassUpdates";
 import Feedback from "./pages/admin/Feedback";
 import Tasks from "./pages/admin/Tasks";
+import Volunteers from "./pages/admin/Volunteers";
+import Attendance from "./pages/admin/Attendance";
 import ParentHome from "./pages/parent/ParentHome";
 
 // HashRouter so deep links work on GitHub Pages without server rewrites.
@@ -38,6 +40,8 @@ export default function App() {
             <Route path="students" element={<Students />} />
             <Route path="students/:id" element={<StudentProfile />} />
             <Route path="admissions" element={<Admissions />} />
+            <Route path="volunteers" element={<Volunteers />} />
+            <Route path="attendance" element={<Attendance />} />
             <Route path="parents" element={<Parents />} />
             <Route path="parents/:id" element={<ParentProfile />} />
             <Route path="teachers" element={<Teachers />} />

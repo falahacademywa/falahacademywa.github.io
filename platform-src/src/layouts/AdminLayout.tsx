@@ -8,7 +8,9 @@ import { moduleForPath } from "../lib/permissions";
 const nav = [
   { to: "/admin", label: "Dashboard", end: true, module: null },
   { to: "/admin/students", label: "Students", module: "students" },
+  { to: "/admin/attendance", label: "Attendance", module: "students" },
   { to: "/admin/admissions", label: "Admissions", module: "admissions" },
+  { to: "/admin/volunteers", label: "Volunteers", module: "volunteers" },
   { to: "/admin/parents", label: "Parents", module: "parents" },
   { to: "/admin/teachers", label: "Teachers", module: "teachers" },
   { to: "/admin/fees", label: "Fees", module: "fees" },

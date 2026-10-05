@@ -48,7 +48,7 @@ export default function Dashboard() {
       };
       const today = todayStr();
       const month = today.slice(0, 7);
-      const [students, applicants, parents, teachers, presentToday, absentToday, plans] = await Promise.all([
+      const [students, applicants, parents, teachers, presentToday, absentToday, plans, volunteers] = await Promise.all([
         count("students", (q) => q.eq("archived", false)),
         count("applicants", (q) => q.eq("status", "under_review")),
         count("profiles", (q) => q.eq("role", "parent")),
@@ -59,6 +59,7 @@ export default function Dashboard() {
           .select("id, total_amount, start_date, enrollments!inner ( status ), payments ( payment_date )")
           .eq("status", "active").eq("enrollments.status", "active").gt("total_amount", 0)
           .then(({ data }) => data ?? []),
+        count("volunteer_applications", (q) => q.in("status", ["new", "contacted", "screening"])).catch(() => 0),
       ]);
       const outstanding = (plans as { start_date: string | null; payments: { payment_date: string }[] }[])
         .filter((p) => !p.start_date || p.start_date <= today)  // plans not yet started don't count
@@ -66,8 +67,9 @@ export default function Dashboard() {
       setWidgets([
         { label: "Total Students", value: students, to: "/admin/students" },
         { label: "New Applications", value: applicants, to: "/admin/admissions" },
-        { label: "Present Today", value: presentToday, to: "/admin/reports" },
-        { label: "Absent Today", value: absentToday, to: "/admin/reports" },
+        { label: "Volunteers in progress", value: volunteers, to: "/admin/volunteers" },
+        { label: "Present Today", value: presentToday, to: "/admin/attendance" },
+        { label: "Absent Today", value: absentToday, to: "/admin/attendance" },
         { label: "Fees Unpaid (this month)", value: outstanding, to: "/admin/fees" },
         { label: "Parent Accounts", value: parents, to: "/admin/parents" },
         { label: "Teachers", value: teachers, to: "/admin/teachers" },

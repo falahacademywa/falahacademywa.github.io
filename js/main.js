@@ -169,10 +169,7 @@ function initCountdown() {
           </div>
         </div>`;
     } else if (now >= schoolStart && now <= schoolEnd) {
-      container.innerHTML = `
-        <div class="countdown-icon">📚</div>
-        <h2 class="countdown-title">Alhamdulillah — School is in Session!</h2>
-        <p class="countdown-subtitle" style="color:#c0d4f0;font-size:1rem;margin-top:0.5rem">We are honored to serve our community and nurture the young Ummah of Nabi Muhammad ﷺ</p>`;
+      if (!container.querySelector('.rotator')) initRotator(container);   // render once, not every second
     } else {
       container.innerHTML = `
         <div class="countdown-icon">🎉</div>
@@ -184,6 +181,55 @@ function initCountdown() {
 
   update();
   setInterval(update, 1000);
+}
+
+// ---- IN-SESSION ROTATOR (three messages while school is running) ----
+// Slow rotation (8 s), pauses on hover/touch/focus, dots to pick a slide,
+// no auto-rotation for visitors who prefer reduced motion. Slide 1 stays the
+// school status; the other two are standing calls to action.
+const SESSION_SLIDES = [
+  { icon: '📚', title: 'Alhamdulillah — School is in Session!',
+    text: 'We are honored to serve our community and nurture the young Ummah of Nabi Muhammad ﷺ',
+    href: 'platform/', cta: 'Family Portal →' },
+  { icon: '🎓', title: 'Admissions Open for 2026–2027',
+    text: 'Limited seats in Pre-K, KG and Grade 1. Qur\'an, Islamic Studies and accredited academics, Monday to Thursday.',
+    href: 'admissions.html#enroll', cta: 'Apply Now →' },
+  { icon: '🤝', title: 'Volunteer and Earn Lasting Reward',
+    text: 'With your help we can reach more children and teach each one better. Every hour you give is sadaqah jariyah. Join us for a few hours a week.',
+    href: 'volunteer.html', cta: 'Volunteer With Us →' },
+];
+function initRotator(container) {
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  container.innerHTML = `
+    <div class="rotator" aria-roledescription="carousel" aria-label="School news">
+      ${SESSION_SLIDES.map((s, i) => `
+        <div class="rotator-slide${i === 0 ? ' active' : ''}" role="group" aria-roledescription="slide" aria-label="${i + 1} of ${SESSION_SLIDES.length}"${i === 0 ? '' : ' aria-hidden="true"'}>
+          <div class="countdown-icon">${s.icon}</div>
+          <h2 class="countdown-title">${s.title}</h2>
+          <p class="countdown-subtitle rotator-text">${s.text}</p>
+          <a href="${s.href}" class="btn-primary rotator-cta">${s.cta}</a>
+        </div>`).join('')}
+    </div>
+    <div class="rotator-dots" role="tablist" aria-label="Choose a message">
+      ${SESSION_SLIDES.map((s, i) => `<button class="rotator-dot${i === 0 ? ' active' : ''}" role="tab" aria-selected="${i === 0}" aria-label="${s.title}"></button>`).join('')}
+    </div>`;
+  const slides = container.querySelectorAll('.rotator-slide');
+  const dots = container.querySelectorAll('.rotator-dot');
+  let current = 0, timer = null, paused = false;
+  function show(i) {
+    current = (i + slides.length) % slides.length;
+    slides.forEach((el, k) => { el.classList.toggle('active', k === current); el.setAttribute('aria-hidden', k === current ? 'false' : 'true'); });
+    dots.forEach((d, k) => { d.classList.toggle('active', k === current); d.setAttribute('aria-selected', k === current ? 'true' : 'false'); });
+  }
+  function start() { if (reduce || timer) return; timer = setInterval(() => { if (!paused) show(current + 1); }, 8000); }
+  dots.forEach((d, i) => d.addEventListener('click', () => { show(i); paused = false; }));
+  container.addEventListener('mouseenter', () => { paused = true; });
+  container.addEventListener('mouseleave', () => { paused = false; });
+  container.addEventListener('focusin', () => { paused = true; });
+  container.addEventListener('focusout', () => { paused = false; });
+  container.addEventListener('touchstart', () => { paused = true; setTimeout(() => { paused = false; }, 12000); }, { passive: true });
+  document.addEventListener('visibilitychange', () => { paused = document.hidden; });
+  start();
 }
 
 // ---- CONTACT FORM (EmailJS) ----

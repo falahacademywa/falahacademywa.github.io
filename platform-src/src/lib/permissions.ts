@@ -5,9 +5,10 @@ export type Level = "view" | "edit";
 export interface Module { key: string; label: string; paths: string[]; note?: string }
 
 export const MODULES: Module[] = [
-  { key: "students",      label: "Students",                  paths: ["/admin/students"],  note: "profiles, guardians, documents, attendance" },
+  { key: "students",      label: "Students",                  paths: ["/admin/students", "/admin/attendance"], note: "profiles, guardians, documents, attendance calendar" },
   { key: "health",        label: "Health & consent forms",    paths: [],                   note: "allergy, medical and photo-consent forms on the student profile" },
   { key: "admissions",    label: "Admissions",                paths: ["/admin/admissions"], note: "applications, Accept → Enroll, decline" },
+  { key: "volunteers",    label: "Volunteers",                paths: ["/admin/volunteers"], note: "website volunteer applications, screening checks, approve" },
   { key: "parents",       label: "Parents",                   paths: ["/admin/parents", "/admin/parent-activity"], note: "accounts, link, suspend, activity" },
   { key: "teachers",      label: "Teachers",                  paths: ["/admin/teachers"] },
   { key: "fees",          label: "Fees",                      paths: ["/admin/fees"],       note: "plans and payments" },
