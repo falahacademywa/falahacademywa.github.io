@@ -5,6 +5,17 @@ import { todayStr } from "../../lib/dates";
 import { type Task, urgency, BUCKETS, bucketLabels } from "../../lib/tasks";
 import { useAuth } from "../../lib/auth";
 import { moduleForPath } from "../../lib/permissions";
+import { type GradeLite, gradeColor } from "../../lib/calendar";
+import { usDate } from "../../lib/format";
+
+// Monday–Sunday of the week containing `iso`
+function weekOf(iso: string): [string, string] {
+  const d = new Date(iso + "T00:00:00");
+  const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const f = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  return [f(mon), f(sun)];
+}
 
 interface Widget {
   label: string;
@@ -27,6 +38,27 @@ export default function Dashboard() {
   const [taskBuckets, setTaskBuckets] = useState<Record<string, number> | null>(null);
   const openTasks = taskBuckets ? Object.values(taskBuckets).reduce((s, n) => s + n, 0) : null;
   const labels = bucketLabels();
+
+  // This week's class updates: per grade, the subjects that had at least one post (phase 22)
+  const [week] = useState(() => weekOf(todayStr()));
+  const [grades, setGrades] = useState<GradeLite[]>([]);
+  const [weekSubjects, setWeekSubjects] = useState<Record<number, string[]> | null>(null);
+  useEffect(() => {
+    if (configMissing || !can("academics")) return;
+    Promise.all([
+      supabase.from("grades").select("id, name, level_order").eq("is_active", true).order("level_order"),
+      supabase.from("class_updates").select("subject, grade_id, enrollments ( grade_id )").gte("update_date", week[0]).lte("update_date", week[1]),
+    ]).then(([{ data: g }, { data: u }]) => {
+      setGrades((g as GradeLite[]) ?? []);
+      const m: Record<number, string[]> = {};
+      ((u as unknown as { subject: string; grade_id: number | null; enrollments: { grade_id: number } | null }[]) ?? []).forEach((x) => {
+        const gid = x.grade_id ?? x.enrollments?.grade_id; if (gid == null) return;
+        const list = (m[gid] ??= []); if (!list.includes(x.subject)) list.push(x.subject);
+      });
+      Object.values(m).forEach((l) => l.sort());
+      setWeekSubjects(m);
+    });
+  }, []);
 
   useEffect(() => {
     if (configMissing) return;
@@ -97,6 +129,23 @@ export default function Dashboard() {
             <div className="mt-1 text-sm text-gray-500">{w.label}</div>
           </Link>
         ))}
+
+        {can("academics") && <Link to="/admin/updates" title="Open Class Updates"
+          className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="font-display text-xl font-semibold text-navy">Class updates this week</div>
+            <div className="text-xs text-gray-400">Mon {usDate(week[0])} – Sun {usDate(week[1])} · click to open</div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {grades.map((g) => { const subs = weekSubjects?.[g.id] ?? []; const c = gradeColor(grades, g.id); return (
+              <div key={g.id} className={`rounded-lg border p-3 ${subs.length ? c.chip : "border-dashed border-gray-200 bg-silver/40 text-gray-400"}`}>
+                <div className="flex items-center gap-2 text-sm font-bold"><span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />{g.name}</div>
+                <div className="mt-1 text-sm">{weekSubjects == null ? "…" : subs.length ? subs.join(", ") : "no updates yet"}</div>
+              </div>
+            ); })}
+            {!grades.length && <div className="text-sm text-gray-400">{weekSubjects == null ? "Loading…" : "No active grades."}</div>}
+          </div>
+        </Link>}
 
         {can("tasks") && <Link to="/admin/tasks"
           className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
