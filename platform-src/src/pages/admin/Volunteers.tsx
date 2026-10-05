@@ -9,7 +9,7 @@ import { usDate, usPhone } from "../../lib/format";
 
 interface Ref { name: string; relationship: string; phone: string; email: string }
 interface Row {
-  id: string; full_name: string; preferred_name: string | null; email: string; phone: string | null;
+  id: string; full_name: string; preferred_name: string | null; gender: "male" | "female" | null; email: string; phone: string | null;
   address: string | null; city: string | null; state: string | null; zip: string | null;
   date_of_birth: string | null; under_18: boolean; guardian_name: string | null; guardian_phone: string | null;
   availability: Record<string, string[] | boolean>; start_date: string | null; hours_per_week: string | null;
@@ -135,6 +135,7 @@ export default function Volunteers() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button onClick={() => setOpen(r)} className="font-semibold text-navy hover:text-royal hover:underline">{r.full_name}</button>
                   {r.preferred_name && <span className="text-sm text-gray-400">“{r.preferred_name}”</span>}
+                  {r.gender && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.gender === "female" ? "bg-pink-100 text-pink-700" : "bg-blue-100 text-blue-700"}`}>{r.gender === "female" ? "F" : "M"}</span>}
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyles[r.status] ?? "bg-gray-100"}`}>{STATUSES.find(([v]) => v === r.status)?.[1] ?? r.status}</span>
                   {r.under_18 && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Under 18 · parent consent</span>}
                   {flagged && <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Disclosure — read before contacting</span>}
@@ -224,6 +225,7 @@ function VolunteerDialog({ r, grades, editable, onClose, onSave, onStatus, onDel
 
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           <Field label="Preferred name">{r.preferred_name}</Field>
+          <Field label="Gender">{r.gender ? (r.gender === "female" ? "Female" : "Male") : null}</Field>
           <Field label="Date of birth">{r.date_of_birth ? `${usDate(r.date_of_birth)} (${ageYears(r.date_of_birth)} yrs)` : null}</Field>
           <Field label="Address">{[r.address, r.city, r.state, r.zip].filter(Boolean).join(", ") || null}</Field>
           <Field label="Availability">{availText(r.availability)}{r.start_date ? ` · from ${usDate(r.start_date)}` : ""}{r.hours_per_week ? ` · ${r.hours_per_week}` : ""}</Field>

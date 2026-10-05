@@ -96,6 +96,9 @@ drop trigger if exists volunteer_applications_notify on public.volunteer_applica
 create trigger volunteer_applications_notify after insert on public.volunteer_applications
   for each row execute function public.trg_volunteer_notify();
 
+-- gender (added 2026-10-05, President): Male / Female radio on the form
+alter table public.volunteer_applications add column if not exists gender text check (gender in ('male', 'female'));
+
 -- ---------- 1b. résumé upload (PDF / Word, 5 MB) ----------
 -- The website uploads the file straight into the private bucket before the
 -- insert; the row keeps the path. Admins open it through a signed URL.

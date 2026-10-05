@@ -59,6 +59,7 @@ function validate() {
   clearErrors();
   var ok = true;
   if (v('v_name').length < 3) { fieldError('v_name', 'Please enter your full name'); ok = false; }
+  if (!radio('v_gender')) { groupError('v_gender_group', 'Please select Female or Male'); ok = false; }
   if (!isValidEmail(v('v_email'))) { fieldError('v_email', 'Please enter a valid e-mail address'); ok = false; }
   if (!isValidUSPhone(v('v_phone'))) { fieldError('v_phone', 'Please enter a valid US phone, e.g. (206) 555-0123'); ok = false; }
   if (v('v_city').length < 2) { fieldError('v_city', 'Please enter your city'); ok = false; }
@@ -100,6 +101,7 @@ function buildPayload() {
   return {
     full_name: v('v_name'),
     preferred_name: v('v_pref') || null,
+    gender: radio('v_gender') || null,
     email: v('v_email').toLowerCase(),
     phone: v('v_phone'),
     address: v('v_street') || null,
