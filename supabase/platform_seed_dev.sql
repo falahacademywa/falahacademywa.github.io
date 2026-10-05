@@ -3,9 +3,9 @@
 -- Run AFTER platform_schema.sql (and platform_schema_phase2.sql).
 --
 -- STEP 1 (dashboard, ~2 min): Authentication > Users > "Add user" >
---   "Create new user" (set password directly, no email sent):
---     admin@test.local   password: FalahAdmin1!
---     parent@test.local  password: FalahParent1!
+--   "Create new user" (set password yourself, no email sent):
+--     admin@test.local   password: <set your own; the values live outside the repo in ~/.falah/dev-test-logins.txt>
+--     parent@test.local  password: <set your own; the values live outside the repo in ~/.falah/dev-test-logins.txt>
 -- STEP 2: run this whole file in the SQL Editor.
 -- ================================================================
 
