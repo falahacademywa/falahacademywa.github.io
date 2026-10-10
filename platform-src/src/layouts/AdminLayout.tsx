@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase, configMissing } from "../lib/supabase";
 import { moduleForPath } from "../lib/permissions";
+import { loadMenuCounts, markClassUpdatesSeen, type MenuCounts } from "../lib/menuCounts";
 
 // module = the staff permission that unlocks the entry (phase 19); admins see all
 const nav = [
@@ -25,6 +26,30 @@ const nav = [
   { to: "/admin/settings", label: "Settings", module: "settings" },
 ];
 
+// Count shown as plain text after the label, e.g. "Volunteers (1)"; two-part items read
+// "Tasks (red, orange)" and "Fees (Zelle to match, unpaid)" — the hover title explains them.
+const COUNT_HINT: Record<string, string> = {
+  "/admin/tasks": "red tasks (due within 7 days or overdue), orange tasks (due within 3 weeks)",
+  "/admin/fees": "families paid this month, families unpaid this month",
+};
+// Colour per number for the two-part items; single counts use the menu's own text colour.
+const COUNT_COLORS: Record<string, string[]> = {
+  "/admin/tasks": ["text-red-400", "text-orange-400"],
+  "/admin/fees": ["text-green-400", "text-red-400"],
+};
+
+function MenuBadge({ values, to, active }: { values?: number[]; to?: string; active?: boolean }) {
+  if (!values || !values.some((v) => v > 0)) return null;
+  const colors = to && !active ? COUNT_COLORS[to] : undefined;
+  return (
+    <span className="shrink-0 font-semibold" title={to ? COUNT_HINT[to] : undefined}>
+      ({values.map((v, i) => (
+        <Fragment key={i}>{i > 0 && ", "}<span className={colors?.[i]}>{v}</span></Fragment>
+      ))})
+    </span>
+  );
+}
+
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; link_path: string | null; created_at: string }
 
 export default function AdminLayout() {
@@ -33,7 +58,9 @@ export default function AdminLayout() {
   const loc = useLocation();
   const isStaff = profile?.role === "staff";
   const portalLabel = isStaff ? (profile?.title?.trim() || "Office Staff") : "Administration Portal";
-  const visibleNav = nav.filter((n) => !n.module || can(n.module));
+  // Dashboard stays first; every other item is sorted A–Z, so new menu items find their own place.
+  const visibleNav = nav.filter((n) => !n.module || can(n.module))
+    .sort((a, b) => (a.to === "/admin" ? -1 : b.to === "/admin" ? 1 : a.label.localeCompare(b.label)));
   // Staff with view-only access to the current module: the page renders, nothing submits.
   const mod = moduleForPath(loc.pathname);
   const viewOnly = isStaff && !!mod && can(mod.key) && !can(mod.key, "edit");
@@ -41,6 +68,16 @@ export default function AdminLayout() {
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  const [counts, setCounts] = useState<MenuCounts>({});
+
+  // Action counts beside menu items (#131): reload on every page change; opening Class Updates marks posts seen.
+  useEffect(() => {
+    if (configMissing || !profile) return;
+    if (loc.pathname.startsWith("/admin/updates")) markClassUpdatesSeen();
+    let live = true;
+    loadMenuCounts((m) => can(m)).then((c) => { if (live) setCounts(c); });
+    return () => { live = false; };
+  }, [profile?.id, loc.pathname]);
 
   useEffect(() => {
     if (configMissing || !profile) return;
@@ -141,7 +178,12 @@ export default function AdminLayout() {
                 `block rounded-lg px-3 py-2 text-sm transition ${
                   isActive ? "bg-emerald-brand font-semibold text-white" : "text-white/80 hover:bg-white/10"
                 }`}>
-              {n.label}
+              {({ isActive }) => (
+                <span className="flex items-center gap-1.5">
+                  <span>{n.label}</span>
+                  <MenuBadge values={counts[n.to]} to={n.to} active={isActive} />
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
