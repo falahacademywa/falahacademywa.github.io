@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { usDate, usPhone } from "../../lib/format";
+import { localDateStr } from "../../lib/dates";
 
 interface Ref { name: string; relationship: string; phone: string; email: string }
 interface Row {
@@ -152,7 +153,7 @@ export default function Volunteers() {
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-gray-400">Applied {usDate(r.created_at.slice(0, 10))}</div>
+                <div className="text-xs text-gray-400">Applied {usDate(localDateStr(r.created_at))}</div>
               </div>
               <div className="mt-2 grid gap-x-8 gap-y-1 text-sm text-gray-600 sm:grid-cols-2 lg:grid-cols-4">
                 <div>{r.phone ? usPhone(r.phone) : "—"} · {r.email}</div>
@@ -218,7 +219,7 @@ function VolunteerDialog({ r, grades, editable, onClose, onSave, onStatus, onDel
         <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="font-display text-xl font-semibold text-navy">{r.full_name}</h2>
-            <div className="text-xs text-gray-400">Applied {usDate(r.created_at.slice(0, 10))} · {r.email} · {r.phone ? usPhone(r.phone) : "no phone"}</div>
+            <div className="text-xs text-gray-400">Applied {usDate(localDateStr(r.created_at))} · {r.email} · {r.phone ? usPhone(r.phone) : "no phone"}</div>
           </div>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyles[r.status] ?? ""}`}>{STATUSES.find(([v]) => v === r.status)?.[1]}</span>
         </div>
