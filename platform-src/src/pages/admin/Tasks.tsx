@@ -127,6 +127,14 @@ export default function Tasks() {
   const categories = useMemo(() => distinct((r) => r.category), [pool]);
   const assignees = useMemo(() => distinct((r) => r.assigned_to), [pool]);
   const statuses = useMemo(() => distinct((r) => r.status), [pool]);
+  // A chosen filter value that is no longer an option (e.g. Status "Done" after unticking Show done)
+  // would keep filtering while the dropdown shows "All" — drop it instead (#113). Wait for rows first.
+  useEffect(() => {
+    if (!rows.length) return;
+    if (catF && !categories.includes(catF)) setCatF("");
+    if (whoF && !assignees.includes(whoF)) setWhoF("");
+    if (statF && !statuses.includes(statF)) setStatF("");
+  }, [rows.length, categories, assignees, statuses, catF, whoF, statF]);
   const anyFilter = Boolean(filter || catF || whoF || statF);
   const clearAll = () => { setFilter(""); setCatF(""); setWhoF(""); setStatF(""); };
 
