@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
+import { todayStr } from "../../lib/dates";
 
 interface EnrRow {
   id: string;
@@ -71,6 +72,7 @@ export default function Academics() {
     if (!selected) return;
     const { error } = await supabase.from("quran_progress").insert({
       enrollment_id: selected.id,
+      assessment_date: todayStr(),   // Pacific date, not the database's UTC default (#118)
       category: qForm.category,
       surah_topic: qForm.surah_topic,
       ayah_from: qForm.ayah_from ? Number(qForm.ayah_from) : null,
@@ -91,6 +93,7 @@ export default function Academics() {
     const isPreK = grades.find((g) => g.id === gradeId)?.name === "Pre-K";
     const { error } = await supabase.from("academic_progress").insert({
       enrollment_id: selected.id,
+      assessment_date: todayStr(),
       subject: isPreK ? "General" : aForm.subject,
       assessment_type: aForm.assessment_type,
       score: aForm.score ? Number(aForm.score) : null,
