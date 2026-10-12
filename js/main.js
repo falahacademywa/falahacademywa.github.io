@@ -183,10 +183,10 @@ function initCountdown() {
   setInterval(update, 1000);
 }
 
-// ---- IN-SESSION ROTATOR (three messages while school is running) ----
+// ---- IN-SESSION ROTATOR (four messages while school is running) ----
 // Slow rotation (8 s), pauses on hover/touch/focus, dots to pick a slide,
 // no auto-rotation for visitors who prefer reduced motion. Slide 1 stays the
-// school status; the other two are standing calls to action.
+// school status; the others are standing calls to action.
 const SESSION_SLIDES = [
   { icon: '📚', title: 'Alhamdulillah — School is in Session!',
     text: 'We are honored to serve our community and nurture the young Ummah of Nabi Muhammad ﷺ',
@@ -194,6 +194,9 @@ const SESSION_SLIDES = [
   { icon: '🎓', title: 'Admissions Open for 2026–2027',
     text: 'Limited seats in Pre-K, KG and Grade 1. Qur\'an, Islamic Studies and accredited academics, Monday to Thursday.',
     href: 'admissions.html#enroll', cta: 'Apply Now →' },
+  { icon: '💝', title: 'Donate and Earn Lasting Reward',
+    text: 'Tuition covers only part of what the school costs; your sadaqah carries the rest. Give once, monthly, or double it through your employer.',
+    href: 'donate.html', cta: 'Donate →' },
   { icon: '🤝', title: 'Volunteer and Earn Lasting Reward',
     text: 'With your help we can reach more children and teach each one better. Every hour you give is sadaqah jariyah. Join us for a few hours a week.',
     href: 'volunteer.html', cta: 'Volunteer With Us →' },
