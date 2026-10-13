@@ -1,7 +1,7 @@
 // Admin → Volunteers (phase 22). Applications arrive from volunteer.html on the
-// public website; the office works each one through references, the WATCH
-// check, the registry check, orientation and the signed agreement, then
-// approves or declines. Every admin is alerted when a new one lands.
+// public website; the office works each one through the references, orientation
+// and the signed agreement, then approves or declines (background checks — WATCH,
+// registry — are deferred to hub TODO #139; add them back to CHECKS then). Every admin is alerted when a new one lands.
 import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
@@ -39,8 +39,8 @@ const statusStyles: Record<string, string> = {
 };
 // the screening steps from the Volunteer Background Check Procedure; each holds the date it was done
 const CHECKS: [string, string][] = [
-  ["ref1", "Reference 1 spoken to"], ["ref2", "Reference 2 spoken to"], ["watch", "WATCH check saved"],
-  ["registry", "nsopw.gov search saved"], ["orientation", "Orientation done"], ["agreement", "Volunteer Agreement signed"],
+  ["ref1", "Reference 1 spoken to"], ["ref2", "Reference 2 spoken to"],
+  ["orientation", "Orientation done"], ["agreement", "Volunteer Agreement signed"],
 ];
 const DAYS: [string, string][] = [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"]];
 
@@ -120,8 +120,8 @@ export default function Volunteers() {
         </div>
       </div>
       <p className="mb-6 text-sm text-gray-500">
-        Applications from <b>falahacademywa.org/volunteer.html</b>. Work each one through the six screening steps (Background Check Procedure), then Approve.
-        A volunteer is never alone with a student; the checks are the second safeguard.
+        Applications from <b>falahacademywa.org/volunteer.html</b>. Work each one through the screening steps (references, orientation, signed agreement), then Approve.
+        A volunteer is never alone with a student.
       </p>
       {msg && <div className="mb-4 rounded-lg bg-silver p-3 text-sm text-gray-700">{msg}</div>}
       {configMissing && <p className="text-sm text-gray-500">Connect the database first.</p>}
