@@ -73,6 +73,7 @@ function validate() {
   }
   if (!checkedValues('v_avail').length) { groupError('v_avail_group', 'Tick at least one block you could usually offer'); ok = false; }
   if (!checkedValues('v_interest').length) { groupError('v_interest_group', 'Tick at least one area'); ok = false; }
+  if (checkedValues('v_interest').indexOf('Other') !== -1 && v('v_interest_other').length < 3) { fieldError('v_interest_other', 'Please tell us the other area'); ok = false; }
   if (v('v_experience').length < 10) { fieldError('v_experience', 'A sentence or two about your experience, please'); ok = false; }
   [1, 2].forEach(function (n) {
     if (v('v_ref' + n + '_name').length < 3) { fieldError('v_ref' + n + '_name', 'Reference name'); ok = false; }
@@ -115,7 +116,7 @@ function buildPayload() {
     availability: avail,
     start_date: v('v_start') || null,
     hours_per_week: v('v_hours') || null,
-    interests: checkedValues('v_interest'),
+    interests: checkedValues('v_interest').map(function (i) { return i === 'Other' ? 'Other: ' + v('v_interest_other') : i; }),
     experience: v('v_experience'),
     languages: v('v_languages') || null,
     first_aid: v('v_firstaid') === '' ? null : v('v_firstaid') === 'yes',
