@@ -6,7 +6,8 @@ import { todayStr } from "../../lib/dates";
 import { usDate } from "../../lib/format";
 
 const ASSIGNEES = ["Muneeb (President)", "Muneeb (accountant)", "Muneeb (Principal)", "Claude", "Nuruddin (Treasurer)"];
-const CATEGORIES = ["Portal", "Website", "Records", "Bookkeeping", "Compliance", "Governance", "Marketing", "Admissions", "W-2 payroll", "Operations"];
+// Departments (President, 2026-10-14) — the same ten as TODO.md; every task belongs to exactly one.
+const CATEGORIES = ["Executive Office", "Academics", "Students & Families", "HR", "Finance", "Development", "Marketing", "Operations", "IT", "Legal & Compliance"];
 
 // The school's working to-do list (mirror of the hub's TODO.md, phase 15).
 // Read-only grid: sort on any column, filter box, "x out of y items" counter.
@@ -45,7 +46,6 @@ export default function Tasks() {
   const [newOpen, setNewOpen] = useState(false);
   const [nText, setNText] = useState("");
   const [nCat, setNCat] = useState("Operations");
-  const [nCatOther, setNCatOther] = useState("");
   const [nWho, setNWho] = useState(ASSIGNEES[0]);
   const [nWhoOther, setNWhoOther] = useState("");
   const [nPrio, setNPrio] = useState("week");
@@ -70,7 +70,7 @@ export default function Tasks() {
     setNMsg(null);
     const text = nText.trim();
     if (!text) return setNMsg("Describe the task first.");
-    const category = nCat === "Other" ? nCatOther.trim() || "Operations" : nCat;
+    const category = nCat;
     const who = nWho === "Other" ? nWhoOther.trim() || "Muneeb (President)" : nWho;
     let due_date: string | null = null, due_text = "someday", status = "Not started";
     if (nPrio === "date") {
@@ -216,11 +216,10 @@ export default function Tasks() {
                   className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Category
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Department
                   <select value={nCat} onChange={(e) => setNCat(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
-                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}<option>Other</option>
+                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
-                  {nCat === "Other" && <input value={nCatOther} onChange={(e) => setNCatOther(e.target.value)} placeholder="Category" className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
                 </label>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">For
                   <select value={nWho} onChange={(e) => setNWho(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
@@ -278,7 +277,7 @@ export default function Tasks() {
             <tr>
               <Th k="code" className="w-12">#</Th>
               <Th k="urgency" className="w-10">⏰</Th>
-              <Th k="category" className="w-40">Category</Th>
+              <Th k="category" className="w-40">Department</Th>
               <Th k="task">Task</Th>
               <Th k="assigned_to" className="w-44">Assigned to</Th>
               <Th k="due" className="w-28">Due</Th>
@@ -286,7 +285,7 @@ export default function Tasks() {
             </tr>
             <tr className="border-t border-gray-200 bg-white">
               <td colSpan={3} className="px-3 pb-2 pt-1">
-                <select value={catF} onChange={(e) => setCatF(e.target.value)} title="Filter by category"
+                <select value={catF} onChange={(e) => setCatF(e.target.value)} title="Filter by department"
                   className="w-full max-w-[13rem] rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
                   <option value="">All categories</option>
                   {categories.map((c) => <option key={c} value={c}>{c}</option>)}
