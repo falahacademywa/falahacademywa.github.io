@@ -25,6 +25,12 @@ import Tasks from "./pages/admin/Tasks";
 import Volunteers from "./pages/admin/Volunteers";
 import Attendance from "./pages/admin/Attendance";
 import ParentHome from "./pages/parent/ParentHome";
+import TeacherLayout from "./layouts/TeacherLayout";
+import TeacherToday from "./pages/teacher/Today";
+import TeacherStudent from "./pages/teacher/StudentDetail";
+import TeacherUpdate from "./pages/teacher/Update";
+import TeacherProgress from "./pages/teacher/Progress";
+import TeacherMe from "./pages/teacher/Me";
 
 // HashRouter so deep links work on GitHub Pages without server rewrites.
 export default function App() {
@@ -60,6 +66,15 @@ export default function App() {
           </Route>
 
           <Route path="/parent" element={<RequireRole roles={["parent"]}><ParentHome /></RequireRole>} />
+
+          {/* Teacher app (phase 26): mobile-first, installable */}
+          <Route path="/teacher" element={<RequireRole roles={["teacher"]}><TeacherLayout /></RequireRole>}>
+            <Route index element={<TeacherToday />} />
+            <Route path="students/:id" element={<TeacherStudent />} />
+            <Route path="update" element={<TeacherUpdate />} />
+            <Route path="progress" element={<TeacherProgress />} />
+            <Route path="me" element={<TeacherMe />} />
+          </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </HashRouter>

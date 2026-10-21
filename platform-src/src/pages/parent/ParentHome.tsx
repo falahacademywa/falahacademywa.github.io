@@ -37,7 +37,7 @@ const PAY_INFO = {
 interface Asg { id: string; subject: string; title: string; instructions: string | null; file_url: string | null; assigned_date: string; due_date: string | null }
 interface Update {
   id: string; subject: string; note: string; update_date: string; homework_due: string | null;
-  attachment_url: string | null; attachment_thumb: string | null;
+  attachment_url: string | null; attachment_thumb: string | null; attachment_urls: string[] | null;
   grade_id: number | null; enrollment_id: string | null; grades: { name: string } | null;
 }
 interface Ev { id: string; title: string; event_type: string; start_date: string; end_date: string | null; location: string | null; rsvp_enabled: boolean }
@@ -234,7 +234,7 @@ export default function ParentHome() {
       });
     // Class updates feed: teacher notes for this child's grade + individual ones
     supabase.from("class_updates")
-      .select("id, subject, note, update_date, homework_due, attachment_url, attachment_thumb, grade_id, enrollment_id, grades ( name )")
+      .select("id, subject, note, update_date, homework_due, attachment_url, attachment_thumb, attachment_urls, grade_id, enrollment_id, grades ( name )")
       .order("created_at", { ascending: false }).limit(20)
       .then(({ data }) => {
         const gradeName = active.students.enrollments.find((e) => e.status === "active")?.grade_name ?? "";
@@ -1178,13 +1178,22 @@ export default function ParentHome() {
                     </span>
                   </div>
                   <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{u.note}</p>
-                  {u.attachment_thumb && (
+                  {(u.attachment_urls?.length ?? 0) > 1 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {u.attachment_urls!.map((src) => (
+                        <a key={src} href={src} target="_blank" rel="noreferrer">
+                          <img src={src} alt="Attached photo" loading="lazy" className="h-28 w-28 rounded-lg border border-gray-200 object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {(u.attachment_urls?.length ?? 0) <= 1 && u.attachment_thumb && (
                     <a href={u.attachment_url ?? "#"} target="_blank" rel="noreferrer" className="mt-2 inline-block">
                       <img src={u.attachment_thumb} alt="Attached photo" loading="lazy"
                         className="max-h-48 rounded-lg border border-gray-200 object-cover" />
                     </a>
                   )}
-                  {!u.attachment_thumb && u.attachment_url && (
+                  {(u.attachment_urls?.length ?? 0) <= 1 && !u.attachment_thumb && u.attachment_url && (
                     <a href={u.attachment_url} target="_blank" rel="noreferrer"
                       className="mt-2 inline-block text-xs font-semibold text-royal hover:underline">View attachment ↗</a>
                   )}

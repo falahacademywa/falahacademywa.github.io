@@ -2,7 +2,7 @@
 // day shows one chip per grade (present+late / recorded, absences in red),
 // one color per grade. Pick a student to see that child's own green / amber /
 // red days. Click a day for who was late or absent. Arrows move through any
-// month. Data comes from the teachers' Google Sheet via attendance-sync.gs.
+// month. Data comes from the teacher app (phase 26) and, for teachers still on it, the Google Sheet via attendance-sync.gs.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
@@ -98,8 +98,8 @@ export default function Attendance() {
         </div>
       </div>
       <p className="mb-3 text-sm text-gray-500">
-        Teachers mark attendance in the Google Sheet; it syncs here hourly. Each day shows one chip per grade: present + late out of recorded, absences in red.
-        Pick a student to see their own days. Click a day for the names. Corrections are made in the Sheet.
+        Teachers mark attendance in the teacher app (or, until they switch, in the Google Sheet that syncs hourly). Each day shows one chip per grade: present + late out of recorded, absences in red.
+        Pick a student to see their own days. Click a day for the names. A teacher corrects a mark by tapping it again in the app for that date.
       </p>
 
       {/* summary + legend */}

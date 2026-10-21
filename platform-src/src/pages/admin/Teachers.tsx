@@ -9,6 +9,9 @@ interface TeacherRow {
   email: string | null;
   phone: string | null;
   active: boolean;
+  app_access: boolean;
+  user_id: string | null;
+  app_last_sign_in: string | null;
   teacher_grades: { id: number; role: string; grades: { name: string } }[];
 }
 
@@ -24,7 +27,7 @@ export default function Teachers() {
     if (configMissing) return;
     const [{ data: t }, { data: g }, { data: y }] = await Promise.all([
       supabase.from("teachers")
-        .select("id, first_name, last_name, email, phone, active, teacher_grades ( id, role, grades ( name ) )")
+        .select("id, first_name, last_name, email, phone, active, app_access, user_id, app_last_sign_in, teacher_grades ( id, role, grades ( name ) )")
         .order("last_name"),
       supabase.from("grades").select("id, name").eq("is_active", true).order("level_order"),
       supabase.from("school_years").select("id").eq("is_current", true).single(),
@@ -59,6 +62,18 @@ export default function Teachers() {
     await supabase.from("teachers").update({ active: !t.active }).eq("id", t.id);
     load();
   }
+  // Teacher app (phase 26): grant or revoke sign-in with the teacher's own Google/Microsoft account
+  async function toggleApp(t: TeacherRow) {
+    setMsg(null);
+    if (t.app_access && !confirm(`Revoke app access for ${t.first_name}? Their phone stops working on the next request.`)) return;
+    const { data, error } = await supabase.rpc("set_teacher_app_access", { p_teacher: t.id, p_on: !t.app_access });
+    if (error) return setMsg("Could not change app access: " + error.message + (error.message.includes("set_teacher_app_access") ? " — run platform_schema_phase26.sql" : ""));
+    const r = data as { app_access: boolean; linked?: boolean };
+    setMsg(r.app_access
+      ? `App access on. ${t.first_name} signs in at the portal with "Continue with Google" or "Continue with Microsoft" using ${t.email}${r.linked ? " (an existing login with that e-mail is now linked)" : ""}.`
+      : `App access revoked for ${t.first_name}.`);
+    load();
+  }
 
   return (
     <div>
@@ -69,7 +84,7 @@ export default function Teachers() {
           {showForm ? "Cancel" : "+ Add Teacher"}
         </button>
       </div>
-      {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
+      {msg && <div className={`mb-4 rounded-lg p-3 text-sm ${/^App access/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage teachers.</p>}
 
       {showForm && (
@@ -98,10 +113,21 @@ export default function Teachers() {
                 {!t.active && <span className="ml-3 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Inactive</span>}
                 <Link to={`/admin/teachers/${t.id}`} className="ml-3 text-xs font-semibold text-royal hover:underline">View profile →</Link>
               </div>
-              <button onClick={() => toggleActive(t)}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
-                {t.active ? "Deactivate" : "Reactivate"}
-              </button>
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  !t.app_access ? "bg-gray-100 text-gray-500" : t.app_last_sign_in ? "bg-emerald-50 text-emerald-deep" : "bg-amber-100 text-amber-800"}`}
+                  title={t.app_last_sign_in ? `Last app sign-in ${new Date(t.app_last_sign_in).toLocaleString()}` : ""}>
+                  {!t.app_access ? "App: off" : t.app_last_sign_in ? `App: signed in ${new Date(t.app_last_sign_in).toLocaleDateString()}` : "App: invited, not signed in"}
+                </span>
+                <button onClick={() => toggleApp(t)} disabled={!t.active || !t.email} title={!t.email ? "Add the teacher's e-mail first" : ""}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40 ${t.app_access ? "border border-red-200 text-red-600 hover:bg-red-50" : "bg-navy text-white hover:bg-royal"}`}>
+                  {t.app_access ? "Revoke app access" : "Grant app access"}
+                </button>
+                <button onClick={() => toggleActive(t)}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
+                  {t.active ? "Deactivate" : "Reactivate"}
+                </button>
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {t.teacher_grades.map((tg) => (

@@ -4,7 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Navigate } from "react-router-dom";
 import { supabase, configMissing } from "./supabase";
 
-export type Role = "admin" | "parent" | "staff";
+export type Role = "admin" | "parent" | "staff" | "teacher";
 export type Level = "view" | "edit";
 
 export interface Profile {
@@ -65,6 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (r.error) r = await supabase.from("profiles").select("id, full_name, role, must_change_password").eq("id", uid).single();
     const p = (r.data as Profile) ?? null;
     setProfile(p);
+    // teacher app (phase 26): stamp the last sign-in for Admin → Teachers
+    if (p?.role === "teacher") supabase.rpc("teacher_touch_sign_in").then(() => {});
     if (p?.role === "staff") {
       const { data } = await supabase.from("staff_permissions").select("module, level").eq("user_id", uid);
       const m: Record<string, Level> = {};
@@ -113,7 +115,7 @@ export function useAuth() {
 }
 
 export function homeFor(role: Role | undefined) {
-  return role === "parent" ? "/parent" : "/admin";
+  return role === "parent" ? "/parent" : role === "teacher" ? "/teacher" : "/admin";
 }
 
 export function Splash() {
