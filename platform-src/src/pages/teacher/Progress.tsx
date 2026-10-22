@@ -11,7 +11,8 @@ import { useRoster, compressImage, todayISO } from "../../lib/teacher";
 import { usDate } from "../../lib/format";
 
 interface Picked { file: File; url: string }
-interface Upload { id: number; taken_at: string; note: string | null; status: string; path: string; created_at: string }
+interface Upload { id: number; taken_at: string; note: string | null; status: string; path: string; created_at: string; subject: string | null }
+const RC_SUBJECTS = ["English", "Maths", "Science"] as const;   // Red Comet courses the school uses (2026-10-22)
 const STATUS: Record<string, string> = { new: "sent", drafted: "received by office", confirmed: "entered in Red Comet", rejected: "not used" };
 
 export default function Progress() {
@@ -21,6 +22,7 @@ export default function Progress() {
   const [enr, setEnr] = useState(sp.get("student") ?? "");
   const [picked, setPicked] = useState<Picked[]>([]);
   const [note, setNote] = useState("");
+  const [subject, setSubject] = useState<string>("");
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [recent, setRecent] = useState<Upload[]>([]);
@@ -32,7 +34,7 @@ export default function Progress() {
 
   async function loadRecent(e = enr) {
     if (!e) return;
-    const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at")
+    const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at, subject")
       .eq("enrollment_id", e).order("created_at", { ascending: false }).limit(12);
     const rows = (data as Upload[]) ?? [];
     setRecent(rows);
@@ -57,6 +59,7 @@ export default function Progress() {
   async function upload(e: React.FormEvent) {
     e.preventDefault();
     if (!enr) return setMsg("Choose a student first.");
+    if (!subject) return setMsg("Choose the subject first.");
     if (!picked.length) return setMsg("Add at least one photo of the workbook.");
     setMsg(null);
     const day = todayISO(); let done = 0;
@@ -66,7 +69,7 @@ export default function Progress() {
       const path = `${enr}/${day}/${crypto.randomUUID()}.jpg`;
       const up = await supabase.storage.from("student-work").upload(path, blob, { contentType: "image/jpeg" });
       if (up.error) { setBusy(null); return setMsg(`Photo ${done + 1} failed: ${up.error.message}. ${done} uploaded.`); }
-      const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: "Red Comet", note: note.trim() || null, uploaded_by: session?.user.id ?? null });
+      const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject, note: note.trim() || null, uploaded_by: session?.user.id ?? null });
       if (error) { setBusy(null); return setMsg(`Photo ${done + 1} stored but not recorded: ${error.message}`); }
       done++;
     }
@@ -89,6 +92,18 @@ export default function Progress() {
             {roster.map((r) => <option key={r.enrollment_id} value={r.enrollment_id}>{r.first_name} {r.last_name} · {r.grade_name}</option>)}
           </select>
         </label>
+
+        <div>
+          <div className="text-xs font-semibold text-gray-500">Subject</div>
+          <div className="mt-1 flex gap-1.5">
+            {RC_SUBJECTS.map((sb) => (
+              <button type="button" key={sb} onClick={() => { setSubject(sb); setMsg(null); }} aria-pressed={subject === sb}
+                className={`flex-1 rounded-lg border py-2 text-sm font-semibold ${subject === sb ? "border-navy bg-navy text-white" : "border-gray-300 bg-white text-gray-600"}`}>
+                {sb}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div>
           <div className="text-xs font-semibold text-gray-500">Workbook photos</div>
@@ -118,8 +133,8 @@ export default function Progress() {
         </label>
 
         {msg && <div className={`rounded-lg p-2 text-sm ${/sent for/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
-        <button type="submit" disabled={!!busy || !enr || !picked.length} className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-          {busy ?? (!enr ? "Choose the student first" : `Send ${picked.length || ""} photo${picked.length === 1 ? "" : "s"} for ${student?.first_name ?? ""}`)}
+        <button type="submit" disabled={!!busy || !enr || !subject || !picked.length} className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+          {busy ?? (!enr ? "Choose the student first" : !subject ? "Choose the subject" : `Send ${picked.length || ""} ${subject} photo${picked.length === 1 ? "" : "s"} for ${student?.first_name ?? ""}`)}
         </button>
       </form>
 
@@ -131,7 +146,7 @@ export default function Progress() {
               <div key={u.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
                 <div className="aspect-[3/4] bg-silver">{thumbs[u.path] && <img src={thumbs[u.path]} alt="" className="h-full w-full object-cover" />}</div>
                 <div className="px-1.5 py-1 text-[10px] leading-tight">
-                  <div className="text-gray-500">{usDate(u.taken_at)}</div>
+                  <div className="text-gray-500">{usDate(u.taken_at)}{u.subject && u.subject !== "Red Comet" ? ` · ${u.subject}` : ""}</div>
                   <div className={`font-semibold ${u.status === "confirmed" ? "text-emerald-deep" : u.status === "rejected" ? "text-red-600" : "text-amber-700"}`}>{STATUS[u.status] ?? u.status}</div>
                 </div>
               </div>
