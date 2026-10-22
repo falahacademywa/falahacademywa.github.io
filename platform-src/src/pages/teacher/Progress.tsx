@@ -26,7 +26,8 @@ export default function Progress() {
   const [recent, setRecent] = useState<Upload[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
-  useEffect(() => { if (!enr && roster.length) setEnr(roster[0].enrollment_id); }, [roster]);
+  // no default student: the teacher must pick the child every time, so pages
+  // cannot land under the first name in the list by accident (2026-10-22)
   const student = useMemo(() => roster.find((r) => r.enrollment_id === enr), [roster, enr]);
 
   async function loadRecent(e = enr) {
@@ -83,7 +84,8 @@ export default function Progress() {
 
       <form onSubmit={upload} className="space-y-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
         <label className="block text-xs font-semibold text-gray-500">Student
-          <select value={enr} onChange={(e) => setEnr(e.target.value)} className={inp}>
+          <select value={enr} onChange={(e) => { setEnr(e.target.value); setMsg(null); }} className={`${inp} ${!enr ? "border-amber-400 bg-amber-50" : ""}`}>
+            <option value="">Choose the student…</option>
             {roster.map((r) => <option key={r.enrollment_id} value={r.enrollment_id}>{r.first_name} {r.last_name} · {r.grade_name}</option>)}
           </select>
         </label>
@@ -116,8 +118,8 @@ export default function Progress() {
         </label>
 
         {msg && <div className={`rounded-lg p-2 text-sm ${/sent for/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
-        <button type="submit" disabled={!!busy || !enr} className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-          {busy ?? `Send ${picked.length || ""} photo${picked.length === 1 ? "" : "s"}`}
+        <button type="submit" disabled={!!busy || !enr || !picked.length} className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+          {busy ?? (!enr ? "Choose the student first" : `Send ${picked.length || ""} photo${picked.length === 1 ? "" : "s"} for ${student?.first_name ?? ""}`)}
         </button>
       </form>
 
