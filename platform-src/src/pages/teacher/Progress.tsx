@@ -37,8 +37,11 @@ export default function Progress() {
 
   async function loadRecent(e = enr) {
     if (!e) return;
+    // this week only (Monday to Sunday): the list is a check of what was sent, not a history
+    const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow);
+    const weekStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at, subject")
-      .eq("enrollment_id", e).order("created_at", { ascending: false }).limit(12);
+      .eq("enrollment_id", e).gte("taken_at", weekStart).order("created_at", { ascending: false }).limit(60);
     const rows = (data as Upload[]) ?? [];
     setRecent(rows);
     const missing = rows.filter((r) => !thumbs[r.path]).map((r) => r.path);
@@ -139,7 +142,7 @@ export default function Progress() {
 
       {student && (
         <>
-          <h2 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wide text-gray-400">Sent for {student.first_name}</h2>
+          <h2 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wide text-gray-400">Sent this week for {student.first_name}</h2>
           <div className="grid grid-cols-3 gap-2">
             {recent.map((u) => (
               <div key={u.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -151,7 +154,7 @@ export default function Progress() {
               </div>
             ))}
           </div>
-          {!recent.length && <p className="text-sm text-gray-400">No photos sent yet.</p>}
+          {!recent.length && <p className="text-sm text-gray-400">Nothing sent this week yet.</p>}
         </>
       )}
     </div>
