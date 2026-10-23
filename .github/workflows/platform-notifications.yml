@@ -34,6 +34,12 @@ jobs:
             -H "Content-Type: application/json" -d '{}')
           echo "Daily rule notifications created: $created"
 
+          # 1b) Wednesday reminder to teachers with app access (phase 28; 0 on other days)
+          tr=$(curl -s -X POST "$URL/rest/v1/rpc/run_teacher_reminders" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" -d '{}')
+          echo "Teacher reminders created: $tr"
+
           if [ -z "$BREVO" ]; then
             echo "BREVO_API_KEY not set - portal notifications only, no emails."
             exit 0
