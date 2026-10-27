@@ -32,6 +32,7 @@ begin
   return n;
 end; $$;
 revoke all on function public.run_teacher_reminders() from public, anon, authenticated;   -- service role (the Action) only
+grant execute on function public.run_teacher_reminders() to service_role;
 
 -- teachers mark their own reminders read from the app banner
 drop policy if exists notif_update_own on public.notifications;
