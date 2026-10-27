@@ -291,6 +291,10 @@ create policy wu_teacher on public.work_uploads for all
   using (public.teaches_enrollment(enrollment_id)) with check (public.teaches_enrollment(enrollment_id));
 grant select, insert, update, delete on public.work_uploads to authenticated;
 grant usage, select on sequence public.work_uploads_id_seq to authenticated;
+-- Supabase stops granting new public tables automatically from 2026-10-30: say it explicitly
+grant all on public.work_uploads to service_role;
+grant usage, select on sequence public.work_uploads_id_seq to service_role;
+grant select on public.teacher_students, public.teacher_student_contacts to service_role;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('student-work', 'student-work', false, 3145728, array['image/jpeg', 'image/png', 'image/webp'])

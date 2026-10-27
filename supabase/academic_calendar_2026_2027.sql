@@ -9,6 +9,7 @@ with ev(title, event_type, start_date, end_date) as (
   values
   ('First Day of School',                          'academic', date '2026-08-26', null::date),
   ('Labor Day - No School',                        'holiday',  date '2026-09-07', null),
+  ('School Closed - No School',                    'holiday',  date '2026-10-29', null),
   ('Veterans Day - No School',                     'holiday',  date '2026-11-11', null),
   ('PTA Meeting',                                  'academic', date '2026-11-18', null),
   ('Thanksgiving Break - No School',               'holiday',  date '2026-11-26', date '2026-11-27'),
