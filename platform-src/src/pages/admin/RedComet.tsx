@@ -1,11 +1,13 @@
 // Admin → Red Comet. Every workbook photo the teachers send from the teacher
 // app (Red Comet tab → `work_uploads` + private `student-work` bucket), for the
-// current calendar month and the month before, as a timeline (newest first).
-// One entry per student + subject + day with the photos as thumbnails; filters
-// for month, grade, student, subject, teacher and status. The status answers
-// one question — were these pages entered in Red Comet or not? — and follows
-// scripts/redcomet-pull.py: confirmed = entered; new/drafted = not yet;
-// rejected = not used. (President 2026-10-28)
+// current calendar month and the month before. Two views: a timeline (newest
+// first) and a grouped accordion Month → Entered or not → Grade → Student →
+// Subject that opens
+// and closes at every level. One entry per student + subject + day with the
+// photos as thumbnails; filters for month, grade, student, subject, teacher and
+// status. The status answers one question — were these pages entered in Red
+// Comet or not? — and follows scripts/redcomet-pull.py: confirmed = entered;
+// new/drafted = not yet; rejected = not used. (President 2026-10-28)
 import { useEffect, useMemo, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr } from "../../lib/dates";
@@ -19,7 +21,8 @@ interface Row {
   profiles: { full_name: string | null } | null;
 }
 type Entered = "entered" | "pending" | "rejected";
-interface Card { key: string; day: string; enrollment_id: string; subject: string; teacher: string; rows: Row[]; entered: Entered; done: number }
+interface Card { key: string; day: string; enrollment_id: string; student: string; grade_id: number | null; subject: string; teacher: string; rows: Row[]; entered: Entered; done: number }
+type View = "timeline" | "grouped";
 
 const enteredOf = (s: string): Entered => (s === "confirmed" ? "entered" : s === "rejected" ? "rejected" : "pending");
 const BADGE: Record<Entered, { label: string; cls: string; dot: string }> = {
@@ -27,7 +30,8 @@ const BADGE: Record<Entered, { label: string; cls: string; dot: string }> = {
   pending:  { label: "Not yet in Red Comet", cls: "bg-amber-50 text-amber-800 border-amber-200",       dot: "bg-amber-400" },
   rejected: { label: "Not used",             cls: "bg-gray-100 text-gray-500 border-gray-200",          dot: "bg-gray-300" },
 };
-const DAYS_OPEN = 14;   // days shown by default; older days sit behind "Show earlier"
+const DAYS_OPEN = 14;   // timeline: days shown by default; older days sit behind "Show earlier"
+const VIEW_KEY = "falah.redcomet.view";
 
 export default function RedComet() {
   const today = todayStr();
@@ -38,6 +42,7 @@ export default function RedComet() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [view, setView] = useState<View>(() => { try { return (localStorage.getItem(VIEW_KEY) as View) || "timeline"; } catch { return "timeline"; } });
   const [monthF, setMonthF] = useState<"both" | string>("both");
   const [gradeF, setGradeF] = useState<number | "">("");
   const [studentF, setStudentF] = useState("");
@@ -46,7 +51,11 @@ export default function RedComet() {
   const [statusF, setStatusF] = useState<"" | Entered>("");
   const [showAll, setShowAll] = useState(false);
   const [big, setBig] = useState<string | null>(null);
+  // grouped view: explicit open/closed per node; nodes not listed use the level default
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [allState, setAllState] = useState<boolean | null>(null);   // Expand all / Collapse all override
 
+  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch { /* private window */ } }, [view]);
   useEffect(() => {
     if (configMissing) return;
     supabase.from("grades").select("id, name, level_order").eq("is_active", true).order("level_order")
@@ -79,6 +88,7 @@ export default function RedComet() {
   useEffect(() => { load(); }, []);
 
   const gradeName = (gid: number | null | undefined) => grades.find((g) => g.id === gid)?.name ?? "—";
+  const gradeOrder = (gid: number | null) => grades.findIndex((g) => g.id === gid);
   const studentName = (r: Row) => r.enrollments ? `${r.enrollments.students.first_name} ${r.enrollments.students.last_name}` : "—";
   const teacherName = (r: Row) => r.profiles?.full_name ?? "unknown";
 
@@ -105,7 +115,7 @@ export default function RedComet() {
     visible.forEach((r) => {
       const subject = r.subject ?? "No subject";
       const key = `${r.taken_at}|${r.enrollment_id}|${subject}`;
-      const c = m.get(key) ?? { key, day: r.taken_at, enrollment_id: r.enrollment_id, subject, teacher: teacherName(r), rows: [], entered: "entered" as Entered, done: 0 };
+      const c = m.get(key) ?? { key, day: r.taken_at, enrollment_id: r.enrollment_id, student: studentName(r), grade_id: r.enrollments?.grade_id ?? null, subject, teacher: teacherName(r), rows: [], entered: "entered" as Entered, done: 0 };
       c.rows.push(r);
       m.set(key, c);
     });
@@ -116,14 +126,46 @@ export default function RedComet() {
     });
     return [...m.values()];
   }, [visible]);
+  const sortCards = (l: Card[]) => l.sort((a, b) => gradeOrder(a.grade_id) - gradeOrder(b.grade_id) || a.student.localeCompare(b.student) || a.subject.localeCompare(b.subject));
+
+  // timeline: by day, newest first
   const days = useMemo(() => {
     const m: Record<string, Card[]> = {};
     cards.forEach((c) => (m[c.day] ??= []).push(c));
-    Object.values(m).forEach((l) => l.sort((a, b) => (a.rows[0].enrollments?.grade_id ?? 0) - (b.rows[0].enrollments?.grade_id ?? 0) || studentName(a.rows[0]).localeCompare(studentName(b.rows[0])) || a.subject.localeCompare(b.subject)));
+    Object.values(m).forEach(sortCards);
     return Object.keys(m).sort((a, b) => (a < b ? 1 : -1)).map((d) => [d, m[d]] as const);
-  }, [cards]);
+  }, [cards, grades]);
   const shownDays = showAll ? days : days.slice(0, DAYS_OPEN);
   const hiddenDays = days.length - shownDays.length;
+
+  // grouped: Month → Entered or not → Grade → Student → Subject → entries (newest first)
+  const ENT_ORDER: Record<Entered, number> = { pending: 0, entered: 1, rejected: 2 };
+  interface Node { key: string; label: string; level: number; cards: Card[]; children: Node[] }
+  const tree = useMemo(() => {
+    const build = (list: Card[], level: number, parentKey: string): Node[] => {
+      const groups = new Map<string, { label: string; sort: string | number; cards: Card[] }>();
+      list.forEach((c) => {
+        const [id, label, sort]: [string, string, string | number] =
+          level === 0 ? [c.day.slice(0, 7), monthLabel(c.day.slice(0, 7)), c.day.slice(0, 7)] :
+          level === 1 ? [c.entered, BADGE[c.entered].label, ENT_ORDER[c.entered]] :
+          level === 2 ? [String(c.grade_id), gradeName(c.grade_id), gradeOrder(c.grade_id)] :
+          level === 3 ? [c.enrollment_id, c.student, c.student] : [c.subject, c.subject, c.subject];
+        const g = groups.get(id) ?? { label, sort, cards: [] };
+        g.cards.push(c); groups.set(id, g);
+      });
+      return [...groups.entries()]
+        .sort((a, b) => level === 0 ? (a[1].sort < b[1].sort ? 1 : -1) : a[1].sort < b[1].sort ? -1 : a[1].sort > b[1].sort ? 1 : 0)
+        .map(([id, g]) => {
+          const key = `${parentKey}/${id}`;
+          return { key, label: g.label, level, cards: g.cards, children: level < 4 ? build(g.cards, level + 1, key) : [] };
+        });
+    };
+    return build(cards, 0, "");
+  }, [cards, grades]);
+  // defaults: current month, its status groups and grades open; students and subjects closed
+  const isOpen = (n: Node) => open[n.key] ?? allState ?? (n.level === 0 ? n.key === `/${thisMonth}` : n.level <= 2);
+  const toggle = (k: string, now: boolean) => setOpen((o) => ({ ...o, [k]: !now }));
+  const setAll = (v: boolean) => { setOpen({}); setAllState(v); };
 
   const counts = useMemo(() => ({
     photos: visible.length,
@@ -135,17 +177,66 @@ export default function RedComet() {
   const sel = "rounded border border-gray-300 bg-white px-2 py-1 text-sm";
   const anyFilter = monthF !== "both" || gradeF !== "" || studentF || subjectF || teacherF || statusF;
   const ago = (d: string) => { const n = Math.round((new Date(today + "T00:00:00").getTime() - new Date(d + "T00:00:00").getTime()) / 86400000); return n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`; };
+  const card = (c: Card, withDay = false) => <EntryCard key={c.key} c={c} grades={grades} thumbs={thumbs} onBig={setBig} withDay={withDay} gradeName={gradeName} />;
+
+  function renderNode(n: Node) {
+    const o = isOpen(n);
+    const pend = n.cards.filter((c) => c.entered === "pending").length;
+    const entd = n.cards.filter((c) => c.entered === "entered").length;
+    const photos = n.cards.reduce((s, c) => s + c.rows.length, 0);
+    const pad = ["", "ml-4 sm:ml-6", "ml-8 sm:ml-12", "ml-12 sm:ml-18", "ml-16 sm:ml-24"][n.level];
+    const head = ["text-base font-bold text-navy", "text-sm font-bold", "text-sm font-semibold text-navy", "text-sm font-semibold text-gray-800", "text-sm text-gray-700"][n.level];
+    const ent = n.level === 1 ? n.cards[0].entered : null;
+    const chip = ent ? BADGE[ent].cls : n.level === 2 ? gradeColor(grades, n.cards[0].grade_id).chip : n.level === 4 ? "bg-emerald-50 text-emerald-deep border-emerald-100" : "";
+    const nStudents = new Set(n.cards.map((c) => c.enrollment_id)).size;
+    const sub = n.level === 3 ? `${n.children.length} subject${n.children.length === 1 ? "" : "s"}` : n.level < 3 ? `${nStudents} student${nStudents === 1 ? "" : "s"}` : "";
+    return (
+      <div key={n.key} className={`${pad} ${n.level === 0 ? "mb-3" : "mt-1.5"}`}>
+        <button onClick={() => toggle(n.key, o)} aria-expanded={o}
+          className={`flex w-full flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-left hover:bg-silver/60 ${n.level === 0 ? "border-gray-200 bg-white shadow-sm" : "border-transparent bg-white/70"} ${pend && !o ? "border-l-4 border-l-amber-400" : ""}`}>
+          <span className={`w-4 text-center text-xs text-gray-400 transition-transform ${o ? "rotate-90" : ""}`}>▶</span>
+          <span className={`${head} ${chip ? `inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${chip}` : ""}`}>
+            {ent && <span className={`h-2 w-2 rounded-full ${BADGE[ent].dot}`} />}{ent === "entered" ? "✓ " : ""}{n.label}
+          </span>
+          <span className="text-xs text-gray-400">{sub}{sub ? " · " : ""}{n.cards.length} {n.cards.length === 1 ? "entry" : "entries"} · {photos} photo{photos === 1 ? "" : "s"}</span>
+          <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold">
+            {n.level !== 1 && pend > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800" title="not yet in Red Comet">{pend} not yet</span>}
+            {n.level !== 1 && entd > 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-deep" title="entered in Red Comet">✓ {entd}</span>}
+          </span>
+        </button>
+        {o && (n.level < 4
+          ? n.children.map(renderNode)
+          : <div className="ml-6 mt-2 space-y-2 sm:ml-8">{[...n.cards].sort((a, b) => (a.day < b.day ? 1 : -1)).map((c) => card(c, true))}</div>)}
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold text-navy">Red Comet</h1>
-        <button onClick={load} className="rounded border border-gray-300 bg-white px-3 py-1 text-sm text-gray-600 hover:bg-silver">Refresh</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white text-sm">
+            {(["timeline", "grouped"] as View[]).map((v) => (
+              <button key={v} onClick={() => setView(v)}
+                className={`px-3 py-1 ${view === v ? "bg-navy font-semibold text-white" : "text-gray-600 hover:bg-silver"}`}>
+                {v === "timeline" ? "Timeline" : "Grouped"}
+              </button>
+            ))}
+          </div>
+          {view === "grouped" && (
+            <>
+              <button onClick={() => setAll(true)} className="rounded border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-silver">Expand all</button>
+              <button onClick={() => setAll(false)} className="rounded border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-silver">Collapse all</button>
+            </>
+          )}
+          <button onClick={load} className="rounded border border-gray-300 bg-white px-3 py-1 text-sm text-gray-600 hover:bg-silver">Refresh</button>
+        </div>
       </div>
       <p className="mb-4 text-sm text-gray-500">
-        Workbook pages the teachers sent from the teacher app, newest first, {monthLabel(lastMonth)} and {monthLabel(thisMonth)}.
-        Each entry is one student, one subject, one day. The badge says whether those pages have been entered in Red Comet yet;
-        it updates on its own as the office works through the OneDrive inbox.
+        Workbook pages the teachers sent from the teacher app, {monthLabel(lastMonth)} and {monthLabel(thisMonth)}.
+        {view === "timeline" ? " Newest first; each entry is one student, one subject, one day." : " Grouped by month, entered or not, grade, student and subject; click a row to open or close it."}
+        {" "}The badge says whether those pages have been entered in Red Comet yet; it updates on its own as the office works through the OneDrive inbox.
         {loading ? " Loading…" : ""}
       </p>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
@@ -194,54 +285,32 @@ export default function RedComet() {
         )}
       </div>
 
-      {/* timeline, newest first */}
-      <ol className="relative ml-3 border-l-2 border-gray-200 pl-6 sm:ml-4 sm:pl-8">
-        {shownDays.map(([d, list]) => {
-          const dayPending = list.some((c) => c.entered === "pending");
-          return (
-            <li key={d} className="relative mb-8 last:mb-0">
-              <span className={`absolute -left-[2.05rem] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white ring-2 sm:-left-[2.55rem] ${dayPending ? "bg-amber-400 ring-amber-200" : "bg-emerald-500 ring-emerald-200"}`} />
-              <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
-                <h2 className="text-sm font-bold text-navy">{usDate(d)}</h2>
-                <span className="text-xs text-gray-400">{ago(d)} · {list.length} {list.length === 1 ? "entry" : "entries"}</span>
-              </div>
-              <div className="space-y-3">
-                {list.map((c) => { const g = c.rows[0].enrollments?.grade_id ?? null; const col = gradeColor(grades, g); const b = BADGE[c.entered]; const used = c.rows.filter((r) => r.status !== "rejected").length; return (
-                  <div key={c.key} className={`rounded-xl border bg-white p-4 shadow-sm ${c.entered === "pending" ? "border-amber-200" : "border-gray-200"}`}>
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>
-                        <span className={`h-2 w-2 rounded-full ${b.dot}`} />{c.entered === "entered" ? "✓ " : ""}{b.label}
-                        {c.entered === "pending" && c.done > 0 ? ` (${c.done} of ${used} done)` : ""}
-                      </span>
-                      <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${col.chip}`}>{gradeName(g)}</span>
-                      <span className="font-semibold text-navy">{studentName(c.rows[0])}</span>
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{c.subject}</span>
-                      <span className="text-xs text-gray-400">{c.rows.length} photo{c.rows.length === 1 ? "" : "s"}</span>
-                      <span className="ml-auto text-xs text-gray-400">{c.teacher}</span>
-                    </div>
-                    {c.rows.some((r) => r.note) && (
-                      <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{[...new Set(c.rows.map((r) => r.note).filter(Boolean))].join(" · ")}</p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {c.rows.map((r) => thumbs[r.path]
-                        ? <button key={r.id} onClick={() => setBig(thumbs[r.path])} title={`#${r.id} · ${BADGE[enteredOf(r.status)].label}`}
-                            className={`relative h-24 w-24 overflow-hidden rounded-lg border bg-silver hover:ring-2 hover:ring-royal ${r.status === "confirmed" ? "border-emerald-300" : r.status === "rejected" ? "border-gray-200 opacity-50" : "border-amber-300"}`}>
-                            <img src={thumbs[r.path]} alt="" loading="lazy" className="h-full w-full object-cover" />
-                            {r.status === "confirmed" && <span className="absolute bottom-1 right-1 rounded bg-emerald-600 px-1 text-[10px] font-bold text-white">✓</span>}
-                          </button>
-                        : <div key={r.id} className="flex h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400">loading…</div>)}
-                    </div>
+      {view === "grouped" ? (
+        <div>{tree.map(renderNode)}</div>
+      ) : (
+        <>
+          {/* timeline, newest first */}
+          <ol className="relative ml-3 border-l-2 border-gray-200 pl-6 sm:ml-4 sm:pl-8">
+            {shownDays.map(([d, list]) => {
+              const dayPending = list.some((c) => c.entered === "pending");
+              return (
+                <li key={d} className="relative mb-8 last:mb-0">
+                  <span className={`absolute -left-[2.05rem] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white ring-2 sm:-left-[2.55rem] ${dayPending ? "bg-amber-400 ring-amber-200" : "bg-emerald-500 ring-emerald-200"}`} />
+                  <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
+                    <h2 className="text-sm font-bold text-navy">{usDate(d)}</h2>
+                    <span className="text-xs text-gray-400">{ago(d)} · {list.length} {list.length === 1 ? "entry" : "entries"}</span>
                   </div>
-                ); })}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-      {hiddenDays > 0 && (
-        <button onClick={() => setShowAll(true)} className="mt-6 w-full rounded-xl border border-dashed border-gray-300 bg-white p-3 text-sm font-semibold text-royal hover:bg-silver/60">
-          Show {hiddenDays} earlier {hiddenDays === 1 ? "day" : "days"}
-        </button>
+                  <div className="space-y-3">{list.map((c) => card(c))}</div>
+                </li>
+              );
+            })}
+          </ol>
+          {hiddenDays > 0 && (
+            <button onClick={() => setShowAll(true)} className="mt-6 w-full rounded-xl border border-dashed border-gray-300 bg-white p-3 text-sm font-semibold text-royal hover:bg-silver/60">
+              Show {hiddenDays} earlier {hiddenDays === 1 ? "day" : "days"}
+            </button>
+          )}
+        </>
       )}
       {!configMissing && !loading && !cards.length && (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-400">
@@ -256,6 +325,42 @@ export default function RedComet() {
           <button onClick={() => setBig(null)} className="absolute right-4 top-4 text-2xl text-white/80 hover:text-white" aria-label="Close">✕</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName }: {
+  c: Card; grades: GradeLite[]; thumbs: Record<string, string>; onBig: (u: string) => void; withDay: boolean; gradeName: (g: number | null) => string;
+}) {
+  const col = gradeColor(grades, c.grade_id); const b = BADGE[c.entered]; const used = c.rows.filter((r) => r.status !== "rejected").length;
+  return (
+    <div className={`rounded-xl border bg-white p-4 shadow-sm ${c.entered === "pending" ? "border-amber-200" : "border-gray-200"}`}>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {withDay && <span className="text-xs font-bold text-gray-500">{usDate(c.day)}</span>}
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>
+          <span className={`h-2 w-2 rounded-full ${b.dot}`} />{c.entered === "entered" ? "✓ " : ""}{b.label}
+          {c.entered === "pending" && c.done > 0 ? ` (${c.done} of ${used} done)` : ""}
+        </span>
+        {!withDay && <>
+          <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${col.chip}`}>{gradeName(c.grade_id)}</span>
+          <span className="font-semibold text-navy">{c.student}</span>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{c.subject}</span>
+        </>}
+        <span className="text-xs text-gray-400">{c.rows.length} photo{c.rows.length === 1 ? "" : "s"}</span>
+        <span className="ml-auto text-xs text-gray-400">{c.teacher}</span>
+      </div>
+      {c.rows.some((r) => r.note) && (
+        <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{[...new Set(c.rows.map((r) => r.note).filter(Boolean))].join(" · ")}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {c.rows.map((r) => thumbs[r.path]
+          ? <button key={r.id} onClick={() => onBig(thumbs[r.path])} title={`#${r.id} · ${BADGE[enteredOf(r.status)].label}`}
+              className={`relative h-24 w-24 overflow-hidden rounded-lg border bg-silver hover:ring-2 hover:ring-royal ${r.status === "confirmed" ? "border-emerald-300" : r.status === "rejected" ? "border-gray-200 opacity-50" : "border-amber-300"}`}>
+              <img src={thumbs[r.path]} alt="" loading="lazy" className="h-full w-full object-cover" />
+              {r.status === "confirmed" && <span className="absolute bottom-1 right-1 rounded bg-emerald-600 px-1 text-[10px] font-bold text-white">✓</span>}
+            </button>
+          : <div key={r.id} className="flex h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400">loading…</div>)}
+      </div>
     </div>
   );
 }
