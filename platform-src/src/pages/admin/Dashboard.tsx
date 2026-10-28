@@ -44,13 +44,22 @@ export default function Dashboard() {
   const [week] = useState(() => weekOf(todayStr()));
   const [grades, setGrades] = useState<GradeLite[]>([]);
   const [weekSubjects, setWeekSubjects] = useState<Record<number, string[]> | null>(null);
+  // Red Comet workbook photos not yet entered (status new/drafted): students and photos per grade (#149)
+  const [rcPending, setRcPending] = useState<Record<number, { students: Set<string>; photos: number }> | null>(null);
   useEffect(() => {
     if (configMissing || !can("academics")) return;
     Promise.all([
       supabase.from("grades").select("id, name, level_order").eq("is_active", true).order("level_order"),
       supabase.from("class_updates").select("subject, grade_id, enrollments ( grade_id )").gte("update_date", week[0]).lte("update_date", week[1]),
-    ]).then(([{ data: g }, { data: u }]) => {
+      supabase.from("work_uploads").select("enrollment_id, enrollments ( grade_id )").in("status", ["new", "drafted"]),
+    ]).then(([{ data: g }, { data: u }, { data: w }]) => {
       setGrades((g as GradeLite[]) ?? []);
+      const rc: Record<number, { students: Set<string>; photos: number }> = {};
+      ((w as unknown as { enrollment_id: string; enrollments: { grade_id: number } | null }[]) ?? []).forEach((x) => {
+        const gid = x.enrollments?.grade_id; if (gid == null) return;
+        const e = (rc[gid] ??= { students: new Set(), photos: 0 }); e.students.add(x.enrollment_id); e.photos++;
+      });
+      setRcPending(rc);
       const m: Record<number, string[]> = {};
       ((u as unknown as { subject: string; grade_id: number | null; enrollments: { grade_id: number } | null }[]) ?? []).forEach((x) => {
         const gid = x.grade_id ?? x.enrollments?.grade_id; if (gid == null) return;
@@ -138,6 +147,24 @@ export default function Dashboard() {
             <div className="mt-1 text-sm text-gray-500">{w.label}</div>
           </Link>
         ))}
+
+        {can("academics") && rcPending && Object.keys(rcPending).length > 0 && (() => {
+          const total = new Set(Object.values(rcPending).flatMap((e) => [...e.students])).size;
+          return (
+            <Link to="/admin/redcomet?status=pending" title="Students with workbook photos not yet entered in Red Comet · click to open"
+              className="rounded-xl border border-amber-300 bg-amber-50/60 p-5 shadow-sm transition hover:border-royal hover:shadow-md">
+              <div className="font-display text-3xl font-semibold text-amber-700">{total}</div>
+              <div className="mt-1 text-sm text-gray-500">Red Comet: waiting</div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                {grades.filter((g) => rcPending[g.id]).map((g) => (
+                  <span key={g.id} className="flex items-center gap-1 font-semibold text-navy" title={`${rcPending[g.id].photos} photo${rcPending[g.id].photos === 1 ? "" : "s"}`}>
+                    <span className={`h-2 w-2 rounded-full ${gradeColor(grades, g.id).dot}`} />{g.name} <span className="text-amber-700">{rcPending[g.id].students.size}</span>
+                  </span>
+                ))}
+              </div>
+            </Link>
+          );
+        })()}
 
         {can("academics") && <Link to="/admin/updates" title="Open Class Updates"
           className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
