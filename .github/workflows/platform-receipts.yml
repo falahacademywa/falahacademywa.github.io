@@ -1,0 +1,32 @@
+name: Platform fee receipts
+
+# Hourly (TODO #100, phase 27): renders a PDF receipt for every payment group
+# queued in receipt_outbox, stores it in the private `receipts` bucket, e-mails
+# it to the family through Brevo with the PDF attached, and sends "corrected" /
+# "withdrawn" notices when the office changes or deletes a payment.
+# Same repo secrets as platform-notifications.yml:
+#   PLATFORM_SUPABASE_URL, PLATFORM_SUPABASE_SERVICE_KEY, BREVO_API_KEY
+# Until the secrets exist this workflow exits quietly.
+
+on:
+  schedule:
+    - cron: "40 * * * *"   # :40 every hour — the Zelle sync posts on the hour
+  workflow_dispatch: {}
+
+jobs:
+  receipts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install reportlab
+        run: pip install --quiet reportlab==4.2.5
+      - name: Send pending receipts
+        env:
+          SUPABASE_URL: ${{ secrets.PLATFORM_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.PLATFORM_SUPABASE_SERVICE_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          PORTAL_URL: https://falahacademywa.org/platform/
+        run: python .github/scripts/receipts.py

@@ -24,7 +24,8 @@ interface QuranRow {
   teacher_comment: string | null; revision: string | null;
 }
 interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
-interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
+interface FeePayment { payment_date: string; amount: number; payment_method: string; period_month: string | null; receipt_no: string | null; receipt_path: string | null; receipt_kind: string | null }
+interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: FeePayment[] }
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
 
 // Payment channels shown in the "How to pay" dialog. Bank account details are
@@ -144,7 +145,7 @@ export default function ParentHome() {
       .filter(Boolean) as string[];
     if (!enrIds.length) return;
     supabase.from("fee_plans")
-      .select("total_amount, billing_frequency, start_date, enrollment_id, payments ( payment_date )")
+      .select("total_amount, billing_frequency, start_date, enrollment_id, payments ( payment_date, period_month )")
       .in("enrollment_id", enrIds)
       .then(({ data }) => {
         const today = new Date();
@@ -162,7 +163,7 @@ export default function ParentHome() {
           }
           anyStarted = true;
           const start = p.start_date ? new Date(p.start_date + "T12:00:00") : today;
-          const paidMonths = new Set((p.payments ?? []).map((x: { payment_date: string }) => x.payment_date.slice(0, 7)));
+          const paidMonths = new Set((p.payments ?? []).map((x: { payment_date: string; period_month: string | null }) => (x.period_month ?? x.payment_date).slice(0, 7)));
           const d = new Date(start.getFullYear(), start.getMonth(), 1);
           while (true) {
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -206,6 +207,53 @@ export default function ParentHome() {
     })();
   }, []);
 
+  // Receipts (phase 27): PDFs live in the private `receipts` bucket; a short-lived link opens them
+  async function openReceipt(path: string) {
+    const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 600);
+    if (error || !data?.signedUrl) { alert("The receipt could not be opened right now. Please try again in a minute."); return; }
+    track("open_receipt", path);
+    window.open(data.signedUrl, "_blank", "noopener");
+  }
+  // Statement for this child's school year: a print-ready window (Save as PDF from the print dialog)
+  function printStatement() {
+    if (!fee || !active) return;
+    const enr = active.students.enrollments.find((e) => e.status === "active") ?? active.students.enrollments[0];
+    const today = new Date();
+    const start = fee.start_date ? new Date(fee.start_date + "T12:00:00") : today;
+    const d = new Date(start.getFullYear(), start.getMonth(), 1);
+    const curKey = todayStr().slice(0, 7);
+    const rows: string[] = [];
+    let billed = 0, paid = 0;
+    while (true) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (key > curKey) break;
+      const ps = fee.payments.filter((p) => (p.period_month ?? p.payment_date).startsWith(key));
+      const amt = ps.reduce((sum, p) => sum + Number(p.amount), 0);
+      billed += Number(fee.total_amount); paid += amt;
+      rows.push(`<tr><td>${d.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</td><td class="r">$${Number(fee.total_amount).toFixed(2)}</td>` +
+        `<td class="r">${amt ? "$" + amt.toFixed(2) : "-"}</td><td>${ps.map((p) => `${p.receipt_no ?? ""} · ${p.payment_date} · ${p.payment_method}`).join("<br>")}</td>` +
+        `<td class="r">${amt >= Number(fee.total_amount) ? "Paid" : amt > 0 ? "Partly paid" : "Due"}</td></tr>`);
+      d.setMonth(d.getMonth() + 1);
+    }
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Falah Academy statement</title>
+<style>body{font-family:Calibri,Arial,sans-serif;color:#222;margin:40px;font-size:13px}h1{color:#1a2f5e;margin:0;font-size:22px}
+.sub{color:#666;font-size:11px;margin-bottom:18px}table{border-collapse:collapse;width:100%;margin-top:14px}th{background:#1a2f5e;color:#fff;text-align:left;padding:6px 8px;font-size:12px}
+td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{text-align:right}tfoot td{font-weight:bold;border-top:2px solid #1a2f5e}
+.foot{margin-top:28px;color:#777;font-size:10px;border-top:1px solid #c9a84c;padding-top:8px;text-align:center}</style></head><body>
+<h1>Falah Academy - Tuition statement</h1><div class="sub">${esc(enr?.school_year ?? "")} · ${esc(active.students.first_name + " " + active.students.last_name)} · ${esc(enr?.grade_name ?? "")} · printed ${today.toLocaleDateString("en-US")}</div>
+<div>Parent / guardian: ${esc(profile?.full_name ?? "")}</div>
+<table><thead><tr><th>Month</th><th class="r">Tuition</th><th class="r">Paid</th><th>Receipt · date · method</th><th class="r">Status</th></tr></thead>
+<tbody>${rows.join("")}</tbody>
+<tfoot><tr><td>Total</td><td class="r">$${billed.toFixed(2)}</td><td class="r">$${paid.toFixed(2)}</td><td></td><td class="r">${billed - paid > 0 ? "Balance $" + (billed - paid).toFixed(2) : "Paid in full"}</td></tr></tfoot></table>
+<div class="foot">Falah Academy · 25650 101st Ave SE, Kent, WA 98030 · (301) 919-0106 · falahacademywa@gmail.com · falahacademywa.org</div>
+<script>window.onload=function(){window.print()}</script></body></html>`;
+    const w = window.open("", "_blank", "noopener,width=900,height=700");
+    if (!w) { alert("Please allow pop-ups to print the statement."); return; }
+    w.document.write(html); w.document.close();
+    track("print_statement");
+  }
+
   // Per-child data: Qur'an, academics, fees
   useEffect(() => {
     if (configMissing || !active) { setQuran([]); setAcad([]); setFee(null); return; }
@@ -218,7 +266,7 @@ export default function ParentHome() {
       .order("assessment_date", { ascending: false }).limit(40)
       .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
     supabase.from("fee_plans")
-      .select("id, total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method )")
+      .select("id, total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method, period_month, receipt_no, receipt_path, receipt_kind )")
       .eq("enrollment_id", enr.id).maybeSingle()
       .then(({ data }) => setFee((data as unknown as FeePlan) ?? null));
     // Assignments: grade-wide for this child's grade + individual ones.
@@ -1315,19 +1363,22 @@ export default function ParentHome() {
                       <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                         Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
-                    ) : fee.payments.some((p) => p.payment_date.startsWith(monthStr())) ? (
+                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr())) ? (
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
                     ) : (
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
                     )}
                   </div>
-                  <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">Monthly status</h3>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">Monthly status</h3>
+                    <button onClick={() => printStatement()} className="text-xs font-semibold text-royal hover:underline">Print statement</button>
+                  </div>
                   <div className="space-y-1 text-sm">
                     {(() => {
                       const today = new Date();
                       const curKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
                       const start = fee.start_date ? new Date(fee.start_date + "T12:00:00") : today;
-                      const months: { key: string; label: string; payment?: { amount: number; payment_date: string } }[] = [];
+                      const months: { key: string; label: string; payment?: FeePayment }[] = [];
                       const d = new Date(start.getFullYear(), start.getMonth(), 1);
                       while (true) {
                         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -1335,7 +1386,7 @@ export default function ParentHome() {
                         months.push({
                           key,
                           label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-                          payment: fee.payments.find((p) => p.payment_date.startsWith(key)),
+                          payment: fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key)),
                         });
                         d.setMonth(d.getMonth() + 1);
                       }
@@ -1344,8 +1395,15 @@ export default function ParentHome() {
                         <div key={m.key} className="flex items-center justify-between border-b py-1.5 last:border-0">
                           <span className="text-gray-600">{m.label}</span>
                           {m.payment ? (
-                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                              Fees Paid ✓ <span className="font-normal text-green-600">(${Number(m.payment.amount).toFixed(0)} · {m.payment.payment_date.slice(5)})</span>
+                            <span className="flex items-center gap-2">
+                              {m.payment.receipt_no && (
+                                m.payment.receipt_path
+                                  ? <button onClick={() => openReceipt(m.payment!.receipt_path!)} className="text-xs font-semibold text-royal hover:underline" title="Download the PDF receipt">{m.payment.receipt_no} ⬇</button>
+                                  : <span className="text-xs text-gray-400" title="The PDF is being prepared">{m.payment.receipt_no}</span>
+                              )}
+                              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                                Fees Paid ✓ <span className="font-normal text-green-600">(${Number(m.payment.amount).toFixed(0)} · {m.payment.payment_date.slice(5)})</span>
+                              </span>
                             </span>
                           ) : (
                             <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Fees Due</span>

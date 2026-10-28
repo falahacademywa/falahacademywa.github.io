@@ -18,7 +18,8 @@ interface PlanRow {
     status: string;
     students: { id: string; first_name: string; last_name: string; student_no: number };
   };
-  payments: { id: number; payment_date: string; amount: number; payment_method: string; reference_no: string | null }[];
+  payments: { id: number; payment_date: string; amount: number; payment_method: string; reference_no: string | null;
+    receipt_no: string | null; receipt_group: string; period_month: string | null; receipt_sent_at: string | null; receipt_kind: string; receipt_path: string | null }[];
 }
 // Zelle alerts read from the school Gmail (phase 21): pending ones need a match
 interface ZelleRow {
@@ -37,12 +38,16 @@ export default function Fees() {
   const [unplanned, setUnplanned] = useState<EnrollmentOpt[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [payFor, setPayFor] = useState<string | null>(null);
-  const [payForm, setPayForm] = useState({ amount: "", payment_method: "cash", reference_no: "", payment_date: todayStr() });
+  const [payForm, setPayForm] = useState({ amount: "", payment_method: "cash", reference_no: "", payment_date: todayStr(), period: monthStr() });
+  // one amount for several children of one family -> split across their plans, one receipt (phase 27)
+  const [famOpen, setFamOpen] = useState(false);
+  const [famForm, setFamForm] = useState<{ students: string[]; amount: string; payment_method: string; reference_no: string; payment_date: string; period: string }>(
+    { students: [], amount: "", payment_method: "zelle", reference_no: "", payment_date: todayStr(), period: monthStr() });
   const [planForm, setPlanForm] = useState({ enrollment_id: "", total_amount: "", billing_frequency: "monthly" });
   // Correcting a recorded payment (wrong method/amount/date). Admin-only via
   // RLS; every change is written to audit_log by the payments_audit trigger.
   const [editId, setEditId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ payment_date: "", amount: "", payment_method: "cash", reference_no: "" });
+  const [editForm, setEditForm] = useState({ payment_date: "", amount: "", payment_method: "cash", reference_no: "", period: "" });
   // Zelle review queue (phase 21)
   const [zelle, setZelle] = useState<ZelleRow[]>([]);
   const [zPick, setZPick] = useState<Record<number, string[]>>({});   // inbox id -> chosen student ids
@@ -52,7 +57,7 @@ export default function Fees() {
     if (configMissing) return;
     const [{ data: p }, { data: e }, { data: z }] = await Promise.all([
       supabase.from("fee_plans")
-        .select("*, enrollments!inner ( id, grade_name, school_year, status, students ( id, first_name, last_name, student_no ) ), payments ( id, payment_date, amount, payment_method, reference_no )")
+        .select("*, enrollments!inner ( id, grade_name, school_year, status, students ( id, first_name, last_name, student_no ) ), payments ( id, payment_date, amount, payment_method, reference_no, receipt_no, receipt_group, period_month, receipt_sent_at, receipt_kind, receipt_path )")
         .eq("enrollments.status", "active"),
       supabase.from("enrollments")
         .select("id, grade_name, students ( first_name, last_name ), fee_plans ( id )")
@@ -75,7 +80,7 @@ export default function Fees() {
   const paid = (r: PlanRow) => r.payments.reduce((s, p) => s + Number(p.amount), 0);
   const paidThisMonth = (r: PlanRow) => {
     const m = monthStr();
-    return r.payments.some((p) => p.payment_date.startsWith(m));
+    return r.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(m));
   };
 
   async function addPlan(e: React.FormEvent) {
@@ -98,12 +103,29 @@ export default function Fees() {
       payment_method: payForm.payment_method,
       reference_no: payForm.reference_no || null,
       payment_date: payForm.payment_date,
+      period_month: payForm.period + "-01",
       recorded_by: profile?.id,
     });
     if (error) return setMsg("Payment failed: " + error.message);
     setPayFor(null);
     setPayForm({ ...payForm, amount: "", reference_no: "" });
     setMsg(null); load();
+  }
+
+  async function recordFamily(e: React.FormEvent) {
+    e.preventDefault();
+    if (!famForm.students.length) return setMsg("Tick the children this payment is for.");
+    const { error } = await supabase.rpc("record_family_payment", {
+      p_students: famForm.students, p_amount: Number(famForm.amount), p_method: famForm.payment_method,
+      p_reference: famForm.reference_no || null, p_date: famForm.payment_date, p_period: famForm.period + "-01" });
+    if (error) return setMsg("Payment failed: " + error.message + (error.message.includes("record_family_payment") ? " - run platform_schema_phase27.sql" : ""));
+    setFamOpen(false); setFamForm({ ...famForm, students: [], amount: "", reference_no: "" });
+    setMsg(null); load();
+  }
+  async function resendReceipt(p: PlanRow["payments"][number]) {
+    const { error } = await supabase.rpc("resend_receipt", { p_group: p.receipt_group });
+    setMsg(error ? "Could not queue the receipt: " + error.message : `Receipt ${p.receipt_no} will be e-mailed again within the hour.`);
+    load();
   }
 
   async function postZelle(z: ZelleRow) {
@@ -130,7 +152,7 @@ export default function Fees() {
   type Payment = PlanRow["payments"][number];
   function startEdit(p: Payment) {
     setEditId(p.id);
-    setEditForm({ payment_date: p.payment_date, amount: String(p.amount), payment_method: p.payment_method, reference_no: p.reference_no ?? "" });
+    setEditForm({ payment_date: p.payment_date, amount: String(p.amount), payment_method: p.payment_method, reference_no: p.reference_no ?? "", period: (p.period_month ?? p.payment_date).slice(0, 7) });
   }
   async function saveEdit() {
     if (editId == null) return;
@@ -139,6 +161,7 @@ export default function Fees() {
       amount: Number(editForm.amount),
       payment_method: editForm.payment_method,
       reference_no: editForm.reference_no || null,
+      period_month: editForm.period + "-01",
     }).eq("id", editId);
     if (error) return setMsg("Update failed: " + error.message);
     setEditId(null); setMsg(null); load();
@@ -156,9 +179,43 @@ export default function Fees() {
       <p className="mb-6 text-sm text-gray-500">
         One plan per enrollment (BR-010). Each student's fee can differ. $0 plans never trigger reminders (BR-121).
         Zelle receipts are read from the school Gmail every hour and posted automatically when the sender and amount are certain;
-        the rest wait below. Every change to a payment is kept in the audit log. Parents are not notified of payments.
+        the rest wait below. Every payment gets a numbered receipt: the family sees it in the portal at once and receives the PDF by e-mail within the hour
+        (invoice on the 1st, reminders on the 6th and 15th to families with a balance). Every change to a payment is kept in the audit log and re-issues the receipt.
       </p>
-      {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
+      {msg && <div className={`mb-4 rounded-lg p-3 text-sm ${/^Receipt/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
+      {!configMissing && plans.length > 0 && (
+        <div className="mb-4">
+          <button onClick={() => setFamOpen(!famOpen)} className="rounded-lg border border-navy px-3 py-1.5 text-xs font-semibold text-navy hover:bg-silver">
+            {famOpen ? "Cancel" : "Record a family payment (several children, one receipt)"}
+          </button>
+          {famOpen && (
+            <form onSubmit={recordFamily} className="mt-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1">
+                {plans.filter((p) => Number(p.total_amount) > 0).map((p) => {
+                  const sid = p.enrollments.students.id; const on = famForm.students.includes(sid);
+                  return (
+                    <label key={p.id} className={`flex items-center gap-1.5 text-xs ${on ? "font-semibold text-navy" : "text-gray-600"}`}>
+                      <input type="checkbox" checked={on} onChange={(e) => setFamForm({ ...famForm, students: e.target.checked ? [...famForm.students, sid] : famForm.students.filter((x) => x !== sid) })} />
+                      {p.enrollments.students.first_name} {p.enrollments.students.last_name} <span className="text-gray-400">${Number(p.total_amount).toFixed(0)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <input type="date" value={famForm.payment_date} onChange={(e) => setFamForm({ ...famForm, payment_date: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <label className="text-xs text-gray-500">For month<br /><input type="month" value={famForm.period} onChange={(e) => setFamForm({ ...famForm, period: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" /></label>
+                <input required type="number" min="1" step="0.01" placeholder="Total $" value={famForm.amount} onChange={(e) => setFamForm({ ...famForm, amount: e.target.value })} className="w-28 rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <select value={famForm.payment_method} onChange={(e) => setFamForm({ ...famForm, payment_method: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm">
+                  {["cash", "check", "bank", "zelle", "other"].map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <input placeholder="Reference # (optional)" value={famForm.reference_no} onChange={(e) => setFamForm({ ...famForm, reference_no: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <button className="rounded-lg bg-navy px-4 py-1.5 text-sm font-semibold text-white hover:bg-royal">Save - one receipt</button>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">The amount is split across the ticked children's plans (each up to its monthly fee, the last one takes the rest), exactly as a Zelle payment is.</p>
+            </form>
+          )}
+        </div>
+      )}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage fees.</p>}
 
       {zPending.length > 0 && (
@@ -282,6 +339,9 @@ export default function Fees() {
                 <input type="date" value={payForm.payment_date}
                   onChange={(e) => setPayForm({ ...payForm, payment_date: e.target.value })}
                   className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <label className="text-xs text-gray-500">For month<br /><input type="month" value={payForm.period}
+                  onChange={(e) => setPayForm({ ...payForm, period: e.target.value })}
+                  className="rounded border border-gray-300 px-2 py-1.5 text-sm" /></label>
                 <input type="number" min="1" step="0.01" placeholder="Amount $" value={payForm.amount}
                   onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
                   className="w-28 rounded border border-gray-300 px-2 py-1.5 text-sm" />
@@ -316,6 +376,11 @@ export default function Fees() {
                               className="rounded border border-gray-300 px-1.5 py-1 text-xs" />
                           </td>
                           <td className="py-1 pr-2">
+                            <input type="month" value={editForm.period}
+                              onChange={(e) => setEditForm({ ...editForm, period: e.target.value })}
+                              className="rounded border border-gray-300 px-1.5 py-1 text-xs" />
+                          </td>
+                          <td className="py-1 pr-2">
                             <input type="number" min="1" step="0.01" value={editForm.amount}
                               onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
                               className="w-24 rounded border border-gray-300 px-1.5 py-1 text-xs" />
@@ -341,10 +406,18 @@ export default function Fees() {
                       ) : (
                         <tr key={p.id} className="border-b last:border-0">
                           <td className="py-1">{p.payment_date}</td>
+                          <td className="py-1 text-gray-500">{p.period_month ? new Date(p.period_month + "T12:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : ""}</td>
                           <td className="py-1 font-semibold">${Number(p.amount).toFixed(2)}</td>
                           <td className="py-1">{p.payment_method}</td>
                           <td className="py-1 text-gray-400">{p.reference_no ?? ""}</td>
+                          <td className="py-1 whitespace-nowrap">
+                            {p.receipt_no && <span className="font-mono text-navy">{p.receipt_no}</span>}
+                            {p.receipt_no && (p.receipt_sent_at
+                              ? <span className="ml-1 text-gray-400" title={new Date(p.receipt_sent_at).toLocaleString()}>{p.receipt_kind === "corrected" ? "corrected" : "sent"}</span>
+                              : <span className="ml-1 text-amber-700">queued</span>)}
+                          </td>
                           <td className="py-1 text-right whitespace-nowrap">
+                            {p.receipt_no && p.receipt_sent_at && <button onClick={() => resendReceipt(p)} className="mr-3 text-xs font-semibold text-gray-500 hover:text-navy">Resend</button>}
                             <button onClick={() => startEdit(p)} className="text-xs font-semibold text-royal hover:underline">Edit</button>
                             <button onClick={() => deletePayment(p)} className="ml-3 text-xs text-red-600 hover:underline">Delete</button>
                           </td>
