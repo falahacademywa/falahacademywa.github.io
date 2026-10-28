@@ -18,6 +18,7 @@ const nav = [
   { to: "/admin/academics", label: "Academics & Qur'an", module: "academics" },
   { to: "/admin/assignments", label: "Assignments", module: "academics" },
   { to: "/admin/updates", label: "Class Updates", module: "academics" },
+  { to: "/admin/redcomet", label: "Red Comet", module: "academics" },
   { to: "/admin/calendar", label: "Calendar", module: "calendar" },
   { to: "/admin/announcements", label: "Announcements", module: "announcements" },
   { to: "/admin/feedback", label: "Feedback", module: "feedback" },

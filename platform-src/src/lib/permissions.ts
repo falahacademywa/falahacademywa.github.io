@@ -12,7 +12,7 @@ export const MODULES: Module[] = [
   { key: "parents",       label: "Parents",                   paths: ["/admin/parents", "/admin/parent-activity"], note: "accounts, link, suspend, activity" },
   { key: "teachers",      label: "Teachers",                  paths: ["/admin/teachers"] },
   { key: "fees",          label: "Fees",                      paths: ["/admin/fees"],       note: "plans and payments" },
-  { key: "academics",     label: "Academics, assignments & class updates", paths: ["/admin/academics", "/admin/assignments", "/admin/updates"] },
+  { key: "academics",     label: "Academics, assignments & class updates", paths: ["/admin/academics", "/admin/assignments", "/admin/updates", "/admin/redcomet"] },
   { key: "calendar",      label: "Calendar",                  paths: ["/admin/calendar"] },
   { key: "announcements", label: "Announcements",             paths: ["/admin/announcements"] },
   { key: "feedback",      label: "Feedback",                  paths: ["/admin/feedback"] },

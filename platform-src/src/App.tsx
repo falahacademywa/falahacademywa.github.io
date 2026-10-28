@@ -20,6 +20,7 @@ import Reports from "./pages/admin/Reports";
 import ParentActivity from "./pages/admin/ParentActivity";
 import AssignmentsAdmin from "./pages/admin/AssignmentsAdmin";
 import ClassUpdates from "./pages/admin/ClassUpdates";
+import RedComet from "./pages/admin/RedComet";
 import Feedback from "./pages/admin/Feedback";
 import Tasks from "./pages/admin/Tasks";
 import Volunteers from "./pages/admin/Volunteers";
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="academics" element={<Academics />} />
             <Route path="assignments" element={<AssignmentsAdmin />} />
             <Route path="updates" element={<ClassUpdates />} />
+            <Route path="redcomet" element={<RedComet />} />
             <Route path="calendar" element={<CalendarAdmin />} />
             <Route path="announcements" element={<AnnouncementsAdmin />} />
             <Route path="feedback" element={<Feedback />} />
