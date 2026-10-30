@@ -19,8 +19,13 @@ interface PlanRow {
     students: { id: string; first_name: string; last_name: string; student_no: number };
   };
   payments: { id: number; payment_date: string; amount: number; payment_method: string; reference_no: string | null;
-    receipt_no: string | null; receipt_group: string; period_month: string | null; receipt_sent_at: string | null; receipt_kind: string; receipt_path: string | null }[];
+    receipt_no: string | null; receipt_group: string; period_month: string | null; receipt_sent_at: string | null; receipt_kind: string; receipt_path: string | null;
+    waiver_reason: string | null; waiver_approved_by: string | null }[];
 }
+// A waived month (phase 29) is a payments row with payment_method 'waived': it covers the month
+// but is not money — no receipt, never counted in "received", shown grey everywhere.
+const isWaived = (p: { payment_method: string }) => p.payment_method === "waived";
+const periodKey = (p: { period_month: string | null; payment_date: string }) => (p.period_month ?? p.payment_date).slice(0, 7);
 // Zelle alerts read from the school Gmail (phase 21): pending ones need a match
 interface ZelleRow {
   id: number; received_at: string; payer: string; amount: number; memo: string | null; status: string;
@@ -39,6 +44,9 @@ export default function Fees() {
   const [msg, setMsg] = useState<string | null>(null);
   const [payFor, setPayFor] = useState<string | null>(null);
   const [payForm, setPayForm] = useState({ amount: "", payment_method: "cash", reference_no: "", payment_date: todayStr(), period: monthStr() });
+  // "Waive month" (phase 29): month, amount (defaults to the plan), reason and who approved it
+  const [waiveFor, setWaiveFor] = useState<string | null>(null);
+  const [waiveForm, setWaiveForm] = useState({ period: monthStr(), amount: "", reason: "", approved_by: "President" });
   // one amount for several children of one family -> split across their plans, one receipt (phase 27)
   const [famOpen, setFamOpen] = useState(false);
   const [famForm, setFamForm] = useState<{ students: string[]; amount: string; payment_method: string; reference_no: string; payment_date: string; period: string }>(
@@ -57,7 +65,7 @@ export default function Fees() {
     if (configMissing) return;
     const [{ data: p }, { data: e }, { data: z }] = await Promise.all([
       supabase.from("fee_plans")
-        .select("*, enrollments!inner ( id, grade_name, school_year, status, students ( id, first_name, last_name, student_no ) ), payments ( id, payment_date, amount, payment_method, reference_no, receipt_no, receipt_group, period_month, receipt_sent_at, receipt_kind, receipt_path )")
+        .select("*, enrollments!inner ( id, grade_name, school_year, status, students ( id, first_name, last_name, student_no ) ), payments ( id, payment_date, amount, payment_method, reference_no, receipt_no, receipt_group, period_month, receipt_sent_at, receipt_kind, receipt_path, waiver_reason, waiver_approved_by )")
         .eq("enrollments.status", "active"),
       supabase.from("enrollments")
         .select("id, grade_name, students ( first_name, last_name ), fee_plans ( id )")
@@ -77,11 +85,23 @@ export default function Fees() {
   }
   useEffect(() => { load(); }, []);
 
-  const paid = (r: PlanRow) => r.payments.reduce((s, p) => s + Number(p.amount), 0);
-  const paidThisMonth = (r: PlanRow) => {
+  const paid = (r: PlanRow) => r.payments.filter((p) => !isWaived(p)).reduce((s, p) => s + Number(p.amount), 0);
+  const waived = (r: PlanRow) => r.payments.filter(isWaived).reduce((s, p) => s + Number(p.amount), 0);
+  // this month: a real payment wins over a waiver if both exist
+  const monthStatus = (r: PlanRow): "paid" | "waived" | "due" => {
     const m = monthStr();
-    return r.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(m));
+    const rows = r.payments.filter((p) => periodKey(p) === m);
+    return rows.some((p) => !isWaived(p)) ? "paid" : rows.length ? "waived" : "due";
   };
+
+  async function waiveMonth(planId: string) {
+    const { error } = await supabase.rpc("waive_fee_month", {
+      p_plan: planId, p_period: waiveForm.period + "-01", p_amount: waiveForm.amount === "" ? null : Number(waiveForm.amount),
+      p_reason: waiveForm.reason.trim(), p_approved_by: waiveForm.approved_by.trim() || null });
+    if (error) return setMsg("Waiver failed: " + error.message + (error.message.includes("waive_fee_month") ? " - run platform_schema_phase29.sql" : ""));
+    setWaiveFor(null); setWaiveForm({ ...waiveForm, amount: "", reason: "" });
+    setMsg(null); load();
+  }
 
   async function addPlan(e: React.FormEvent) {
     e.preventDefault();
@@ -167,7 +187,9 @@ export default function Fees() {
     setEditId(null); setMsg(null); load();
   }
   async function deletePayment(p: Payment) {
-    if (!confirm(`Delete the $${Number(p.amount).toFixed(2)} payment dated ${p.payment_date}? This cannot be undone.`)) return;
+    const what = isWaived(p) ? `Remove the waiver for ${p.period_month ? new Date(p.period_month + "T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : p.payment_date}? The month will show as due again.`
+      : `Delete the $${Number(p.amount).toFixed(2)} payment dated ${p.payment_date}? This cannot be undone.`;
+    if (!confirm(what)) return;
     const { error } = await supabase.from("payments").delete().eq("id", p.id);
     if (error) return setMsg("Delete failed: " + error.message);
     setMsg(null); load();
@@ -181,6 +203,7 @@ export default function Fees() {
         Zelle receipts are read from the school Gmail every hour and posted automatically when the sender and amount are certain;
         the rest wait below. Every payment gets a numbered receipt: the family sees it in the portal at once and receives the PDF by e-mail within the hour
         (invoice on the 1st, reminders on the 6th and 15th to families with a balance). Every change to a payment is kept in the audit log and re-issues the receipt.
+        A <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-semibold text-gray-700">Waived</span> month is not money: no receipt, not counted in totals, and the family sees "waived" instead of "due".
       </p>
       {msg && <div className={`mb-4 rounded-lg p-3 text-sm ${/^Receipt/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
       {!configMissing && plans.length > 0 && (
@@ -323,16 +346,50 @@ export default function Fees() {
                   ? <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                       Starts {new Date(r.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
-                  : paidThisMonth(r)
+                  : monthStatus(r) === "paid"
                     ? <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Paid this month</span>
-                    : <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Not paid this month</span>
+                    : monthStatus(r) === "waived"
+                      ? <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700">Waived this month</span>
+                      : <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Not paid this month</span>
               )}
-              <span className="ml-auto text-xs text-gray-400">Total received: ${paid(r).toFixed(2)}</span>
-              <button onClick={() => setPayFor(payFor === r.id ? null : r.id)}
+              <span className="ml-auto text-xs text-gray-400">
+                Total received: ${paid(r).toFixed(2)}{waived(r) > 0 && <span className="ml-2 text-gray-500">· Waived: ${waived(r).toFixed(2)}</span>}
+              </span>
+              <button onClick={() => { setPayFor(payFor === r.id ? null : r.id); setWaiveFor(null); }}
                 className="rounded-lg bg-emerald-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-deep">
                 {payFor === r.id ? "Cancel" : "Record payment"}
               </button>
+              {Number(r.total_amount) > 0 && (
+                <button onClick={() => { setWaiveFor(waiveFor === r.id ? null : r.id); setPayFor(null); setWaiveForm({ ...waiveForm, amount: "", reason: "" }); }}
+                  className="rounded-lg border border-gray-400 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-silver">
+                  {waiveFor === r.id ? "Cancel" : "Waive month"}
+                </button>
+              )}
             </div>
+
+            {waiveFor === r.id && (
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="text-xs text-gray-500">Month<br /><input type="month" value={waiveForm.period}
+                    onChange={(e) => setWaiveForm({ ...waiveForm, period: e.target.value })}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm" /></label>
+                  <label className="text-xs text-gray-500">Amount waived<br /><input type="number" min="0" step="0.01" placeholder={Number(r.total_amount).toFixed(0)} value={waiveForm.amount}
+                    onChange={(e) => setWaiveForm({ ...waiveForm, amount: e.target.value })}
+                    className="w-28 rounded border border-gray-300 px-2 py-1.5 text-sm" /></label>
+                  <label className="grow text-xs text-gray-500">Reason (required)<br /><input value={waiveForm.reason} placeholder="e.g. hardship — approved at the 10-06 meeting"
+                    onChange={(e) => setWaiveForm({ ...waiveForm, reason: e.target.value })}
+                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm" /></label>
+                  <label className="text-xs text-gray-500">Approved by<br /><input value={waiveForm.approved_by}
+                    onChange={(e) => setWaiveForm({ ...waiveForm, approved_by: e.target.value })}
+                    className="w-32 rounded border border-gray-300 px-2 py-1.5 text-sm" /></label>
+                  <button onClick={() => waiveMonth(r.id)} disabled={!waiveForm.reason.trim() || !waiveForm.period}
+                    className="rounded-lg bg-gray-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">
+                    Waive
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-400">The family gets an in-app note that the month is waived (no receipt, no e-mail). The waiver is written to the audit log.</p>
+              </div>
+            )}
 
             {payFor === r.id && (
               <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-3">
@@ -368,7 +425,18 @@ export default function Fees() {
                 <table className="mt-2 w-full text-xs">
                   <tbody>
                     {[...r.payments].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).map((p) => (
-                      editId === p.id ? (
+                      isWaived(p) ? (
+                        <tr key={p.id} className="border-b bg-gray-50 last:border-0">
+                          <td className="py-1">{p.payment_date}</td>
+                          <td className="py-1 text-gray-500">{p.period_month ? new Date(p.period_month + "T12:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : ""}</td>
+                          <td className="py-1 font-semibold text-gray-500">${Number(p.amount).toFixed(2)}</td>
+                          <td className="py-1"><span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700">Waived</span></td>
+                          <td className="py-1 text-gray-500" colSpan={2}>{p.waiver_reason}{p.waiver_approved_by && <span className="text-gray-400"> · approved by {p.waiver_approved_by}</span>}</td>
+                          <td className="py-1 text-right whitespace-nowrap">
+                            <button onClick={() => deletePayment(p)} className="text-xs text-red-600 hover:underline">Remove waiver</button>
+                          </td>
+                        </tr>
+                      ) : editId === p.id ? (
                         <tr key={p.id} className="border-b bg-amber-50 last:border-0">
                           <td className="py-1 pr-2">
                             <input type="date" value={editForm.payment_date}

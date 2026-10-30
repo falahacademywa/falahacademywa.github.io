@@ -44,11 +44,12 @@ export async function loadMenuCounts(can: (module: string) => boolean): Promise<
     jobs.push((async () => {
       // paid / unpaid = same rule as the Dashboard "Fees this month" tile
       const { data } = await supabase.from("fee_plans")
-        .select("id, start_date, enrollments!inner ( status ), payments ( payment_date )")
+        .select("id, start_date, enrollments!inner ( status ), payments ( payment_date, period_month )")
         .eq("status", "active").eq("enrollments.status", "active").gt("total_amount", 0);
-      const due = ((data ?? []) as { start_date: string | null; payments: { payment_date: string }[] }[])
+      const due = ((data ?? []) as { start_date: string | null; payments: { payment_date: string; period_month: string | null }[] }[])
         .filter((p) => !p.start_date || p.start_date <= today);
-      const unpaid = due.filter((p) => !p.payments.some((x) => x.payment_date.startsWith(month))).length;
+      // a waived month (phase 29) counts as covered here, same as the Dashboard tile
+      const unpaid = due.filter((p) => !p.payments.some((x) => (x.period_month ?? x.payment_date).startsWith(month))).length;
       out["/admin/fees"] = [due.length - unpaid, unpaid];
     })());
 

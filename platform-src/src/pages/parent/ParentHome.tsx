@@ -223,16 +223,18 @@ export default function ParentHome() {
     const d = new Date(start.getFullYear(), start.getMonth(), 1);
     const curKey = todayStr().slice(0, 7);
     const rows: string[] = [];
-    let billed = 0, paid = 0;
+    let billed = 0, paid = 0, waivedTotal = 0;
     while (true) {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (key > curKey) break;
       const ps = fee.payments.filter((p) => (p.period_month ?? p.payment_date).startsWith(key));
-      const amt = ps.reduce((sum, p) => sum + Number(p.amount), 0);
-      billed += Number(fee.total_amount); paid += amt;
+      // a waived month (phase 29) is covered but not paid: it never counts as money
+      const amt = ps.filter((p) => p.payment_method !== "waived").reduce((sum, p) => sum + Number(p.amount), 0);
+      const wv = ps.filter((p) => p.payment_method === "waived").reduce((sum, p) => sum + Number(p.amount), 0);
+      billed += Number(fee.total_amount); paid += amt; waivedTotal += wv;
       rows.push(`<tr><td>${d.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</td><td class="r">$${Number(fee.total_amount).toFixed(2)}</td>` +
-        `<td class="r">${amt ? "$" + amt.toFixed(2) : "-"}</td><td>${ps.map((p) => `${p.receipt_no ?? ""} · ${p.payment_date} · ${p.payment_method}`).join("<br>")}</td>` +
-        `<td class="r">${amt >= Number(fee.total_amount) ? "Paid" : amt > 0 ? "Partly paid" : "Due"}</td></tr>`);
+        `<td class="r">${amt ? "$" + amt.toFixed(2) : "-"}</td><td>${ps.map((p) => p.payment_method === "waived" ? "waived by the school" : `${p.receipt_no ?? ""} · ${p.payment_date} · ${p.payment_method}`).join("<br>")}</td>` +
+        `<td class="r">${amt + wv >= Number(fee.total_amount) ? (amt ? "Paid" : "Waived") : amt + wv > 0 ? "Partly paid" : "Due"}</td></tr>`);
       d.setMonth(d.getMonth() + 1);
     }
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
@@ -245,7 +247,7 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
 <div>Parent / guardian: ${esc(profile?.full_name ?? "")}</div>
 <table><thead><tr><th>Month</th><th class="r">Tuition</th><th class="r">Paid</th><th>Receipt · date · method</th><th class="r">Status</th></tr></thead>
 <tbody>${rows.join("")}</tbody>
-<tfoot><tr><td>Total</td><td class="r">$${billed.toFixed(2)}</td><td class="r">$${paid.toFixed(2)}</td><td></td><td class="r">${billed - paid > 0 ? "Balance $" + (billed - paid).toFixed(2) : "Paid in full"}</td></tr></tfoot></table>
+<tfoot><tr><td>Total</td><td class="r">$${billed.toFixed(2)}</td><td class="r">$${paid.toFixed(2)}</td><td>${waivedTotal ? "Waived: $" + waivedTotal.toFixed(2) : ""}</td><td class="r">${billed - paid - waivedTotal > 0 ? "Balance $" + (billed - paid - waivedTotal).toFixed(2) : "Paid in full"}</td></tr></tfoot></table>
 <div class="foot">Falah Academy · 25650 101st Ave SE, Kent, WA 98030 · (301) 919-0106 · falahacademywa@gmail.com · falahacademywa.org</div>
 <script>window.onload=function(){window.print()}</script></body></html>`;
     const w = window.open("", "_blank", "noopener,width=900,height=700");
@@ -1363,8 +1365,10 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                       <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                         Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
-                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr())) ? (
+                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr()) && p.payment_method !== "waived") ? (
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
+                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr())) ? (
+                      <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">Waived this month</span>
                     ) : (
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
                     )}
@@ -1386,7 +1390,9 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                         months.push({
                           key,
                           label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-                          payment: fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key)),
+                          // a real payment wins over a waiver when both exist for the month
+                          payment: fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key) && p.payment_method !== "waived")
+                            ?? fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key)),
                         });
                         d.setMonth(d.getMonth() + 1);
                       }
@@ -1394,7 +1400,11 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                       return months.reverse().map((m) => (
                         <div key={m.key} className="flex items-center justify-between border-b py-1.5 last:border-0">
                           <span className="text-gray-600">{m.label}</span>
-                          {m.payment ? (
+                          {m.payment?.payment_method === "waived" ? (
+                            <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700" title="Waived by the school — nothing is due for this month">
+                              Waived <span className="font-normal text-gray-500">(nothing due)</span>
+                            </span>
+                          ) : m.payment ? (
                             <span className="flex items-center gap-2">
                               {m.payment.receipt_no && (
                                 m.payment.receipt_path

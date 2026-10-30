@@ -13,6 +13,7 @@ export interface Profile {
   role: Role;
   must_change_password: boolean;
   title?: string | null;   // display title for staff ("Office Staff", "Principal")
+  suspended?: boolean;     // Admin → Parents "Suspend", or set by set_student_status() (phase 30)
 }
 
 interface AuthState {
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(uid: string) {
     // `title` arrives with phase 19; fall back so an un-migrated project still signs in.
-    let r = await supabase.from("profiles").select("id, full_name, role, must_change_password, title").eq("id", uid).single();
+    let r = await supabase.from("profiles").select("id, full_name, role, must_change_password, title, suspended").eq("id", uid).single();
     if (r.error) r = await supabase.from("profiles").select("id, full_name, role, must_change_password").eq("id", uid).single();
     const p = (r.data as Profile) ?? null;
     setProfile(p);
@@ -137,8 +138,29 @@ export function RequireRole({ roles, children }: { roles: Role[]; children: Reac
   if (loading && !profile) return <Splash />;
   if (!session || !profile) return <Navigate to="/login" replace />;
   if (profile.must_change_password) return <Navigate to="/change-password" replace />;
+  if (profile.suspended && profile.role !== "admin") return <SuspendedNotice />;
   if (!roles.includes(profile.role)) return <Navigate to={homeFor(profile.role)} replace />;
   return <>{children}</>;
+}
+
+// A suspended login (Admin → Parents, or a student suspension/withdrawal with
+// "suspend the parent login" ticked) sees this instead of the portal. Until
+// phase 30 the flag existed but was never enforced (TASKS).
+function SuspendedNotice() {
+  const { signOut } = useAuth();
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-silver p-6">
+      <div className="max-w-md rounded-xl bg-white p-6 text-center shadow-sm">
+        <img src="../images/logo.jpg" alt="" className="mx-auto mb-3 h-14 w-14 rounded-full object-cover" />
+        <h1 className="font-display text-xl font-semibold text-navy">This account is paused</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Your Family Portal access is currently suspended. If you believe this is a mistake, or your child is returning to Falah Academy,
+          please contact the office at <a className="text-royal underline" href="mailto:falahacademywa@gmail.com">falahacademywa@gmail.com</a> or (301) 919-0106.
+        </p>
+        <button onClick={signOut} className="mt-4 rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-semibold text-gray-600 hover:bg-silver">Sign out</button>
+      </div>
+    </div>
+  );
 }
 
 // For pages any signed-in user may reach (e.g. change-password)

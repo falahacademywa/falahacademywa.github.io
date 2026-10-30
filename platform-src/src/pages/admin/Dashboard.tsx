@@ -98,22 +98,26 @@ export default function Dashboard() {
         count("attendance", (q) => q.eq("date", today).in("status", ["present", "late"])),
         count("attendance", (q) => q.eq("date", today).eq("status", "absent")),
         supabase.from("fee_plans")
-          .select("id, total_amount, start_date, enrollments!inner ( status ), payments ( payment_date )")
+          .select("id, total_amount, start_date, enrollments!inner ( status ), payments ( payment_date, period_month, payment_method )")
           .eq("status", "active").eq("enrollments.status", "active").gt("total_amount", 0)
           .then(({ data }) => data ?? []),
         count("volunteer_applications", (q) => q.in("status", ["new", "contacted", "screening"])).catch(() => 0),
       ]);
-      const due = (plans as { start_date: string | null; payments: { payment_date: string }[] }[])
+      type Pay = { payment_date: string; period_month: string | null; payment_method: string };
+      const due = (plans as { start_date: string | null; payments: Pay[] }[])
         .filter((p) => !p.start_date || p.start_date <= today);  // plans not yet started don't count
-      const outstanding = due.filter((p) => !p.payments.some((x) => x.payment_date.startsWith(month))).length;
-      const paid = due.length - outstanding;
+      const inMonth = (x: Pay) => (x.period_month ?? x.payment_date).startsWith(month);
+      // a waived month (phase 29) is covered but not paid: shown separately, never as outstanding
+      const waivedN = due.filter((p) => p.payments.some((x) => inMonth(x) && x.payment_method === "waived") && !p.payments.some((x) => inMonth(x) && x.payment_method !== "waived")).length;
+      const outstanding = due.filter((p) => !p.payments.some(inMonth)).length;
+      const paid = due.length - outstanding - waivedN;
       setWidgets([
         { label: "Total Students", value: students, to: "/admin/students" },
         { label: "New Applications", value: applicants, to: "/admin/admissions" },
         { label: "Volunteers in progress", value: volunteers, to: "/admin/volunteers" },
         { label: "Present Today", value: presentToday, to: "/admin/attendance" },
         { label: "Absent Today", value: absentToday, to: "/admin/attendance" },
-        { label: "Fees this month", value: `${paid}/${due.length}`, to: "/admin/fees", pair: { paid, unpaid: outstanding } },
+        { label: waivedN ? `Fees this month (${waivedN} waived)` : "Fees this month", value: `${paid + waivedN}/${due.length}`, to: "/admin/fees", pair: { paid, unpaid: outstanding } },
         { label: "Parent Accounts", value: parents, to: "/admin/parents" },
         { label: "Teachers", value: teachers, to: "/admin/teachers" },
       ]);

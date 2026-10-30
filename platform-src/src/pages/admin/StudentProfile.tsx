@@ -9,7 +9,7 @@ import { StudentFormDialog, consentBadge, formStatus, allergySummary, medicalSum
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
-interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; amount: number; payment_method: string }[] }
+interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; period_month: string | null; amount: number; payment_method: string }[] }
 interface QuranRow { id: number; assessment_date: string; category: string; surah_topic: string; memorization_level: string | null; teacher_comment: string | null; revision: string | null }
 interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
 
@@ -24,7 +24,7 @@ interface Student {
   notes: string | null;
   profile_photo_url: string | null;
   photo_pending_url: string | null;
-  enrollments: { id: string; school_year: string; grade_name: string; status: string; enrollment_date: string }[];
+  enrollments: { id: string; school_year: string; grade_name: string; status: string; enrollment_date: string; exit_date: string | null; exit_reason: string | null }[];
   parent_students: { profiles: { full_name: string; email: string | null; phone: string | null; must_change_password: boolean } }[];
   guardians: { id: string; name: string; relationship: string; phone: string | null; email: string | null; sort: number }[];
   emergency_contacts: { id: string; name: string; phone: string; relationship: string | null; is_primary: boolean }[];
@@ -52,6 +52,14 @@ export default function StudentProfile() {
   const [formOpen, setFormOpen] = useState<FormKind | null>(null);
   // Right-click menu on a guardian row (make primary contact / open profile)
   const [menu, setMenu] = useState<{ x: number; y: number; g: Student["guardians"][number] } | null>(null);
+  // Suspend / Withdraw / Reinstate dialog (phase 30)
+  const [statusDlg, setStatusDlg] = useState<"suspend" | "withdraw" | "reinstate" | null>(null);
+  const [statusForm, setStatusForm] = useState({ date: todayStr(), reason: "", closeFee: true, suspendLogins: true });
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  // Guardian / emergency-contact editors (#138)
+  const [gForm, setGForm] = useState<{ id: string | null; name: string; relationship: string; phone: string; email: string } | null>(null);
+  const [cForm, setCForm] = useState<{ id: string | null; name: string; phone: string; relationship: string; is_primary: boolean } | null>(null);
   async function makePrimary(g: Student["guardians"][number]) {
     if (!s) return;
     await supabase.from("guardians").update({ sort: 2 }).eq("student_id", s.id).neq("id", g.id);
@@ -123,7 +131,7 @@ export default function StudentProfile() {
     const { data, error } = await supabase
       .from("students")
       .select(`id, student_no, first_name, last_name, date_of_birth, gender, archived, notes, profile_photo_url, photo_pending_url,
-        enrollments ( id, school_year, grade_name, status, enrollment_date ),
+        enrollments ( id, school_year, grade_name, status, enrollment_date, exit_date, exit_reason ),
         parent_students ( profiles ( full_name, email, phone, must_change_password ) ),
         guardians ( id, name, relationship, phone, email, sort ),
         emergency_contacts ( id, name, phone, relationship, is_primary ),
@@ -167,7 +175,7 @@ export default function StudentProfile() {
   useEffect(() => {
     if (configMissing || !activeEnr) return;
     supabase.from("fee_plans")
-      .select("total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method )")
+      .select("total_amount, billing_frequency, start_date, payments ( payment_date, period_month, amount, payment_method )")
       .eq("enrollment_id", activeEnr.id).maybeSingle()
       .then(({ data }) => setFeeInfo((data as unknown as FeeInfo) ?? null));
     supabase.from("quran_progress").select("id, assessment_date, category, surah_topic, memorization_level, teacher_comment, revision")
@@ -223,6 +231,60 @@ export default function StudentProfile() {
     load();
   }
 
+  // Suspend / Withdraw / Reinstate (phase 30, #112): one RPC does enrollment status, archive,
+  // fee plan, parent logins and the audit row in a single transaction.
+  async function submitStatus() {
+    if (!s || !statusDlg) return;
+    setStatusBusy(true);
+    const { data, error } = await supabase.rpc("set_student_status", {
+      p_student: s.id, p_action: statusDlg, p_date: statusForm.date || null, p_reason: statusForm.reason.trim() || null,
+      p_close_fee: statusForm.closeFee, p_suspend_logins: statusForm.suspendLogins });
+    setStatusBusy(false);
+    if (error) { alert("Could not update the status: " + error.message + (error.message.includes("set_student_status") ? " (run platform_schema_phase30.sql)" : "")); return; }
+    const r = (data ?? {}) as { fee_plans_closed?: number; parents_suspended?: number; fee_plans_reopened?: number; parents_unsuspended?: number };
+    setStatusDlg(null);
+    setStatusMsg(statusDlg === "reinstate"
+      ? `Reinstated. Fee plans re-opened: ${r.fee_plans_reopened ?? 0} · parent logins restored: ${r.parents_unsuspended ?? 0}.`
+      : `${statusDlg === "suspend" ? "Suspended" : "Withdrawn"}. Fee plans closed: ${r.fee_plans_closed ?? 0} · parent logins suspended: ${r.parents_suspended ?? 0}. The attendance sheet and class-update roster update within the hour.`);
+    load();
+  }
+
+  // Guardians and emergency contacts: office edits (phase 30 day, #138). Admin policies existed already;
+  // the protect_guardian_columns trigger lets a signed-in admin change e-mails (SQL-editor edits are reverted).
+  async function saveGuardian() {
+    if (!s || !gForm) return;
+    const row = { name: gForm.name.trim(), relationship: gForm.relationship, phone: gForm.phone.trim() || null, email: gForm.email.trim().toLowerCase() || null };
+    if (!row.name) return alert("Name is required.");
+    const { error } = gForm.id
+      ? await supabase.from("guardians").update(row).eq("id", gForm.id)
+      : await supabase.from("guardians").insert({ ...row, student_id: s.id, sort: s.guardians.length ? Math.max(...s.guardians.map((g) => g.sort)) + 1 : 1 });
+    if (error) return alert("Save failed: " + error.message);
+    setGForm(null); load();
+  }
+  async function removeGuardian(g: Student["guardians"][number]) {
+    if (!confirm(`Remove ${g.name} from ${s?.first_name}'s guardians? Their portal login (if any) is not deleted.`)) return;
+    const { error } = await supabase.from("guardians").delete().eq("id", g.id);
+    if (error) return alert("Remove failed: " + error.message);
+    setMenu(null); load();
+  }
+  async function saveContact() {
+    if (!s || !cForm) return;
+    const row = { name: cForm.name.trim(), phone: cForm.phone.trim(), relationship: cForm.relationship.trim() || null, is_primary: cForm.is_primary };
+    if (!row.name || !row.phone) return alert("Name and phone are required.");
+    if (row.is_primary) await supabase.from("emergency_contacts").update({ is_primary: false }).eq("student_id", s.id);
+    const { error } = cForm.id
+      ? await supabase.from("emergency_contacts").update(row).eq("id", cForm.id)
+      : await supabase.from("emergency_contacts").insert({ ...row, student_id: s.id });
+    if (error) return alert("Save failed: " + error.message);
+    setCForm(null); load();
+  }
+  async function removeContact(c: Student["emergency_contacts"][number]) {
+    if (!confirm(`Remove emergency contact ${c.name}?`)) return;
+    const { error } = await supabase.from("emergency_contacts").delete().eq("id", c.id);
+    if (error) return alert("Remove failed: " + error.message);
+    load();
+  }
+
   if (configMissing) return <p className="text-sm text-gray-500">Connect the database to view student profiles.</p>;
   if (err) return <p className="text-sm text-red-600">{err}</p>;
   if (!s) return <p className="text-sm text-gray-500">Loading…</p>;
@@ -246,7 +308,15 @@ export default function StudentProfile() {
             Student ID <span className="font-mono font-semibold">{String(s.student_no).padStart(5, "0")}</span>
             {s.date_of_birth && <> · DOB {usDate(s.date_of_birth)}</>}
             {s.gender && <> · {s.gender}</>}
-            {s.archived && <span className="ml-2 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Archived</span>}
+            {(() => {
+              const e = s.enrollments.find((x) => x.status === "suspended") ?? s.enrollments.find((x) => x.status === "withdrawn");
+              if (e && !s.enrollments.some((x) => x.status === "active")) return (
+                <span title={e.exit_reason ?? ""} className={`ml-2 rounded-full px-2.5 py-0.5 text-xs font-semibold ${e.status === "suspended" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>
+                  {e.status === "suspended" ? "Suspended" : "Withdrawn"}{e.exit_date ? ` since ${usDate(e.exit_date)}` : ""}
+                </span>
+              );
+              return s.archived ? <span className="ml-2 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-600">Archived</span> : null;
+            })()}
           </div>
           {(() => { const b = consentBadge(consent); return (
             <button onClick={() => setFormOpen("consent")} title={b.title + " — click to open the consent form"}
@@ -256,11 +326,80 @@ export default function StudentProfile() {
           ); })()}
         </div>
         </div>
-        <button onClick={toggleArchive}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
-          {s.archived ? "Restore" : "Archive"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {s.enrollments.some((e) => e.status === "active") ? (
+            <>
+              <button onClick={() => { setStatusForm({ date: todayStr(), reason: "", closeFee: true, suspendLogins: true }); setStatusDlg("suspend"); }}
+                className="rounded-lg border border-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">Suspend</button>
+              <button onClick={() => { setStatusForm({ date: todayStr(), reason: "", closeFee: true, suspendLogins: true }); setStatusDlg("withdraw"); }}
+                className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">Withdraw</button>
+            </>
+          ) : s.enrollments.some((e) => e.status === "suspended" || e.status === "withdrawn") ? (
+            <button onClick={() => { setStatusForm({ date: todayStr(), reason: "", closeFee: true, suspendLogins: true }); setStatusDlg("reinstate"); }}
+              className="rounded-lg bg-emerald-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-deep">Reinstate</button>
+          ) : (
+            <button onClick={toggleArchive}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
+              {s.archived ? "Restore" : "Archive"}
+            </button>
+          )}
+        </div>
       </div>
+      {statusMsg && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+          <span>{statusMsg}</span>
+          <button onClick={() => setStatusMsg(null)} className="text-xs font-semibold text-green-700 hover:underline">Dismiss</button>
+        </div>
+      )}
+
+      {statusDlg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !statusBusy && setStatusDlg(null)}>
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display text-lg font-semibold text-navy">
+              {statusDlg === "suspend" ? "Suspend" : statusDlg === "withdraw" ? "Withdraw" : "Reinstate"} {s.first_name} {s.last_name}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              {statusDlg === "suspend" && "Suspended = may return. The enrollment is paused from the date below, the student leaves the attendance sheet and the class-update roster within the hour, and fee reminders stop."}
+              {statusDlg === "withdraw" && "Withdrawn = has left the school. The enrollment is closed from the date below, the student leaves the attendance sheet and the class-update roster within the hour, and fee reminders stop."}
+              {statusDlg === "reinstate" && "The enrollment becomes active again, the student returns to the attendance sheet and roster within the hour, closed fee plans re-open and the family's portal logins are restored."}
+            </p>
+            {statusDlg !== "reinstate" && (
+              <label className="mt-3 block text-xs font-semibold text-gray-600">Type
+                <div className="mt-1 flex gap-2">
+                  {(["suspend", "withdraw"] as const).map((k) => (
+                    <button key={k} onClick={() => setStatusDlg(k)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${statusDlg === k ? (k === "suspend" ? "border-amber-500 bg-amber-100 text-amber-900" : "border-red-400 bg-red-100 text-red-800") : "border-gray-300 text-gray-600 hover:bg-silver"}`}>
+                      {k === "suspend" ? "Suspended (may return)" : "Withdrawn (left)"}
+                    </button>
+                  ))}
+                </div>
+              </label>
+            )}
+            <label className="mt-3 block text-xs font-semibold text-gray-600">Effective date
+              <input type="date" value={statusForm.date} onChange={(e) => setStatusForm({ ...statusForm, date: e.target.value })}
+                className="mt-1 block rounded border border-gray-300 px-2 py-1.5 text-sm font-normal" />
+            </label>
+            <label className="mt-3 block text-xs font-semibold text-gray-600">Reason{statusDlg === "reinstate" ? " (optional)" : " (required)"}
+              <textarea rows={2} value={statusForm.reason} onChange={(e) => setStatusForm({ ...statusForm, reason: e.target.value })}
+                placeholder={statusDlg === "reinstate" ? "e.g. family back from travel" : "e.g. family relocated · too young for the class · not attending since 09-15"}
+                className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm font-normal" />
+            </label>
+            {statusDlg !== "reinstate" && (
+              <div className="mt-3 space-y-1.5 text-sm text-gray-700">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={statusForm.closeFee} onChange={(e) => setStatusForm({ ...statusForm, closeFee: e.target.checked })} /> Close the fee plan (no more invoices or reminders)</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={statusForm.suspendLogins} onChange={(e) => setStatusForm({ ...statusForm, suspendLogins: e.target.checked })} /> Suspend the parent login if the family has no other active child</label>
+              </div>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setStatusDlg(null)} disabled={statusBusy} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-silver">Cancel</button>
+              <button onClick={submitStatus} disabled={statusBusy || (statusDlg !== "reinstate" && !statusForm.reason.trim()) || !statusForm.date}
+                className={`rounded-lg px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50 ${statusDlg === "suspend" ? "bg-amber-600 hover:bg-amber-700" : statusDlg === "withdraw" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-brand hover:bg-emerald-deep"}`}>
+                {statusBusy ? "Saving…" : statusDlg === "suspend" ? "Suspend" : statusDlg === "withdraw" ? "Withdraw" : "Reinstate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {siblings.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -337,8 +476,10 @@ export default function StudentProfile() {
                     <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                       Starts {new Date(feeInfo.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
-                  ) : feeInfo.payments.some((p) => p.payment_date.startsWith(monthStr())) ? (
+                  ) : feeInfo.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr()) && p.payment_method !== "waived") ? (
                     <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
+                  ) : feeInfo.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr())) ? (
+                    <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">Waived this month</span>
                   ) : (
                     <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">Not paid (due by the 5th)</span>
                   )}
@@ -346,8 +487,10 @@ export default function StudentProfile() {
                 {[...feeInfo.payments].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).slice(0, 5).map((p, i) => (
                   <div key={i} className="flex justify-between border-b py-1 text-sm last:border-0">
                     <span className="text-gray-500">{p.payment_date}</span>
-                    <span className="font-semibold text-navy">${Number(p.amount).toFixed(2)}</span>
-                    <span className="text-xs text-gray-400">{p.payment_method}</span>
+                    <span className={`font-semibold ${p.payment_method === "waived" ? "text-gray-400 line-through" : "text-navy"}`}>${Number(p.amount).toFixed(2)}</span>
+                    {p.payment_method === "waived"
+                      ? <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700">Waived</span>
+                      : <span className="text-xs text-gray-400">{p.payment_method}</span>}
                   </div>
                 ))}
                 {!feeInfo.payments.length && <p className="text-xs text-gray-400">No payments recorded yet.</p>}
@@ -398,7 +541,13 @@ export default function StudentProfile() {
                   <tr key={e.id} className="border-b last:border-0">
                     <td className="py-2 font-semibold text-navy">{e.school_year}</td>
                     <td className="py-2">{e.grade_name}</td>
-                    <td className="py-2 text-gray-500">{e.status}</td>
+                    <td className="py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        e.status === "active" ? "bg-green-100 text-green-700" : e.status === "suspended" ? "bg-amber-100 text-amber-800"
+                        : e.status === "withdrawn" ? "bg-red-100 text-red-700" : "bg-gray-200 text-gray-600"}`}>{e.status}</span>
+                      {e.exit_date && <span className="ml-2 text-xs text-gray-500">{usDate(e.exit_date)}</span>}
+                      {e.exit_reason && <div className="mt-0.5 text-xs text-gray-400">{e.exit_reason}</div>}
+                    </td>
                     <td className="py-2 text-gray-400">{e.enrollment_date}</td>
                   </tr>
                 ))}
@@ -408,7 +557,28 @@ export default function StudentProfile() {
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Parents &amp; Guardians</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">Parents &amp; Guardians</h2>
+            <button onClick={() => setGForm({ id: null, name: "", relationship: "father", phone: "", email: "" })}
+              className="text-xs font-semibold text-royal hover:underline">+ Add parent / guardian</button>
+          </div>
+          {gForm && (
+            <div className="mb-3 rounded-lg border border-gray-200 bg-silver/50 p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input placeholder="Full name" value={gForm.name} onChange={(e) => setGForm({ ...gForm, name: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <select value={gForm.relationship} onChange={(e) => setGForm({ ...gForm, relationship: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm">
+                  {["father", "mother", "guardian"].map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <input placeholder="Phone" value={gForm.phone} onChange={(e) => setGForm({ ...gForm, phone: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <input placeholder="E-mail (links the portal login)" type="email" value={gForm.email} onChange={(e) => setGForm({ ...gForm, email: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+              </div>
+              <p className="mt-1.5 text-[11px] text-gray-500">The e-mail is what ties this parent to a Family Portal login and to their other children. Changing it here does not change the login itself.</p>
+              <div className="mt-2 flex gap-2">
+                <button onClick={saveGuardian} className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-royal">{gForm.id ? "Save changes" : "Add"}</button>
+                <button onClick={() => setGForm(null)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white">Cancel</button>
+              </div>
+            </div>
+          )}
           {(() => {
             const accounts = s.parent_students.map((ps) => ps.profiles);
             const accOf = (email: string | null) => email ? accounts.find((a) => a.email?.toLowerCase() === email.toLowerCase()) : undefined;
@@ -484,19 +654,45 @@ export default function StudentProfile() {
                 </button>
                 <button onClick={() => { setMenu(null); nav(`/admin/parents/${menu.g.id}`); }}
                   className="block w-full px-3 py-2 text-left hover:bg-silver">Open parent profile</button>
+                <button onClick={() => { setGForm({ id: menu.g.id, name: menu.g.name, relationship: menu.g.relationship, phone: menu.g.phone ?? "", email: menu.g.email ?? "" }); setMenu(null); }}
+                  className="block w-full px-3 py-2 text-left hover:bg-silver">Edit details</button>
+                <button onClick={() => removeGuardian(menu.g)}
+                  className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50">Remove from this student</button>
               </div>
             </>
           )}
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Emergency Contacts</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-400">Emergency Contacts</h2>
+            <button onClick={() => setCForm({ id: null, name: "", phone: "", relationship: "", is_primary: !s.emergency_contacts.length })}
+              className="text-xs font-semibold text-royal hover:underline">+ Add contact</button>
+          </div>
+          {cForm && (
+            <div className="mb-3 rounded-lg border border-gray-200 bg-silver/50 p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input placeholder="Full name" value={cForm.name} onChange={(e) => setCForm({ ...cForm, name: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <input placeholder="Phone" value={cForm.phone} onChange={(e) => setCForm({ ...cForm, phone: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <input placeholder="Relationship (aunt, neighbour …)" value={cForm.relationship} onChange={(e) => setCForm({ ...cForm, relationship: e.target.value })} className="rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={cForm.is_primary} onChange={(e) => setCForm({ ...cForm, is_primary: e.target.checked })} /> Primary contact</label>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button onClick={saveContact} className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-royal">{cForm.id ? "Save changes" : "Add"}</button>
+                <button onClick={() => setCForm(null)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white">Cancel</button>
+              </div>
+            </div>
+          )}
           {s.emergency_contacts.length ? s.emergency_contacts.map((c) => (
-            <div key={c.id} className="py-1 text-sm">
+            <div key={c.id} className="flex flex-wrap items-center gap-x-2 py-1 text-sm">
               <span className="font-semibold text-navy">{c.name}</span>
-              <span className="ml-2 text-gray-500">{usPhone(c.phone)}</span>
-              {c.relationship && <span className="ml-2 text-gray-400">({c.relationship})</span>}
-              {c.is_primary && <span className="ml-2 rounded-full bg-gold/20 px-2 py-0.5 text-xs text-navy">Primary</span>}
+              <span className="text-gray-500">{usPhone(c.phone)}</span>
+              {c.relationship && <span className="text-gray-400">({c.relationship})</span>}
+              {c.is_primary && <span className="rounded-full bg-gold/20 px-2 py-0.5 text-xs text-navy">Primary</span>}
+              <span className="ml-auto whitespace-nowrap">
+                <button onClick={() => setCForm({ id: c.id, name: c.name, phone: c.phone, relationship: c.relationship ?? "", is_primary: c.is_primary })} className="text-xs font-semibold text-royal hover:underline">Edit</button>
+                <button onClick={() => removeContact(c)} className="ml-3 text-xs text-red-600 hover:underline">Remove</button>
+              </span>
             </div>
           )) : <p className="text-sm font-semibold text-red-500">⚠ No emergency contact on file (BR-007).</p>}
         </section>

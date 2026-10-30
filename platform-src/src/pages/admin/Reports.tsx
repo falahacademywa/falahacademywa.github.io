@@ -52,18 +52,25 @@ export default function Reports() {
 
   async function exportFees() {
     const { data } = await supabase.from("fee_plans")
-      .select("plan_name, total_amount, billing_frequency, enrollments!inner ( grade_name, status, students ( student_no, first_name, last_name ) ), payments ( payment_date, amount )")
+      .select("plan_name, total_amount, billing_frequency, enrollments!inner ( grade_name, status, students ( student_no, first_name, last_name ) ), payments ( payment_date, period_month, amount, payment_method )")
       .eq("enrollments.status", "active");
     const thisMonth = monthStr();
+    // waived months (phase 29) are not money: own column, never in "Total Paid"
+    const key = (p: any) => (p.period_month ?? p.payment_date).slice(0, 7);
     downloadCsv("falah-fees.csv",
-      ["StudentNo", "Student", "Grade", "Plan $", "Frequency", "Total Paid", "Paid This Month"],
-      (data ?? []).map((r: any) => [
-        r.enrollments.students.student_no,
-        `${r.enrollments.students.first_name} ${r.enrollments.students.last_name}`,
-        r.enrollments.grade_name, r.total_amount, r.billing_frequency,
-        r.payments.reduce((s: number, p: any) => s + Number(p.amount), 0),
-        r.payments.some((p: any) => p.payment_date.startsWith(thisMonth)) ? "Yes" : "No",
-      ]));
+      ["StudentNo", "Student", "Grade", "Plan $", "Frequency", "Total Paid", "Total Waived", "This Month"],
+      (data ?? []).map((r: any) => {
+        const real = r.payments.filter((p: any) => p.payment_method !== "waived");
+        const waived = r.payments.filter((p: any) => p.payment_method === "waived");
+        return [
+          r.enrollments.students.student_no,
+          `${r.enrollments.students.first_name} ${r.enrollments.students.last_name}`,
+          r.enrollments.grade_name, r.total_amount, r.billing_frequency,
+          real.reduce((s: number, p: any) => s + Number(p.amount), 0),
+          waived.reduce((s: number, p: any) => s + Number(p.amount), 0),
+          real.some((p: any) => key(p) === thisMonth) ? "Paid" : waived.some((p: any) => key(p) === thisMonth) ? "Waived" : "Due",
+        ];
+      }));
     setMsg("Fees exported.");
   }
 
@@ -96,7 +103,7 @@ export default function Reports() {
         </div>
         <div className={card}>
           <h2 className="font-semibold text-navy">Fees Status</h2>
-          <p className="mb-3 mt-1 text-sm text-gray-500">Every active fee plan with totals and this-month payment status.</p>
+          <p className="mb-3 mt-1 text-sm text-gray-500">Every active fee plan with totals (paid and waived separately) and this-month status: Paid, Waived or Due.</p>
           <button className={btn} onClick={exportFees}>Export CSV</button>
         </div>
         <div className={card}>
