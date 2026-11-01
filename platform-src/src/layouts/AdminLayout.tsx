@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase, configMissing } from "../lib/supabase";
 import { moduleForPath } from "../lib/permissions";
@@ -18,7 +18,7 @@ const nav = [
   { to: "/admin/academics", label: "Academics & Qur'an", module: "academics" },
   { to: "/admin/assignments", label: "Assignments", module: "academics" },
   { to: "/admin/updates", label: "Class Updates", module: "academics" },
-  { to: "/admin/redcomet", label: "Red Comet", module: "academics" },
+  { to: "/admin/redcomet", label: "Red Comet", module: "redcomet" },
   { to: "/admin/calendar", label: "Calendar", module: "calendar" },
   { to: "/admin/announcements", label: "Announcements", module: "announcements" },
   { to: "/admin/feedback", label: "Feedback", module: "feedback" },
@@ -54,13 +54,16 @@ function MenuBadge({ values, to, active }: { values?: number[]; to?: string; act
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; link_path: string | null; created_at: string }
 
 export default function AdminLayout() {
-  const { profile, signOut, can } = useAuth();
+  const { profile, signOut, can, isTeacher } = useAuth();
   const nav2 = useNavigate();
   const loc = useLocation();
   const isStaff = profile?.role === "staff";
   const portalLabel = isStaff ? (profile?.title?.trim() || "Office Staff") : "Administration Portal";
   // Dashboard stays first; every other item is sorted A–Z, so new menu items find their own place.
-  const visibleNav = nav.filter((n) => !n.module || can(n.module))
+  // Settings sits apart at the bottom, just above the name and Sign out (President 2026-10-31).
+  const allowed = nav.filter((n) => !n.module || can(n.module));
+  const settingsItem = allowed.find((n) => n.to === "/admin/settings");
+  const visibleNav = allowed.filter((n) => n !== settingsItem)
     .sort((a, b) => (a.to === "/admin" ? -1 : b.to === "/admin" ? 1 : a.label.localeCompare(b.label)));
   // Staff with view-only access to the current module: the page renders, nothing submits.
   const mod = moduleForPath(loc.pathname);
@@ -188,8 +191,22 @@ export default function AdminLayout() {
             </NavLink>
           ))}
         </nav>
+        {settingsItem && (
+          <div className="border-t border-white/10 px-3 py-2">
+            <NavLink to={settingsItem.to} onClick={() => setOpen(false)}
+              className={({ isActive }) => `flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${isActive ? "bg-emerald-brand font-semibold text-white" : "text-white/80 hover:bg-white/10"}`}>
+              <span aria-hidden>⚙</span><span>{settingsItem.label}</span>
+            </NavLink>
+          </div>
+        )}
         <div className="border-t border-white/10 p-4 text-sm">
           <div className="mb-2 truncate text-white/70">{profile?.full_name}{isStaff && <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-300">staff</span>}</div>
+          {isTeacher && (
+            <Link to="/teacher" onClick={() => setOpen(false)}
+              className="mb-2 flex items-center justify-center gap-1.5 rounded-lg border border-white/25 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10">
+              ⇄ Switch to teacher app
+            </Link>
+          )}
           <button onClick={signOut} className="text-white/60 underline hover:text-white">Sign out</button>
         </div>
       </aside>

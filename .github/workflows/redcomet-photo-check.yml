@@ -1,0 +1,69 @@
+name: Red Comet photo check
+
+# Phase 31 (President 2026-10-31): every workbook photo the teachers send is checked by an
+# open-source image model (CLIP, on GitHub's runner, free on this public repo — no AI service,
+# no cost, no office PC). Photos that do not look like school work are flagged: the uploader,
+# the grade's teachers, admins and staff with Red Comet edit get a portal notification and an
+# e-mail, and the photo stays out of the office OneDrive until someone deletes it or presses
+# "It is school work". Script: scripts/photo_check.py. Same repo secrets as the other jobs:
+#   PLATFORM_SUPABASE_URL, PLATFORM_SUPABASE_SERVICE_KEY, BREVO_API_KEY (optional)
+# PROD: every hour (the first step exits in seconds when nothing is waiting); also runnable by hand.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Score only, write nothing (1 = yes)"
+        required: false
+        default: "0"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Anything to check?
+        id: pending
+        env:
+          URL: ${{ secrets.PLATFORM_SUPABASE_URL }}
+          KEY: ${{ secrets.PLATFORM_SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "count=0" >> "$GITHUB_OUTPUT"; echo "secrets not set"; exit 0; fi
+          n=$(curl -s "$URL/rest/v1/work_uploads?select=id&check_status=eq.pending&limit=1" \
+                -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | jq 'if type=="array" then length else 0 end')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          echo "pending photos (first page): $n"
+
+      - uses: actions/setup-python@v5
+        if: steps.pending.outputs.count != '0'
+        with:
+          python-version: "3.12"
+
+      - name: Cache model and packages
+        if: steps.pending.outputs.count != '0'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/huggingface
+          key: clip-vitb32-torch251-tf4463-v1
+
+      - name: Install CLIP (CPU)
+        if: steps.pending.outputs.count != '0'
+        run: |
+          pip install --quiet torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet transformers==4.46.3 pillow==11.0.0
+
+      - name: Check photos
+        if: steps.pending.outputs.count != '0'
+        env:
+          PLATFORM_SUPABASE_URL: ${{ secrets.PLATFORM_SUPABASE_URL }}
+          PLATFORM_SUPABASE_SERVICE_KEY: ${{ secrets.PLATFORM_SUPABASE_SERVICE_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          PHOTO_CHECK_DRY_RUN: ${{ github.event.inputs.dry_run || '0' }}
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: python scripts/photo_check.py

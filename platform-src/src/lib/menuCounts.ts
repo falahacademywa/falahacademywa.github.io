@@ -84,6 +84,9 @@ export async function loadMenuCounts(can: (module: string) => boolean): Promise<
   if (can("academics"))
     jobs.push(count("class_updates", (q) => q.gt("created_at", seenUpdatesAt())).then((n) => { out["/admin/updates"] = [n]; }));
 
+  if (can("redcomet"))   // photos the hourly check flagged (phase 31): someone must delete or clear them
+    jobs.push(count("work_uploads", (q) => q.eq("check_status", "flagged")).then((n) => { out["/admin/redcomet"] = [n]; }));
+
   if (can("tasks"))
     jobs.push((async () => {
       const { data } = await supabase.from("admin_tasks").select("*").eq("is_done", false);

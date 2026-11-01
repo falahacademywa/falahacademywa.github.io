@@ -47,7 +47,7 @@ export default function Dashboard() {
   // Red Comet workbook photos not yet entered (status new/drafted): students and photos per grade (#149)
   const [rcPending, setRcPending] = useState<Record<number, { students: Set<string>; photos: number }> | null>(null);
   useEffect(() => {
-    if (configMissing || !can("academics")) return;
+    if (configMissing || (!can("academics") && !can("redcomet"))) return;
     Promise.all([
       supabase.from("grades").select("id, name, level_order").eq("is_active", true).order("level_order"),
       supabase.from("class_updates").select("subject, grade_id, enrollments ( grade_id )").gte("update_date", week[0]).lte("update_date", week[1]),
@@ -152,7 +152,7 @@ export default function Dashboard() {
           </Link>
         ))}
 
-        {can("academics") && rcPending && Object.keys(rcPending).length > 0 && (() => {
+        {can("redcomet") && rcPending && Object.keys(rcPending).length > 0 && (() => {
           const total = new Set(Object.values(rcPending).flatMap((e) => [...e.students])).size;
           return (
             <Link to="/admin/redcomet?status=pending" title="Students with workbook photos not yet entered in Red Comet · click to open"

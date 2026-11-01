@@ -3,6 +3,10 @@
 // with one `work_uploads` row each; scripts/redcomet-pull.py (hourly on the
 // President's PC) copies them into the student's OneDrive inbox folder, where
 // the Buzz transcription agent works from, and moves the status along.
+// Phase 31 (2026-10-31): "Select" → delete photos not yet entered in Red Comet (the
+// database refuses entered ones and allows only the teacher's own grades); photos the
+// hourly photo check flagged show red with "It is school work" / "Delete", and stay in
+// the list past the current week until someone deals with them.
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -11,7 +15,7 @@ import { useRoster, compressImage, todayISO } from "../../lib/teacher";
 import { usDate } from "../../lib/format";
 
 interface Picked { file: File; url: string }
-interface Upload { id: number; taken_at: string; note: string | null; status: string; path: string; created_at: string; subject: string | null }
+interface Upload { id: number; taken_at: string; note: string | null; status: string; path: string; created_at: string; subject: string | null; check_status?: string; check_label?: string | null }
 const RC_SUBJECTS = ["English", "Maths", "Science"] as const;   // Red Comet courses the school uses (2026-10-22)
 const STATUS: Record<string, string> = { new: "sent", drafted: "received by office", confirmed: "entered in Red Comet", rejected: "not used" };
 
@@ -28,6 +32,10 @@ export default function Progress() {
   const [msg, setMsg] = useState<string | null>(null);
   const [recent, setRecent] = useState<Upload[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [selecting, setSelecting] = useState(false);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [listMsg, setListMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [listBusy, setListBusy] = useState(false);
 
   // no default student: the teacher must pick the child every time, so pages
   // cannot land under the first name in the list by accident (2026-10-22)
@@ -40,8 +48,9 @@ export default function Progress() {
     // this week only (Monday to Sunday): the list is a check of what was sent, not a history
     const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow);
     const weekStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at, subject")
-      .eq("enrollment_id", e).gte("taken_at", weekStart).order("created_at", { ascending: false }).limit(60);
+    // …plus any older photo the photo check flagged, so it is never out of sight
+    const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at, subject, check_status, check_label")
+      .eq("enrollment_id", e).or(`taken_at.gte.${weekStart},check_status.eq.flagged`).order("created_at", { ascending: false }).limit(60);
     const rows = (data as Upload[]) ?? [];
     setRecent(rows);
     const missing = rows.filter((r) => !thumbs[r.path]).map((r) => r.path);
@@ -52,7 +61,33 @@ export default function Progress() {
       setThumbs((t) => ({ ...t, ...add }));
     }
   }
-  useEffect(() => { loadRecent(); }, [enr]);
+  useEffect(() => { loadRecent(); setSelecting(false); setSel(new Set()); setListMsg(null); }, [enr]);
+
+  function toggleSel(u: Upload) {
+    if (u.status === "confirmed") return;
+    setSel((s) => { const n = new Set(s); n.has(u.id) ? n.delete(u.id) : n.add(u.id); return n; });
+  }
+  async function deleteUploads(ids: number[]) {
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setListBusy(true); setListMsg(null);
+    const { data, error } = await supabase.from("work_uploads").delete().in("id", ids).select("id, path");
+    if (error) { setListBusy(false); return setListMsg({ ok: false, text: "Could not delete: " + error.message }); }
+    const gone = (data as { id: number; path: string }[]) ?? [];
+    if (gone.length) await supabase.storage.from("student-work").remove(gone.map((g) => g.path));
+    setListBusy(false); setSel(new Set()); setSelecting(false);
+    const skipped = ids.length - gone.length;
+    setListMsg({ ok: true, text: `${gone.length} photo${gone.length === 1 ? "" : "s"} deleted${skipped ? `, ${skipped} could not be (already entered)` : ""}.` });
+    loadRecent();
+  }
+  async function clearFlag(ids: number[]) {
+    setListBusy(true); setListMsg(null);
+    const { error } = await supabase.from("work_uploads").update({ check_status: "cleared" }).in("id", ids);
+    setListBusy(false);
+    if (error) return setListMsg({ ok: false, text: "Could not save: " + error.message });
+    setListMsg({ ok: true, text: "Marked as school work. It goes to the office on the next hourly run." });
+    loadRecent();
+  }
 
   function pick(sb: Subject, files: FileList | null) {
     if (!files) return;
@@ -142,18 +177,50 @@ export default function Progress() {
 
       {student && (
         <>
-          <h2 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wide text-gray-400">Sent this week for {student.first_name}</h2>
-          <div className="grid grid-cols-3 gap-2">
-            {recent.map((u) => (
-              <div key={u.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-                <div className="aspect-[3/4] bg-silver">{thumbs[u.path] && <img src={thumbs[u.path]} alt="" className="h-full w-full object-cover" />}</div>
-                <div className="px-1.5 py-1 text-[10px] leading-tight">
-                  <div className="text-gray-500">{usDate(u.taken_at)}{u.subject && u.subject !== "Red Comet" ? ` · ${u.subject}` : ""}</div>
-                  <div className={`font-semibold ${u.status === "confirmed" ? "text-emerald-deep" : u.status === "rejected" ? "text-red-600" : "text-amber-700"}`}>{STATUS[u.status] ?? u.status}</div>
-                </div>
-              </div>
-            ))}
+          <div className="mb-2 mt-5 flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-gray-400">Sent this week for {student.first_name}</h2>
+            {recent.some((u) => u.status !== "confirmed") && (
+              <button type="button" onClick={() => { setSelecting(!selecting); setSel(new Set()); }}
+                className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${selecting ? "border-red-600 bg-red-600 text-white" : "border-gray-300 bg-white text-gray-600"}`}>
+                {selecting ? "Cancel" : "Select"}
+              </button>
+            )}
           </div>
+          {selecting && <p className="mb-2 text-[11px] text-gray-500">Tap the photos to delete. Photos already entered in Red Comet cannot be deleted.</p>}
+          {listMsg && <div className={`mb-2 rounded-lg p-2 text-xs ${listMsg.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{listMsg.text}</div>}
+          <div className="grid grid-cols-3 gap-2">
+            {recent.map((u) => {
+              const flagged = u.check_status === "flagged";
+              const on = sel.has(u.id);
+              return (
+                <div key={u.id} onClick={() => selecting && toggleSel(u)}
+                  className={`relative overflow-hidden rounded-lg border bg-white ${flagged ? "border-2 border-red-500" : "border-gray-200"} ${on ? "ring-4 ring-red-500" : ""} ${selecting && u.status === "confirmed" ? "opacity-40" : ""}`}>
+                  <div className="aspect-[3/4] bg-silver">{thumbs[u.path] && <img src={thumbs[u.path]} alt="" className="h-full w-full object-cover" />}</div>
+                  {selecting && u.status !== "confirmed" && (
+                    <span className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow ${on ? "bg-red-600" : "bg-black/40"}`}>{on ? "✓" : ""}</span>
+                  )}
+                  <div className="px-1.5 py-1 text-[10px] leading-tight">
+                    <div className="text-gray-500">{usDate(u.taken_at)}{u.subject && u.subject !== "Red Comet" ? ` · ${u.subject}` : ""}</div>
+                    {flagged
+                      ? <div className="font-semibold text-red-600">⚠ needs a look</div>
+                      : <div className={`font-semibold ${u.status === "confirmed" ? "text-emerald-deep" : u.status === "rejected" ? "text-red-600" : "text-amber-700"}`}>{STATUS[u.status] ?? u.status}</div>}
+                  </div>
+                  {flagged && !selecting && (
+                    <div className="grid grid-cols-2 border-t border-red-100 text-[10px] font-semibold">
+                      <button type="button" disabled={listBusy} onClick={() => clearFlag([u.id])} className="py-1.5 text-emerald-deep active:bg-emerald-50">It is work</button>
+                      <button type="button" disabled={listBusy} onClick={() => deleteUploads([u.id])} className="border-l border-red-100 py-1.5 text-red-600 active:bg-red-50">Delete</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {selecting && (
+            <button type="button" disabled={!sel.size || listBusy} onClick={() => deleteUploads([...sel])}
+              className="mt-3 w-full rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+              {listBusy ? "Deleting…" : sel.size ? `Delete ${sel.size} photo${sel.size === 1 ? "" : "s"}` : "Tap photos to select"}
+            </button>
+          )}
           {!recent.length && <p className="text-sm text-gray-400">Nothing sent this week yet.</p>}
         </>
       )}

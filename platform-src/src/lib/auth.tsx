@@ -21,6 +21,9 @@ interface AuthState {
   profile: Profile | null;
   perms: Record<string, Level>;                 // staff module permissions (phase 19); admins pass everything
   can: (module: string, level?: Level) => boolean;
+  // this login is linked to an active teacher record with app access (phase 26) — true for
+  // role 'teacher', and for an admin or staff login that also teaches (switch, 2026-10-31)
+  isTeacher: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -31,6 +34,7 @@ const AuthContext = createContext<AuthState>({
   profile: null,
   perms: {},
   can: () => false,
+  isTeacher: false,
   loading: true,
   signOut: async () => {},
   refreshProfile: async () => {},
@@ -40,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [perms, setPerms] = useState<Record<string, Level>>({});
+  const [isTeacher, setIsTeacher] = useState(false);
   // booted: the stored session has been read from the browser. Until then we
   // must NOT redirect anyone to /login — that race was signing users out on refresh.
   const [booted, setBooted] = useState(configMissing);
@@ -65,9 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let r = await supabase.from("profiles").select("id, full_name, role, must_change_password, title, suspended").eq("id", uid).single();
     if (r.error) r = await supabase.from("profiles").select("id, full_name, role, must_change_password").eq("id", uid).single();
     const p = (r.data as Profile) ?? null;
+    // a teacher link on an admin/staff login opens the teacher app too (is_teacher() checks the record)
+    let teach = p?.role === "teacher";
+    if (p && (p.role === "admin" || p.role === "staff")) {
+      const { data } = await supabase.rpc("is_teacher");
+      teach = data === true;
+    }
+    setIsTeacher(teach);
     setProfile(p);
     // teacher app (phase 26): stamp the last sign-in for Admin → Teachers
-    if (p?.role === "teacher") supabase.rpc("teacher_touch_sign_in").then(() => {});
+    if (teach) supabase.rpc("teacher_touch_sign_in").then(() => {});
     if (p?.role === "staff") {
       const { data } = await supabase.from("staff_permissions").select("module, level").eq("user_id", uid);
       const m: Record<string, Level> = {};
@@ -104,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, profile, perms, can, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, profile, perms, can, isTeacher, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
@@ -132,14 +144,16 @@ export function Splash() {
 }
 
 export function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, isTeacher } = useAuth();
   // Splash only before the FIRST profile load — a background re-fetch for the
   // same user must not unmount the page beneath it.
   if (loading && !profile) return <Splash />;
   if (!session || !profile) return <Navigate to="/login" replace />;
   if (profile.must_change_password) return <Navigate to="/change-password" replace />;
   if (profile.suspended && profile.role !== "admin") return <SuspendedNotice />;
-  if (!roles.includes(profile.role)) return <Navigate to={homeFor(profile.role)} replace />;
+  // the teacher app also opens for an admin/staff login linked to a teacher record
+  const ok = roles.includes(profile.role) || (roles.includes("teacher") && isTeacher);
+  if (!ok) return <Navigate to={homeFor(profile.role)} replace />;
   return <>{children}</>;
 }
 

@@ -16,6 +16,8 @@ export interface Task {
   source?: string;           // 'TODO.md' (synced from the hub) or 'portal' (created here, phase 20)
   notes?: string | null;
   created_at?: string;
+  assigned_user?: string | null;   // phase 31: the admin/staff login the task is delegated to
+  assign_pending?: boolean;        // phase 31: reassigned in the portal, TODO.md not updated yet
 }
 
 // Priority picker on the phone form → due date (the tracker's urgency comes from the date)

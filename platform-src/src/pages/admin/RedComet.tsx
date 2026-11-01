@@ -8,6 +8,10 @@
 // status. The status answers one question — were these pages entered in Red
 // Comet or not? — and follows scripts/redcomet-pull.py: confirmed = entered;
 // new/drafted = not yet; rejected = not used. (President 2026-10-28)
+// Phase 31 (2026-10-31): own staff module 'redcomet'; "Select photos" → Delete for
+// photos not yet entered (the database refuses entered ones; the hourly pull removes
+// the OneDrive copy); the hourly photo check (GitHub Actions + CLIP) flags photos that
+// do not look like workbook pages — they show red, with "It is school work" to clear.
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
@@ -20,11 +24,12 @@ import { type GradeLite, gradeColor, shiftMonth, monthLabel, monthRange } from "
 interface Row {
   id: number; enrollment_id: string; path: string; taken_at: string; subject: string | null; note: string | null;
   status: string; created_at: string; uploaded_by: string | null;
+  check_status?: string; check_label?: string | null;
   enrollments: { grade_id: number; students: { first_name: string; last_name: string } } | null;
   profiles: { full_name: string | null } | null;
 }
 type Entered = "entered" | "pending" | "rejected";
-interface Card { key: string; day: string; enrollment_id: string; student: string; grade_id: number | null; subject: string; teacher: string; rows: Row[]; entered: Entered; done: number }
+interface Card { key: string; day: string; enrollment_id: string; student: string; grade_id: number | null; subject: string; teacher: string; rows: Row[]; entered: Entered; done: number; flagged: number }
 type View = "timeline" | "grouped";
 
 const enteredOf = (s: string): Entered => (s === "confirmed" ? "entered" : s === "rejected" ? "rejected" : "pending");
@@ -53,6 +58,13 @@ export default function RedComet() {
   const [teacherF, setTeacherF] = useState("");
   const [sp] = useSearchParams();   // /admin/redcomet?status=pending from the Dashboard tile
   const [statusF, setStatusF] = useState<"" | Entered>(() => { const v = sp.get("status"); return v === "pending" || v === "entered" || v === "rejected" ? v : ""; });
+  const [checkF, setCheckF] = useState(sp.get("check") === "flagged");   // only photos the photo check flagged
+  const { can } = useAuth();
+  const canEdit = can("redcomet", "edit");
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [big, setBig] = useState<string | null>(null);
@@ -73,7 +85,7 @@ export default function RedComet() {
     const from = monthRange(lastMonth)[0];
     const to = monthRange(thisMonth)[1];
     const { data, error } = await supabase.from("work_uploads")
-      .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
+      .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
       .gte("taken_at", from).lte("taken_at", to)
       .order("taken_at", { ascending: false }).order("created_at", { ascending: false }).limit(2000);
     if (error) setMsg("Could not load: " + error.message);
@@ -112,7 +124,8 @@ export default function RedComet() {
     (!studentF || r.enrollment_id === studentF) &&
     (!subjectF || (r.subject ?? "No subject") === subjectF) &&
     (!teacherF || teacherName(r) === teacherF) &&
-    (!statusF || enteredOf(r.status) === statusF)), [rows, monthF, gradeF, studentF, subjectF, teacherF, statusF]);
+    (!statusF || enteredOf(r.status) === statusF) &&
+    (!checkF || r.check_status === "flagged")), [rows, monthF, gradeF, studentF, subjectF, teacherF, statusF, checkF]);
 
   // one entry per day + student + subject (a teacher's one "Send" for that subject)
   const cards = useMemo(() => {
@@ -120,7 +133,7 @@ export default function RedComet() {
     visible.forEach((r) => {
       const subject = r.subject ?? "No subject";
       const key = `${r.taken_at}|${r.enrollment_id}|${subject}`;
-      const c = m.get(key) ?? { key, day: r.taken_at, enrollment_id: r.enrollment_id, student: studentName(r), grade_id: r.enrollments?.grade_id ?? null, subject, teacher: teacherName(r), rows: [], entered: "entered" as Entered, done: 0 };
+      const c = m.get(key) ?? { key, day: r.taken_at, enrollment_id: r.enrollment_id, student: studentName(r), grade_id: r.enrollments?.grade_id ?? null, subject, teacher: teacherName(r), rows: [], entered: "entered" as Entered, done: 0, flagged: 0 };
       c.rows.push(r);
       m.set(key, c);
     });
@@ -128,6 +141,7 @@ export default function RedComet() {
       const used = c.rows.filter((r) => r.status !== "rejected");
       c.done = used.filter((r) => r.status === "confirmed").length;
       c.entered = !used.length ? "rejected" : c.done === used.length ? "entered" : "pending";
+      c.flagged = c.rows.filter((r) => r.check_status === "flagged").length;
     });
     return [...m.values()];
   }, [visible]);
@@ -177,12 +191,52 @@ export default function RedComet() {
     entered: cards.filter((c) => c.entered === "entered").length,
     pending: cards.filter((c) => c.entered === "pending").length,
     students: new Set(visible.map((r) => r.enrollment_id)).size,
-  }), [visible, cards]);
+    flagged: rows.filter((r) => r.check_status === "flagged").length,
+  }), [visible, cards, rows]);
+
+  // ---- delete (phase 31): only photos not yet entered in Red Comet ----
+  const deletable = (r: Row) => r.status !== "confirmed";
+  function togglePick(r: Row) {
+    if (!deletable(r)) return;
+    setPicked((s) => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; });
+  }
+  function pickMany(list: Row[], on: boolean) {
+    setPicked((s) => { const n = new Set(s); list.filter(deletable).forEach((r) => (on ? n.add(r.id) : n.delete(r.id))); return n; });
+  }
+  async function deleteRows(ids: number[]) {
+    if (!ids.length) return;
+    const n = ids.length;
+    if (!confirm(`Delete ${n} photo${n === 1 ? "" : "s"}?\n\nThey disappear from the portal now and from the office OneDrive within the hour. This cannot be undone.`)) return;
+    setBusy(`Deleting ${n}…`); setMsg(null); setOkMsg(null);
+    const { data, error } = await supabase.from("work_uploads").delete().in("id", ids).select("id, path");
+    if (error) { setBusy(null); setMsg("Could not delete: " + error.message); return; }
+    const gone = (data as { id: number; path: string }[]) ?? [];
+    let storageNote = "";
+    if (gone.length) {
+      const { error: e2 } = await supabase.storage.from("student-work").remove(gone.map((g) => g.path));
+      if (e2) storageNote = ` (the image files could not all be removed: ${e2.message})`;
+    }
+    setBusy(null); setPicked(new Set()); setSelecting(false);
+    const skipped = n - gone.length;
+    setOkMsg(`${gone.length} photo${gone.length === 1 ? "" : "s"} deleted${skipped ? `, ${skipped} not deleted (already entered or not allowed)` : ""}. The OneDrive copies go on the next hourly run.${storageNote}`);
+    load();
+  }
+  async function clearFlag(ids: number[]) {
+    if (!ids.length) return;
+    setBusy("Saving…"); setMsg(null); setOkMsg(null);
+    const { error } = await supabase.from("work_uploads").update({ check_status: "cleared" }).in("id", ids);
+    setBusy(null);
+    if (error) { setMsg("Could not save: " + error.message); return; }
+    setOkMsg(`${ids.length} photo${ids.length === 1 ? "" : "s"} marked as school work; ${ids.length === 1 ? "it goes" : "they go"} to the office OneDrive on the next hourly run.`);
+    load();
+  }
 
   const sel = "rounded border border-gray-300 bg-white px-2 py-1 text-sm";
-  const anyFilter = monthF !== "both" || gradeF !== "" || studentF || subjectF || teacherF || statusF;
+  const anyFilter = monthF !== "both" || gradeF !== "" || studentF || subjectF || teacherF || statusF || checkF;
   const ago = (d: string) => { const n = Math.round((new Date(today + "T00:00:00").getTime() - new Date(d + "T00:00:00").getTime()) / 86400000); return n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`; };
-  const card = (c: Card, withDay = false) => <EntryCard key={c.key} c={c} grades={grades} thumbs={thumbs} onBig={setBig} withDay={withDay} gradeName={gradeName} />;
+  const card = (c: Card, withDay = false) => <EntryCard key={c.key} c={c} grades={grades} thumbs={thumbs} onBig={setBig} withDay={withDay} gradeName={gradeName}
+    selecting={selecting} picked={picked} onPick={togglePick} onPickAll={pickMany} canEdit={canEdit} busy={!!busy}
+    onDelete={deleteRows} onClear={clearFlag} />;
 
   function renderNode(n: Node) {
     const o = isOpen(n);
@@ -235,6 +289,12 @@ export default function RedComet() {
               <button onClick={() => setAll(false)} className="rounded border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-silver">Collapse all</button>
             </>
           )}
+          {canEdit && (
+            <button onClick={() => { setSelecting((v) => !v); setPicked(new Set()); }}
+              className={`rounded border px-3 py-1 text-sm font-semibold ${selecting ? "border-red-600 bg-red-600 text-white" : "border-red-200 bg-white text-red-700 hover:bg-red-50"}`}>
+              {selecting ? "Done selecting" : "Select photos"}
+            </button>
+          )}
           <button onClick={() => setShowUpload((v) => !v)} className={`rounded border px-3 py-1 text-sm font-semibold ${showUpload ? "border-navy bg-navy text-white" : "border-navy/30 bg-white text-navy hover:bg-silver"}`}>
             {showUpload ? "Close upload" : "Upload photos"}
           </button>
@@ -248,13 +308,21 @@ export default function RedComet() {
         {loading ? " Loading…" : ""}
       </p>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
+      {okMsg && <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-deep">{okMsg}</div>}
+      {selecting && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          Tap photos to select them, or use "Select all" on an entry. Photos already entered in Red Comet (✓) cannot be deleted.
+        </div>
+      )}
       {configMissing && <p className="text-sm text-gray-500">Connect the database first.</p>}
 
       {/* summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Not yet in Red Comet" value={counts.pending} tone="amber" onClick={() => setStatusF(statusF === "pending" ? "" : "pending")} active={statusF === "pending"} />
         <Stat label="Entered in Red Comet" value={counts.entered} tone="emerald" onClick={() => setStatusF(statusF === "entered" ? "" : "entered")} active={statusF === "entered"} />
-        <Stat label="Photos" value={counts.photos} />
+        {counts.flagged > 0
+          ? <Stat label="Needs a look" value={counts.flagged} tone="red" onClick={() => setCheckF(!checkF)} active={checkF} />
+          : <Stat label="Photos" value={counts.photos} />}
         <Stat label="Students" value={counts.students} />
       </div>
 
@@ -266,6 +334,9 @@ export default function RedComet() {
           <option value="entered">Entered in Red Comet</option>
           <option value="rejected">Not used</option>
         </select>
+        <label className="flex items-center gap-1.5 text-sm text-gray-600">
+          <input type="checkbox" checked={checkF} onChange={(e) => setCheckF(e.target.checked)} /> Needs a look only
+        </label>
         <select value={monthF} onChange={(e) => setMonthF(e.target.value)} className={sel}>
           <option value="both">Both months</option>
           <option value={thisMonth}>{monthLabel(thisMonth)}</option>
@@ -288,7 +359,7 @@ export default function RedComet() {
           {teachers.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         {anyFilter && (
-          <button onClick={() => { setMonthF("both"); setGradeF(""); setStudentF(""); setSubjectF(""); setTeacherF(""); setStatusF(""); }}
+          <button onClick={() => { setMonthF("both"); setGradeF(""); setStudentF(""); setSubjectF(""); setTeacherF(""); setStatusF(""); setCheckF(false); }}
             className="text-xs font-semibold text-royal hover:underline">Clear filters</button>
         )}
       </div>
@@ -328,6 +399,15 @@ export default function RedComet() {
         </p>
       )}
 
+      {selecting && picked.size > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-[60] mx-auto flex w-fit items-center gap-3 rounded-full bg-navy px-5 py-2.5 text-sm text-white shadow-2xl">
+          <span className="font-semibold">{picked.size} selected</span>
+          <button onClick={() => deleteRows([...picked])} disabled={!!busy}
+            className="rounded-full bg-red-600 px-4 py-1.5 font-semibold hover:bg-red-700 disabled:opacity-50">{busy ?? `Delete ${picked.size}`}</button>
+          <button onClick={() => setPicked(new Set())} className="text-white/70 underline hover:text-white">Clear</button>
+        </div>
+      )}
+
       {/* full-size viewer */}
       {big && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4" onClick={() => setBig(null)}>
@@ -339,12 +419,17 @@ export default function RedComet() {
   );
 }
 
-function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName }: {
+function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, picked, onPick, onPickAll, canEdit, busy, onDelete, onClear }: {
   c: Card; grades: GradeLite[]; thumbs: Record<string, string>; onBig: (u: string) => void; withDay: boolean; gradeName: (g: number | null) => string;
+  selecting: boolean; picked: Set<number>; onPick: (r: Row) => void; onPickAll: (rows: Row[], on: boolean) => void; canEdit: boolean; busy: boolean;
+  onDelete: (ids: number[]) => void; onClear: (ids: number[]) => void;
 }) {
+  const flaggedRows = c.rows.filter((r) => r.check_status === "flagged");
+  const pickable = c.rows.filter((r) => r.status !== "confirmed");
+  const allPicked = pickable.length > 0 && pickable.every((r) => picked.has(r.id));
   const col = gradeColor(grades, c.grade_id); const b = BADGE[c.entered]; const used = c.rows.filter((r) => r.status !== "rejected").length;
   return (
-    <div className={`rounded-xl border bg-white p-4 shadow-sm ${c.entered === "pending" ? "border-amber-200" : "border-gray-200"}`}>
+    <div className={`rounded-xl border bg-white p-4 shadow-sm ${c.flagged ? "border-red-300 ring-1 ring-red-200" : c.entered === "pending" ? "border-amber-200" : "border-gray-200"}`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {withDay && <span className="text-xs font-bold text-gray-500">{usDate(c.day)}</span>}
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>
@@ -357,17 +442,37 @@ function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName }: {
           <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{c.subject}</span>
         </>}
         <span className="text-xs text-gray-400">{c.rows.length} photo{c.rows.length === 1 ? "" : "s"}</span>
+        {selecting && pickable.length > 0 && (
+          <button onClick={() => onPickAll(pickable, !allPicked)} className="rounded border border-red-200 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+            {allPicked ? "Unselect all" : "Select all"}
+          </button>
+        )}
         <span className="ml-auto text-xs text-gray-400">{c.teacher}</span>
       </div>
+      {flaggedRows.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+          <span className="font-semibold">⚠ {flaggedRows.length} photo{flaggedRows.length === 1 ? "" : "s"} may not be a workbook page</span>
+          <span className="text-red-700/80">({[...new Set(flaggedRows.map((r) => r.check_label).filter(Boolean))].join(", ") || "photo check"})</span>
+          {canEdit && <>
+            <button disabled={busy} onClick={() => onClear(flaggedRows.map((r) => r.id))} className="ml-auto rounded border border-emerald-300 bg-white px-2 py-0.5 font-semibold text-emerald-deep hover:bg-emerald-50 disabled:opacity-50">It is school work</button>
+            <button disabled={busy} onClick={() => onDelete(flaggedRows.filter((r) => r.status !== "confirmed").map((r) => r.id))} className="rounded border border-red-300 bg-white px-2 py-0.5 font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">Delete</button>
+          </>}
+        </div>
+      )}
       {c.rows.some((r) => r.note) && (
         <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{[...new Set(c.rows.map((r) => r.note).filter(Boolean))].join(" · ")}</p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         {c.rows.map((r) => thumbs[r.path]
-          ? <button key={r.id} onClick={() => onBig(thumbs[r.path])} title={`#${r.id} · ${BADGE[enteredOf(r.status)].label}`}
-              className={`relative h-24 w-24 overflow-hidden rounded-lg border bg-silver hover:ring-2 hover:ring-royal ${r.status === "confirmed" ? "border-emerald-300" : r.status === "rejected" ? "border-gray-200 opacity-50" : "border-amber-300"}`}>
+          ? <button key={r.id} onClick={() => (selecting ? onPick(r) : onBig(thumbs[r.path]))}
+              title={`#${r.id} · ${BADGE[enteredOf(r.status)].label}${r.check_status === "flagged" ? ` · needs a look (${r.check_label ?? "photo check"})` : ""}${selecting && r.status === "confirmed" ? " · already entered, cannot be deleted" : ""}`}
+              className={`relative h-24 w-24 overflow-hidden rounded-lg border bg-silver hover:ring-2 hover:ring-royal ${r.check_status === "flagged" ? "border-2 border-red-500" : r.status === "confirmed" ? "border-emerald-300" : r.status === "rejected" ? "border-gray-200 opacity-50" : "border-amber-300"} ${selecting && r.status === "confirmed" ? "cursor-not-allowed opacity-40" : ""} ${picked.has(r.id) ? "ring-4 ring-red-500" : ""}`}>
               <img src={thumbs[r.path]} alt="" loading="lazy" className="h-full w-full object-cover" />
               {r.status === "confirmed" && <span className="absolute bottom-1 right-1 rounded bg-emerald-600 px-1 text-[10px] font-bold text-white">✓</span>}
+              {r.check_status === "flagged" && <span className="absolute left-1 top-1 rounded bg-red-600 px-1 text-[10px] font-bold text-white">⚠</span>}
+              {selecting && r.status !== "confirmed" && (
+                <span className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white text-[11px] font-bold text-white shadow ${picked.has(r.id) ? "bg-red-600" : "bg-black/40"}`}>{picked.has(r.id) ? "✓" : ""}</span>
+              )}
             </button>
           : <div key={r.id} className="flex h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400">loading…</div>)}
       </div>
@@ -375,8 +480,8 @@ function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName }: {
   );
 }
 
-function Stat({ label, value, tone, onClick, active }: { label: string; value: number; tone?: "amber" | "emerald"; onClick?: () => void; active?: boolean }) {
-  const toneCls = tone === "amber" ? "text-amber-700" : tone === "emerald" ? "text-emerald-deep" : "text-navy";
+function Stat({ label, value, tone, onClick, active }: { label: string; value: number; tone?: "amber" | "emerald" | "red"; onClick?: () => void; active?: boolean }) {
+  const toneCls = tone === "amber" ? "text-amber-700" : tone === "emerald" ? "text-emerald-deep" : tone === "red" ? "text-red-600" : "text-navy";
   const Tag = onClick ? "button" : "div";
   return (
     <Tag onClick={onClick} className={`rounded-xl border bg-white px-4 py-3 text-left shadow-sm ${active ? "border-royal ring-2 ring-royal/30" : "border-gray-200"} ${onClick ? "hover:bg-silver/50" : ""}`}

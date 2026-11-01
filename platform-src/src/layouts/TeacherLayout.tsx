@@ -1,6 +1,6 @@
 // Teacher app shell (phase 26): phone-width column, top bar, bottom tabs.
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 
@@ -36,6 +36,9 @@ export default function TeacherLayout() {
           <div className="font-display text-base font-semibold leading-tight">Falah Academy</div>
           <div className="truncate text-[11px] text-white/60">{profile?.full_name}</div>
         </div>
+        {(profile?.role === "admin" || profile?.role === "staff") && (
+          <Link to="/admin" className="shrink-0 rounded-lg border border-white/30 px-2.5 py-1 text-[11px] font-semibold text-white">⇄ Admin</Link>
+        )}
       </header>
       <main className="flex-1 px-3 pb-24 pt-3">
         {notes.map((n) => (

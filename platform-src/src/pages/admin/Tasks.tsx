@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { type Task, urgency, PRIORITIES } from "../../lib/tasks";
 import { useAuth } from "../../lib/auth";
@@ -6,6 +7,12 @@ import { todayStr } from "../../lib/dates";
 import { usDate } from "../../lib/format";
 
 const ASSIGNEES = ["Muneeb (President)", "Muneeb (accountant)", "Muneeb (Principal)", "Claude", "Nuruddin (Treasurer)"];
+// Delegation (phase 31, President 2026-10-31): any admin or staff login can be given a task.
+// Staff see only the tasks assigned to them (enforced in the database); teachers are not
+// assignable for now. A reassigned hub task carries assign_pending until the hourly sync
+// writes the new name into TODO.md.
+interface Person { id: string; full_name: string; title: string | null; role: string }
+const personLabel = (p: Person) => `${p.full_name.trim()} (${p.title?.trim() || (p.role === "admin" ? "Admin" : "Office Staff")})`;
 // Departments (President, 2026-10-14) — the same ten as TODO.md; every task belongs to exactly one.
 const CATEGORIES = ["Executive Office", "Academics", "Students & Families", "HR", "Finance", "Development", "Marketing", "Operations", "IT", "Legal & Compliance"];
 
@@ -34,14 +41,19 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function Tasks() {
-  const { can, session } = useAuth();
+  const { can, session, profile } = useAuth();
+  const isStaff = profile?.role === "staff";
+  const [sp] = useSearchParams();
+  const [people, setPeople] = useState<Person[]>([]);
+  const [reWho, setReWho] = useState("");
+  const [reMsg, setReMsg] = useState<string | null>(null);
   const [rows, setRows] = useState<Task[]>([]);
   const [filter, setFilter] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("urgency");
   const [asc, setAsc] = useState(true);
   const [loaded, setLoaded] = useState<string | null>(null);
-  const [openCode, setOpenCode] = useState<string | null>(null);   // row expanded for details
+  const [openCode, setOpenCode] = useState<string | null>(() => sp.get("task"));   // row expanded for details (?task= from a notification)
   // "+ New task" (phase 20): saved with source = 'portal' and a P-code, pulled into the office records within the hour
   const [newOpen, setNewOpen] = useState(false);
   const [nText, setNText] = useState("");
@@ -65,13 +77,45 @@ export default function Tasks() {
     });
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (configMissing) return;
+    supabase.rpc("task_assignees").then(({ data }) => setPeople((data as Person[]) ?? []));
+  }, []);
+  // staff file new tasks for themselves by default (they only see their own)
+  useEffect(() => { if (isStaff && profile) setNWho(`u:${profile.id}`); }, [isStaff, profile?.id]);
+  // "u:<id>" = a login, anything else = a plain name from ASSIGNEES / Other
+  const resolveWho = (v: string, other = ""): { assigned_to: string; assigned_user: string | null } => {
+    if (v.startsWith("u:")) {
+      const p = people.find((x) => x.id === v.slice(2));
+      return { assigned_to: p ? personLabel(p) : "Muneeb (President)", assigned_user: p?.id ?? null };
+    }
+    return { assigned_to: v === "Other" ? other.trim() || "Muneeb (President)" : v, assigned_user: null };
+  };
+  const whoOptions = (
+    <>
+      <optgroup label="Office">{ASSIGNEES.map((c) => <option key={c} value={c}>{c}</option>)}</optgroup>
+      {people.length > 0 && <optgroup label="Portal logins (get a notification)">{people.map((p) => <option key={p.id} value={`u:${p.id}`}>{personLabel(p)}</option>)}</optgroup>}
+    </>
+  );
+  async function reassign(t: Task) {
+    setReMsg(null);
+    if (!reWho) return;
+    const w = resolveWho(reWho);
+    const { error } = await supabase.from("admin_tasks")
+      .update({ ...w, assign_pending: t.source !== "portal" })
+      .eq("code", t.code);
+    if (error) return setReMsg("Could not reassign: " + error.message);
+    setReMsg(`Assigned to ${w.assigned_to}${w.assigned_user ? " — they get a notification" : ""}.`);
+    setReWho("");
+    load();
+  }
 
   async function saveNew() {
     setNMsg(null);
     const text = nText.trim();
     if (!text) return setNMsg("Describe the task first.");
     const category = nCat;
-    const who = nWho === "Other" ? nWhoOther.trim() || "Muneeb (President)" : nWho;
+    const { assigned_to: who, assigned_user } = resolveWho(nWho, nWhoOther);
     let due_date: string | null = null, due_text = "someday", status = "Not started";
     if (nPrio === "date") {
       if (!nDate) return setNMsg("Pick the due date.");
@@ -95,12 +139,12 @@ export default function Tasks() {
         attachments.push({ name: f.name, path, size: f.size });
       }
       const { error: e3 } = await supabase.from("admin_tasks").insert({
-        code, task_no: null, is_done: false, category, task: text, assigned_to: who,
+        code, task_no: null, is_done: false, category, task: text, assigned_to: who, assigned_user,
         due_text, due_date, status, done_on: null, source: "portal",
         notes: nNotes.trim() || null, created_by: session?.user.id ?? null, attachments,
       });
       if (e3) throw new Error(e3.message);
-      setNewOpen(false); setNText(""); setNNotes(""); setNFiles([]); setNPrio("week"); setNDate("");
+      setNewOpen(false); setNText(""); setNNotes(""); setNFiles([]); setNPrio("week"); setNDate(""); setNWho(isStaff && profile ? `u:${profile.id}` : ASSIGNEES[0]);
       load();
     } catch (err) {
       setNMsg(String((err as Error).message ?? err));
@@ -189,7 +233,9 @@ export default function Tasks() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold text-navy">Tasks</h1>
-          <p className="text-xs text-gray-500">The school's working to-do list, maintained in the office records{loaded ? ` · last updated ${loaded}` : ""}. Tasks added here (P-numbers) are pulled into the records within the hour and get their real number.</p>
+          <p className="text-xs text-gray-500">{isStaff
+            ? "The tasks assigned to you. New ones arrive with a notification."
+            : <>The school's working to-do list, maintained in the office records{loaded ? ` · last updated ${loaded}` : ""}. Tasks added here (P-numbers) are pulled into the records within the hour and get their real number. Give a task to a staff login and only they (and admins) see it.</>}</p>
         </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-gray-600">
@@ -223,7 +269,7 @@ export default function Tasks() {
                 </label>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">For
                   <select value={nWho} onChange={(e) => setNWho(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
-                    {ASSIGNEES.map((c) => <option key={c}>{c}</option>)}<option>Other</option>
+                    {whoOptions}<option value="Other">Other</option>
                   </select>
                   {nWho === "Other" && <input value={nWhoOther} onChange={(e) => setNWhoOther(e.target.value)} placeholder="Name (role)" className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
                 </label>
@@ -315,7 +361,7 @@ export default function Tasks() {
               const isOpen = openCode === r.code;
               return (
                 <Fragment key={r.code}>
-                  <tr onClick={() => setOpenCode(isOpen ? null : r.code)} title="Click for details"
+                  <tr onClick={() => { setOpenCode(isOpen ? null : r.code); setReWho(""); setReMsg(null); }} title="Click for details"
                     className={`cursor-pointer border-t border-gray-100 align-top hover:bg-silver/40 ${r.is_done ? "text-gray-400" : "text-gray-700"} ${isOpen ? "bg-silver/40" : ""}`}>
                     <td className="px-3 py-2 font-semibold text-navy">{r.code}</td>
                     <td className="px-3 py-2" title={u.label}>{u.icon}</td>
@@ -335,10 +381,21 @@ export default function Tasks() {
                       <td colSpan={7} className="px-6 py-4">
                         <div className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                           <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Urgency</div><div>{u.icon} {u.label}</div></div>
-                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Assigned to</div><div>{r.assigned_to || "—"}</div></div>
+                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Assigned to</div><div>{r.assigned_to || "—"}{r.assign_pending && <span className="ml-1 text-[10px] text-amber-700" title="Reassigned here; the office records update within the hour">(updating records…)</span>}</div></div>
                           <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.is_done ? "Done on" : "Due"}</div><div>{r.is_done ? r.done_on ?? "—" : r.due_text || "—"}</div></div>
                           <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.source === "portal" ? "Added here" : "Last synced"}</div><div>{new Date(r.source === "portal" && r.created_at ? r.created_at : r.updated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</div></div>
                         </div>
+                        {profile?.role === "admin" && !r.is_done && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Reassign</span>
+                            <select value={reWho} onChange={(e) => setReWho(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
+                              <option value="">Choose a person…</option>
+                              {whoOptions}
+                            </select>
+                            <button onClick={() => reassign(r)} disabled={!reWho} className="rounded-full bg-navy px-3 py-1 text-xs font-semibold text-white hover:bg-royal disabled:opacity-40">Assign</button>
+                            {reMsg && <span className="text-xs text-gray-600">{reMsg}</span>}
+                          </div>
+                        )}
                         {r.source === "portal" && (
                           <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                             📱 Added from the portal. It keeps the code {r.code} until the office pull copies it into the records (hourly) and gives it a real number.
