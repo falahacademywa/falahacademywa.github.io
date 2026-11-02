@@ -200,7 +200,7 @@ export default function Progress() {
                     <span className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow ${on ? "bg-red-600" : "bg-black/40"}`}>{on ? "✓" : ""}</span>
                   )}
                   <div className="px-1.5 py-1 text-[10px] leading-tight">
-                    <div className="text-gray-500">{usDate(u.taken_at)}{u.subject && u.subject !== "Red Comet" ? ` · ${u.subject}` : ""}</div>
+                    <div className="text-gray-500">{usDate(u.taken_at)}{u.subject ? ` · ${u.subject}` : ""}</div>
                     {flagged
                       ? <div className="font-semibold text-red-600">⚠ needs a look</div>
                       : <div className={`font-semibold ${u.status === "confirmed" ? "text-emerald-deep" : u.status === "rejected" ? "text-red-600" : "text-amber-700"}`}>{STATUS[u.status] ?? u.status}</div>}
