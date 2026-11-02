@@ -12,7 +12,10 @@
 // photos not yet entered (the database refuses entered ones; the hourly pull removes
 // the OneDrive copy); the hourly photo check (GitHub Actions + CLIP) flags photos that
 // do not look like workbook pages — they show red, with "It is school work" to clear.
-import { useEffect, useMemo, useState } from "react";
+// 2026-11-01 (President): the last 12 months instead of two; thumbnails are signed
+// only when their entry is on screen (keeps Supabase egress on the free plan); hover
+// a photo → tick box to select, Delete bar at the bottom (no separate select mode).
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
@@ -40,18 +43,21 @@ const BADGE: Record<Entered, { label: string; cls: string; dot: string }> = {
 };
 const DAYS_OPEN = 14;   // timeline: days shown by default; older days sit behind "Show earlier"
 const VIEW_KEY = "falah.redcomet.view";
+const MONTHS = 12;      // months loaded (this month and the 11 before)
+const PAGE = 1000;      // PostgREST returns at most 1000 rows per request
+const SIGN_TTL = 3600;  // signed thumbnail links last an hour
 
 export default function RedComet() {
   const today = todayStr();
   const thisMonth = today.slice(0, 7);
-  const lastMonth = shiftMonth(thisMonth, -1);
+  const firstMonth = shiftMonth(thisMonth, -(MONTHS - 1));
   const [grades, setGrades] = useState<GradeLite[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [view, setView] = useState<View>(() => { try { return (localStorage.getItem(VIEW_KEY) as View) || "timeline"; } catch { return "timeline"; } });
-  const [monthF, setMonthF] = useState<"both" | string>("both");
+  const [monthF, setMonthF] = useState<"all" | string>("all");
   const [gradeF, setGradeF] = useState<number | "">("");
   const [studentF, setStudentF] = useState("");
   const [subjectF, setSubjectF] = useState("");
@@ -61,8 +67,8 @@ export default function RedComet() {
   const [checkF, setCheckF] = useState(sp.get("check") === "flagged");   // only photos the photo check flagged
   const { can } = useAuth();
   const canEdit = can("redcomet", "edit");
-  const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  const selecting = picked.size > 0;   // ticking the first box starts a selection
   const [busy, setBusy] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
@@ -81,28 +87,61 @@ export default function RedComet() {
 
   async function load() {
     if (configMissing) return;
-    setLoading(true);
-    const from = monthRange(lastMonth)[0];
+    setLoading(true); setMsg(null);
+    const from = monthRange(firstMonth)[0];
     const to = monthRange(thisMonth)[1];
-    const { data, error } = await supabase.from("work_uploads")
-      .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
-      .gte("taken_at", from).lte("taken_at", to)
-      .order("taken_at", { ascending: false }).order("created_at", { ascending: false }).limit(2000);
-    if (error) setMsg("Could not load: " + error.message);
-    const list = (data as unknown as Row[]) ?? [];
+    const list: Row[] = [];
+    for (let off = 0; ; off += PAGE) {
+      const { data, error } = await supabase.from("work_uploads")
+        .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
+        .gte("taken_at", from).lte("taken_at", to)
+        .order("taken_at", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false })
+        .range(off, off + PAGE - 1);
+      if (error) { setMsg("Could not load: " + error.message); break; }
+      const page = (data as unknown as Row[]) ?? [];
+      list.push(...page);
+      if (page.length < PAGE) break;
+    }
     setRows(list);
     setLoading(false);
-    // signed thumbnails (private bucket), 100 paths per call, valid 10 minutes
-    const paths = list.map((r) => r.path);
-    const add: Record<string, string> = {};
-    for (let i = 0; i < paths.length; i += 100) {
-      const chunk = paths.slice(i, i + 100);
-      const { data: signed } = await supabase.storage.from("student-work").createSignedUrls(chunk, 600);
-      (signed ?? []).forEach((s, j) => { if (s.signedUrl) add[chunk[j]] = s.signedUrl; });
-    }
-    setThumbs(add);
   }
   useEffect(() => { load(); }, []);
+
+  // Thumbnails are signed only when an entry is on screen (EntryCard asks for its
+  // paths); requests are batched, 100 paths per call. The <img> itself is lazy, so a
+  // photo is downloaded only when it scrolls into view — 12 months cost no more egress
+  // than two unless someone actually scrolls through them.
+  const asked = useRef<Set<string>>(new Set());
+  const queue = useRef<Set<string>>(new Set());
+  const timer = useRef<number | null>(null);
+  const need = useCallback((paths: string[]) => {
+    paths.forEach((p) => { if (!asked.current.has(p)) { asked.current.add(p); queue.current.add(p); } });
+    if (!queue.current.size || timer.current) return;
+    timer.current = window.setTimeout(async () => {
+      timer.current = null;
+      const all = [...queue.current]; queue.current.clear();
+      for (let i = 0; i < all.length; i += 100) {
+        const chunk = all.slice(i, i + 100);
+        const { data: signed } = await supabase.storage.from("student-work").createSignedUrls(chunk, SIGN_TTL);
+        const add: Record<string, string> = {};
+        // a path with no image file is marked "" (shown as "no image") and not asked again
+        (signed ?? []).forEach((s, j) => { add[chunk[j]] = s.signedUrl || ""; });
+        setThumbs((t) => ({ ...t, ...add }));
+      }
+    }, 30);
+  }, []);
+  // signed links expire after an hour: forget them so open entries ask again
+  useEffect(() => {
+    const t = window.setInterval(() => { asked.current.clear(); setThumbs({}); }, (SIGN_TTL - 120) * 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  // Esc clears a selection
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setPicked(new Set()); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
+  const months = useMemo(() => [...new Set(rows.map((r) => r.taken_at.slice(0, 7)))].sort().reverse(), [rows]);
 
   const gradeName = (gid: number | null | undefined) => grades.find((g) => g.id === gid)?.name ?? "—";
   const gradeOrder = (gid: number | null) => grades.findIndex((g) => g.id === gid);
@@ -119,7 +158,7 @@ export default function RedComet() {
   const teachers = useMemo(() => [...new Set(rows.map(teacherName))].sort(), [rows]);
 
   const visible = useMemo(() => rows.filter((r) =>
-    (monthF === "both" || r.taken_at.slice(0, 7) === monthF) &&
+    (monthF === "all" || r.taken_at.slice(0, 7) === monthF) &&
     (gradeF === "" || r.enrollments?.grade_id === gradeF) &&
     (!studentF || r.enrollment_id === studentF) &&
     (!subjectF || (r.subject ?? "No subject") === subjectF) &&
@@ -216,7 +255,7 @@ export default function RedComet() {
       const { error: e2 } = await supabase.storage.from("student-work").remove(gone.map((g) => g.path));
       if (e2) storageNote = ` (the image files could not all be removed: ${e2.message})`;
     }
-    setBusy(null); setPicked(new Set()); setSelecting(false);
+    setBusy(null); setPicked(new Set());
     const skipped = n - gone.length;
     setOkMsg(`${gone.length} photo${gone.length === 1 ? "" : "s"} deleted${skipped ? `, ${skipped} not deleted (already entered or not allowed)` : ""}. The OneDrive copies go on the next hourly run.${storageNote}`);
     load();
@@ -232,11 +271,11 @@ export default function RedComet() {
   }
 
   const sel = "rounded border border-gray-300 bg-white px-2 py-1 text-sm";
-  const anyFilter = monthF !== "both" || gradeF !== "" || studentF || subjectF || teacherF || statusF || checkF;
+  const anyFilter = monthF !== "all" || gradeF !== "" || studentF || subjectF || teacherF || statusF || checkF;
   const ago = (d: string) => { const n = Math.round((new Date(today + "T00:00:00").getTime() - new Date(d + "T00:00:00").getTime()) / 86400000); return n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`; };
   const card = (c: Card, withDay = false) => <EntryCard key={c.key} c={c} grades={grades} thumbs={thumbs} onBig={setBig} withDay={withDay} gradeName={gradeName}
     selecting={selecting} picked={picked} onPick={togglePick} onPickAll={pickMany} canEdit={canEdit} busy={!!busy}
-    onDelete={deleteRows} onClear={clearFlag} />;
+    onDelete={deleteRows} onClear={clearFlag} need={need} />;
 
   function renderNode(n: Node) {
     const o = isOpen(n);
@@ -289,12 +328,6 @@ export default function RedComet() {
               <button onClick={() => setAll(false)} className="rounded border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-silver">Collapse all</button>
             </>
           )}
-          {canEdit && (
-            <button onClick={() => { setSelecting((v) => !v); setPicked(new Set()); }}
-              className={`rounded border px-3 py-1 text-sm font-semibold ${selecting ? "border-red-600 bg-red-600 text-white" : "border-red-200 bg-white text-red-700 hover:bg-red-50"}`}>
-              {selecting ? "Done selecting" : "Select photos"}
-            </button>
-          )}
           <button onClick={() => setShowUpload((v) => !v)} className={`rounded border px-3 py-1 text-sm font-semibold ${showUpload ? "border-navy bg-navy text-white" : "border-navy/30 bg-white text-navy hover:bg-silver"}`}>
             {showUpload ? "Close upload" : "Upload photos"}
           </button>
@@ -302,18 +335,14 @@ export default function RedComet() {
         </div>
       </div>
       <p className="mb-4 text-sm text-gray-500">
-        Workbook pages the teachers sent from the teacher app, {monthLabel(lastMonth)} and {monthLabel(thisMonth)}.
+        Workbook pages the teachers sent from the teacher app over the last 12 months ({monthLabel(firstMonth)} – {monthLabel(thisMonth)}).
         {view === "timeline" ? " Newest first; each entry is one student, one subject, one day." : " Grouped by month, entered or not, grade, student and subject; click a row to open or close it."}
         {" "}The badge says whether those pages have been entered in Red Comet yet; it updates on its own as the office works through the OneDrive inbox.
+        {canEdit && " To delete, hover over a photo and tick its box (on a phone the boxes are always shown); photos already entered in Red Comet (✓) cannot be deleted."}
         {loading ? " Loading…" : ""}
       </p>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
       {okMsg && <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-deep">{okMsg}</div>}
-      {selecting && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
-          Tap photos to select them, or use "Select all" on an entry. Photos already entered in Red Comet (✓) cannot be deleted.
-        </div>
-      )}
       {configMissing && <p className="text-sm text-gray-500">Connect the database first.</p>}
 
       {/* summary */}
@@ -338,9 +367,8 @@ export default function RedComet() {
           <input type="checkbox" checked={checkF} onChange={(e) => setCheckF(e.target.checked)} /> Needs a look only
         </label>
         <select value={monthF} onChange={(e) => setMonthF(e.target.value)} className={sel}>
-          <option value="both">Both months</option>
-          <option value={thisMonth}>{monthLabel(thisMonth)}</option>
-          <option value={lastMonth}>{monthLabel(lastMonth)}</option>
+          <option value="all">All 12 months</option>
+          {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
         </select>
         <select value={gradeF} onChange={(e) => { setGradeF(e.target.value === "" ? "" : Number(e.target.value)); setStudentF(""); }} className={sel}>
           <option value="">All grades</option>
@@ -359,7 +387,7 @@ export default function RedComet() {
           {teachers.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         {anyFilter && (
-          <button onClick={() => { setMonthF("both"); setGradeF(""); setStudentF(""); setSubjectF(""); setTeacherF(""); setStatusF(""); setCheckF(false); }}
+          <button onClick={() => { setMonthF("all"); setGradeF(""); setStudentF(""); setSubjectF(""); setTeacherF(""); setStatusF(""); setCheckF(false); }}
             className="text-xs font-semibold text-royal hover:underline">Clear filters</button>
         )}
       </div>
@@ -395,16 +423,16 @@ export default function RedComet() {
       )}
       {!configMissing && !loading && !cards.length && (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-400">
-          No Red Comet photos{anyFilter ? " match these filters" : ` in ${monthLabel(lastMonth)} or ${monthLabel(thisMonth)}`}.
+          No Red Comet photos{anyFilter ? " match these filters" : " in the last 12 months"}.
         </p>
       )}
 
-      {selecting && picked.size > 0 && (
+      {selecting && (
         <div className="fixed inset-x-0 bottom-4 z-[60] mx-auto flex w-fit items-center gap-3 rounded-full bg-navy px-5 py-2.5 text-sm text-white shadow-2xl">
           <span className="font-semibold">{picked.size} selected</span>
           <button onClick={() => deleteRows([...picked])} disabled={!!busy}
             className="rounded-full bg-red-600 px-4 py-1.5 font-semibold hover:bg-red-700 disabled:opacity-50">{busy ?? `Delete ${picked.size}`}</button>
-          <button onClick={() => setPicked(new Set())} className="text-white/70 underline hover:text-white">Clear</button>
+          <button onClick={() => setPicked(new Set())} className="text-white/70 underline hover:text-white" title="Esc">Clear</button>
         </div>
       )}
 
@@ -419,17 +447,22 @@ export default function RedComet() {
   );
 }
 
-function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, picked, onPick, onPickAll, canEdit, busy, onDelete, onClear }: {
+function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, picked, onPick, onPickAll, canEdit, busy, onDelete, onClear, need }: {
   c: Card; grades: GradeLite[]; thumbs: Record<string, string>; onBig: (u: string) => void; withDay: boolean; gradeName: (g: number | null) => string;
   selecting: boolean; picked: Set<number>; onPick: (r: Row) => void; onPickAll: (rows: Row[], on: boolean) => void; canEdit: boolean; busy: boolean;
-  onDelete: (ids: number[]) => void; onClear: (ids: number[]) => void;
+  onDelete: (ids: number[]) => void; onClear: (ids: number[]) => void; need: (paths: string[]) => void;
 }) {
+  // ask for signed thumbnails only while this entry is on screen
+  useEffect(() => {
+    const missing = c.rows.map((r) => r.path).filter((p) => thumbs[p] === undefined);
+    if (missing.length) need(missing);
+  }, [c.rows, thumbs, need]);
   const flaggedRows = c.rows.filter((r) => r.check_status === "flagged");
-  const pickable = c.rows.filter((r) => r.status !== "confirmed");
+  const pickable = canEdit ? c.rows.filter((r) => r.status !== "confirmed") : [];
   const allPicked = pickable.length > 0 && pickable.every((r) => picked.has(r.id));
   const col = gradeColor(grades, c.grade_id); const b = BADGE[c.entered]; const used = c.rows.filter((r) => r.status !== "rejected").length;
   return (
-    <div className={`rounded-xl border bg-white p-4 shadow-sm ${c.flagged ? "border-red-300 ring-1 ring-red-200" : c.entered === "pending" ? "border-amber-200" : "border-gray-200"}`}>
+    <div className={`group/card rounded-xl border bg-white p-4 shadow-sm ${c.flagged ? "border-red-300 ring-1 ring-red-200" : c.entered === "pending" ? "border-amber-200" : "border-gray-200"}`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {withDay && <span className="text-xs font-bold text-gray-500">{usDate(c.day)}</span>}
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${b.cls}`}>
@@ -442,8 +475,9 @@ function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, pi
           <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{c.subject}</span>
         </>}
         <span className="text-xs text-gray-400">{c.rows.length} photo{c.rows.length === 1 ? "" : "s"}</span>
-        {selecting && pickable.length > 0 && (
-          <button onClick={() => onPickAll(pickable, !allPicked)} className="rounded border border-red-200 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+        {pickable.length > 1 && (
+          <button onClick={() => onPickAll(pickable, !allPicked)}
+            className={`rounded border border-red-200 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-50 ${selecting ? "" : "opacity-0 focus:opacity-100 group-hover/card:opacity-100 [@media(hover:none)]:opacity-100"}`}>
             {allPicked ? "Unselect all" : "Select all"}
           </button>
         )}
@@ -463,18 +497,25 @@ function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, pi
         <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{[...new Set(c.rows.map((r) => r.note).filter(Boolean))].join(" · ")}</p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        {c.rows.map((r) => thumbs[r.path]
-          ? <button key={r.id} onClick={() => (selecting ? onPick(r) : onBig(thumbs[r.path]))}
-              title={`#${r.id} · ${BADGE[enteredOf(r.status)].label}${r.check_status === "flagged" ? ` · needs a look (${r.check_label ?? "photo check"})` : ""}${selecting && r.status === "confirmed" ? " · already entered, cannot be deleted" : ""}`}
-              className={`relative h-24 w-24 overflow-hidden rounded-lg border bg-silver hover:ring-2 hover:ring-royal ${r.check_status === "flagged" ? "border-2 border-red-500" : r.status === "confirmed" ? "border-emerald-300" : r.status === "rejected" ? "border-gray-200 opacity-50" : "border-amber-300"} ${selecting && r.status === "confirmed" ? "cursor-not-allowed opacity-40" : ""} ${picked.has(r.id) ? "ring-4 ring-red-500" : ""}`}>
-              <img src={thumbs[r.path]} alt="" loading="lazy" className="h-full w-full object-cover" />
-              {r.status === "confirmed" && <span className="absolute bottom-1 right-1 rounded bg-emerald-600 px-1 text-[10px] font-bold text-white">✓</span>}
-              {r.check_status === "flagged" && <span className="absolute left-1 top-1 rounded bg-red-600 px-1 text-[10px] font-bold text-white">⚠</span>}
-              {selecting && r.status !== "confirmed" && (
-                <span className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white text-[11px] font-bold text-white shadow ${picked.has(r.id) ? "bg-red-600" : "bg-black/40"}`}>{picked.has(r.id) ? "✓" : ""}</span>
+        {c.rows.map((r) => {
+          const can = pickable.includes(r); const on = picked.has(r.id);
+          if (!thumbs[r.path]) return <div key={r.id} title={`#${r.id}`} className="flex h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400">{thumbs[r.path] === "" ? "no image" : "loading…"}</div>;
+          return (
+            <div key={r.id} className={`group relative h-24 w-24 overflow-hidden rounded-lg border bg-silver ${r.check_status === "flagged" ? "border-2 border-red-500" : r.status === "confirmed" ? "border-emerald-300" : r.status === "rejected" ? "border-gray-200 opacity-50" : "border-amber-300"} ${on ? "ring-4 ring-red-500" : "hover:ring-2 hover:ring-royal"}`}>
+              {/* click the photo: open it — or, while a selection is under way, add/remove it */}
+              <button onClick={() => (selecting && can ? onPick(r) : onBig(thumbs[r.path]))} className="block h-full w-full"
+                title={`#${r.id} · ${BADGE[enteredOf(r.status)].label}${r.check_status === "flagged" ? ` · needs a look (${r.check_label ?? "photo check"})` : ""}${canEdit && r.status === "confirmed" ? " · already entered, cannot be deleted" : ""}`}>
+                <img src={thumbs[r.path]} alt="" loading="lazy" className={`h-full w-full object-cover ${on ? "scale-95" : ""}`} />
+              </button>
+              {r.status === "confirmed" && <span className="pointer-events-none absolute bottom-1 right-1 rounded bg-emerald-600 px-1 text-[10px] font-bold text-white">✓</span>}
+              {r.check_status === "flagged" && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-red-600 px-1 text-[10px] font-bold text-white">⚠</span>}
+              {can && (
+                <button onClick={() => onPick(r)} role="checkbox" aria-checked={on} aria-label={on ? "Unselect photo" : "Select photo"}
+                  className={`absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded border-2 text-sm font-bold shadow transition-opacity ${on ? "border-red-600 bg-red-600 text-white opacity-100" : `border-white bg-black/30 text-transparent hover:bg-black/50 ${selecting ? "opacity-100" : "opacity-0 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"}`}`}>✓</button>
               )}
-            </button>
-          : <div key={r.id} className="flex h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400">loading…</div>)}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
