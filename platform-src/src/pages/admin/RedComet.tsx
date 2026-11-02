@@ -1,6 +1,6 @@
 // Admin → Red Comet. Every workbook photo the teachers send from the teacher
 // app (Red Comet tab → `work_uploads` + private `student-work` bucket), for the
-// current calendar month and the month before. Two views: a timeline (newest
+// last 12 months. Two views: a timeline (newest
 // first) and a grouped accordion Month → Entered or not → Grade → Student →
 // Subject that opens
 // and closes at every level. One entry per student + subject + day with the
@@ -220,8 +220,9 @@ export default function RedComet() {
     };
     return build(cards, 0, "");
   }, [cards, grades]);
-  // defaults: current month, its status groups and grades open; students and subjects closed
-  const isOpen = (n: Node) => open[n.key] ?? allState ?? (n.level === 0 ? n.key === `/${thisMonth}` : n.level <= 2);
+  // defaults: the newest month with photos (not the calendar month, which is empty on the 1st),
+  // its status groups and grades open; students and subjects closed
+  const isOpen = (n: Node) => open[n.key] ?? allState ?? (n.level === 0 ? n.key === tree[0]?.key : n.level <= 2);
   const toggle = (k: string, now: boolean) => setOpen((o) => ({ ...o, [k]: !now }));
   const setAll = (v: boolean) => { setOpen({}); setAllState(v); };
 
