@@ -10,6 +10,10 @@
 --   * Parents read the remarks on their portal home; the office sees everything.
 --   * Staff permission module 'meetings' (view = see, edit = change the invite list, open or
 --     close a time per class, add a time to the day, cancel a booking).
+--   * 2026-11-03 (President): short links parents can remember — falahacademywa.org/meet/prek,
+--     /meet/kg, /meet/grade1 (static redirect pages to /platform/#/meet/<slug>); ptm_links.slug.
+--   * No e-mail from this feature (President 2026-11-03): its portal notifications are created
+--     with emailed = true, so the twice-daily dispatcher never mails them.
 --   * 2026-11-03 (President): 12:30 is a time again, and the office controls the times —
 --     each class has its own closed times (ptm_classes.closed_slots); parents never see those.
 --
@@ -46,6 +50,7 @@ create table if not exists public.ptm_links (
   class_id int primary key references public.ptm_classes on delete cascade,
   token    text not null unique default encode(extensions.gen_random_bytes(9), 'hex')
 );
+alter table public.ptm_links add column if not exists slug text unique;   -- short name in /meet/<slug> (one class at a time)
 
 create table if not exists public.ptm_students (
   class_id  int  not null references public.ptm_classes on delete cascade,
@@ -104,6 +109,19 @@ create or replace function public.ptm_hm(p time)
 returns text language sql immutable as $$ select to_char(date '2000-01-01' + p, 'HH24:MI') $$;
 create or replace function public.ptm_ampm(p time)
 returns text language sql immutable as $$ select to_char(date '2000-01-01' + p, 'FMHH12:MI AM') $$;
+
+-- the class behind a link: the long token or the short slug ("kg", "KG", " Kg ")
+create or replace function public.ptm_class_of(p text)
+returns int language sql stable security definer set search_path = public as $$
+  select class_id from public.ptm_links where token = btrim(p) or slug = lower(btrim(p)) limit 1
+$$;
+
+-- in-app notes only (no e-mail): the dispatcher skips rows already marked emailed
+create or replace function public.ptm_note_admins(p_title text, p_message text)
+returns void language sql security definer set search_path = public as $$
+  insert into public.notifications (recipient_id, title, message, priority, link_path, emailed)
+  select id, p_title, p_message, 'info', '/admin/meetings', true from public.profiles where role = 'admin'
+$$;
 
 -- when a slot ends (Pacific)
 create or replace function public.ptm_slot_end(p_event int, p_slot time)
@@ -171,7 +189,7 @@ returns jsonb language sql stable security definer set search_path = public as $
                 'free', (select count(*) from public.ptm_bookings b where b.class_id = c.id and b.slot = s) < c.capacity)
                 order by s) from unnest(e.slots) s where not (s = any (c.closed_slots))))
   from public.ptm_links l join public.ptm_classes c on c.id = l.class_id join public.ptm_events e on e.id = c.event_id
-  where l.token = p_token
+  where l.class_id = public.ptm_class_of(p_token)
 $$;
 
 -- identify: the child's first name + a phone number on file for that family
@@ -180,7 +198,7 @@ returns jsonb language plpgsql stable security definer set search_path = public 
 declare cid int; fam int; ph text := public.ptm_phone(p_phone); first text := lower(split_part(btrim(coalesce(p_child, '')), ' ', 1));
 begin
   if length(ph) < 10 or first = '' then return null; end if;
-  select l.class_id into cid from public.ptm_links l where l.token = p_token;
+  cid := public.ptm_class_of(p_token);
   if cid is null then return null; end if;
   select ps.family_no into fam
     from public.ptm_students ps join public.students s on s.id = ps.student_id
@@ -203,7 +221,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare c record; e record; fam int; t time; ph text := public.ptm_phone(p_phone);
         first text := lower(split_part(btrim(coalesce(p_child, '')), ' ', 1)); had time; kids text;
 begin
-  select cl.* into c from public.ptm_links l join public.ptm_classes cl on cl.id = l.class_id where l.token = p_token;
+  select cl.* into c from public.ptm_classes cl where cl.id = public.ptm_class_of(p_token);
   if c.id is null then return jsonb_build_object('ok', false, 'error', 'This link is not valid.'); end if;
   select * into e from public.ptm_events where id = c.event_id;
   if not e.active or (e.book_until is not null and now() >= e.book_until) then
@@ -226,8 +244,8 @@ begin
   if p_slot is null then
     delete from public.ptm_bookings where class_id = c.id and family_no = fam;
     if had is not null then
-      perform public.notify_admins('Parent meeting cancelled',
-        c.name || ': the ' || public.ptm_ampm(had) || ' meeting for ' || kids || ' was cancelled by the parent.', 'info', '/admin/meetings');
+      perform public.ptm_note_admins('Parent meeting cancelled',
+        c.name || ': the ' || public.ptm_ampm(had) || ' meeting for ' || kids || ' was cancelled by the parent.');
     end if;
     return jsonb_build_object('ok', true, 'slot', null);
   end if;
@@ -245,13 +263,15 @@ begin
   on conflict (class_id, family_no) do update set slot = excluded.slot, parent_name = coalesce(excluded.parent_name, ptm_bookings.parent_name),
      phone = excluded.phone, booked_at = now();
   if had is distinct from t then
-    perform public.notify_admins('Parent meeting ' || case when had is null then 'booked' else 'moved' end,
+    perform public.ptm_note_admins('Parent meeting ' || case when had is null then 'booked' else 'moved' end,
       c.name || ': ' || kids || ' — ' || public.ptm_ampm(t) || ' on ' || to_char(e.meet_date, 'FMMon FMDD')
-      || case when had is null then '' else ' (was ' || public.ptm_ampm(had) || ')' end || '.', 'info', '/admin/meetings');
+      || case when had is null then '' else ' (was ' || public.ptm_ampm(had) || ')' end || '.');
   end if;
   return jsonb_build_object('ok', true, 'slot', public.ptm_hm(t));
 end; $$;
 
+-- internal helpers: only the functions above use them
+revoke all on function public.ptm_class_of(text), public.ptm_note_admins(text, text) from public, anon, authenticated;
 revoke all on function public.ptm_page(text), public.ptm_family(text, text, text), public.ptm_book(text, text, text, text, text) from public;
 grant execute on function public.ptm_page(text), public.ptm_family(text, text, text), public.ptm_book(text, text, text, text, text) to anon, authenticated;
 
@@ -319,9 +339,11 @@ begin
      author_name = excluded.author_name, updated_at = now();
   if first_post then
     select first_name into sname from public.students where id = p_student;
-    perform public.notify_parents_of_student(p_student, 'Parent-teacher meeting notes',
+    insert into public.notifications (recipient_id, title, message, priority, link_path, emailed)
+    select ps.parent_id, 'Parent-teacher meeting notes',
       who || ' posted ' || case when p_kind = 'quran' then 'Qur''an ' else '' end || 'notes for ' || sname
-      || ' from the meeting on ' || to_char(e.meet_date, 'FMMon FMDD') || '.', 'info', '/parent');
+      || ' from the meeting on ' || to_char(e.meet_date, 'FMMon FMDD') || '.', 'info', '/parent', true
+      from public.parent_students ps where ps.student_id = p_student;
   end if;
   return jsonb_build_object('ok', true);
 end; $$;
@@ -355,7 +377,7 @@ begin
     'event', to_jsonb(e) - 'created_at',
     'events', (select jsonb_agg(jsonb_build_object('id', x.id, 'title', x.title, 'date', x.meet_date) order by x.meet_date desc) from public.ptm_events x),
     'classes', (select coalesce(jsonb_agg(jsonb_build_object(
-        'id', c.id, 'name', c.name, 'capacity', c.capacity, 'token', l.token,
+        'id', c.id, 'name', c.name, 'capacity', c.capacity, 'token', l.token, 'slug', l.slug,
         'closed', (select coalesce(jsonb_agg(public.ptm_hm(x)), '[]') from unnest(c.closed_slots) x),
         'students', (select coalesce(jsonb_agg(jsonb_build_object(
             'student_id', s.id, 'name', s.first_name || ' ' || s.last_name, 'grade', en.grade_name,
@@ -486,10 +508,15 @@ begin
     end if;
     perform public.ptm_fill_class(c);
   end loop;
+  -- short links /meet/prek, /meet/kg, /meet/grade1 (a slug belongs to one class at a time)
+  update public.ptm_links l set slug = v.slug
+    from public.ptm_classes c, (values ('Pre-K', 'prek'), ('KG', 'kg'), ('Grade 1', 'grade1')) v(name, slug)
+   where c.id = l.class_id and c.event_id = ev and c.name = v.name and l.slug is null
+     and not exists (select 1 from public.ptm_links x where x.slug = v.slug);
 end $$;
 
 -- check: the three links' classes and how many children / families each has
-select c.name, l.token, count(ps.*) as children, count(distinct ps.family_no) filter (where ps.invited) as families
+select c.name, l.slug, l.token, count(ps.*) as children, count(distinct ps.family_no) filter (where ps.invited) as families
   from public.ptm_classes c join public.ptm_links l on l.class_id = c.id
   left join public.ptm_students ps on ps.class_id = c.id
- group by c.name, l.token, c.sort order by c.sort;
+ group by c.name, l.slug, l.token, c.sort order by c.sort;

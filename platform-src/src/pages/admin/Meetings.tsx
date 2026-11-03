@@ -11,7 +11,7 @@ import { ampm, longDate, KIND_LABEL, type Remark } from "../../lib/meetings";
 
 interface Stu { student_id: string; name: string; grade: string | null; family_no: number; invited: boolean; slot: string | null;
   parent_name: string | null; phone: string | null; booked_at: string | null; remarks: Record<string, Remark> }
-interface Cls { id: number; name: string; capacity: number; token: string | null; closed: string[]; students: Stu[] }
+interface Cls { id: number; name: string; capacity: number; token: string | null; slug: string | null; closed: string[]; students: Stu[] }
 interface Ev { id: number; title: string; meet_date: string; slot_minutes: number; slots: string[]; quran_minutes: number; book_until: string | null; active: boolean }
 interface View { event: Ev; events: { id: number; title: string; date: string }[]; classes: Cls[] }
 
@@ -85,7 +85,10 @@ function ClassCard({ c, ev, canEdit, busy, act }: { c: Cls; ev: Ev; canEdit: boo
   const [copied, setCopied] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [openRemark, setOpenRemark] = useState<string | null>(null);
-  const link = c.token ? `${location.origin}${location.pathname}#/meet/${c.token}` : "";
+  // the short link parents can remember (falahacademywa.org/meet/kg, a static redirect page);
+  // the long token link keeps working too
+  const site = location.origin + location.pathname.replace(/platform\/.*$/, "");
+  const link = c.slug ? `${site}meet/${c.slug}` : c.token ? `${location.origin}${location.pathname}#/meet/${c.token}` : "";
   const invited = c.students.filter((s) => s.invited);
   // families: siblings share a family number (and a time)
   const fams = useMemo(() => {
@@ -112,7 +115,7 @@ function ClassCard({ c, ev, canEdit, busy, act }: { c: Cls; ev: Ev; canEdit: boo
       </div>
       {link && (
         <div className="mt-2 flex items-center gap-2">
-          <input readOnly value={link} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded border border-gray-200 bg-silver/50 px-2 py-1 font-mono text-xs text-gray-600" />
+          <input readOnly value={link} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded border border-gray-200 bg-silver/50 px-2 py-1 font-mono text-sm text-navy" />
           <button onClick={copy} className="shrink-0 rounded border border-navy/30 px-2.5 py-1 text-xs font-semibold text-navy hover:bg-silver">{copied ? "Copied ✓" : "Copy link"}</button>
           <a href={link} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-semibold text-royal hover:underline">Open</a>
         </div>
