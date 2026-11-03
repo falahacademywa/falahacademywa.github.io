@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { usDate } from "../../lib/format";
 import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_SHORT, FORM_DOC_TYPE, MEDICAL_COLS, CONSENT_COLS } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
+import MeetingCard from "../../components/MeetingCard";
 
 interface Child {
   student_id: string;
@@ -1155,6 +1156,9 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
             </div>
           </div>
         )}
+
+        {/* Parent-teacher meeting: booked time, then the teachers' remarks (phase 33) */}
+        <MeetingCard studentId={active?.student_id} firstName={active?.students.first_name} />
 
         {/* Attendance — one-line summary bar; calendar expands only on demand */}
         <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">

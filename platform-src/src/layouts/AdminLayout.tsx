@@ -19,6 +19,7 @@ const nav = [
   { to: "/admin/assignments", label: "Assignments", module: "academics" },
   { to: "/admin/updates", label: "Class Updates", module: "academics" },
   { to: "/admin/redcomet", label: "Red Comet", module: "redcomet" },
+  { to: "/admin/meetings", label: "Parent meetings", module: "meetings" },
   { to: "/admin/calendar", label: "Calendar", module: "calendar" },
   { to: "/admin/announcements", label: "Announcements", module: "announcements" },
   { to: "/admin/feedback", label: "Feedback", module: "feedback" },

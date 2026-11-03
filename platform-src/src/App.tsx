@@ -25,6 +25,9 @@ import Feedback from "./pages/admin/Feedback";
 import Tasks from "./pages/admin/Tasks";
 import Volunteers from "./pages/admin/Volunteers";
 import Attendance from "./pages/admin/Attendance";
+import MeetingsAdmin from "./pages/admin/Meetings";
+import Meet from "./pages/Meet";
+import TeacherMeetings from "./pages/teacher/Meetings";
 import ParentHome from "./pages/parent/ParentHome";
 import TeacherLayout from "./layouts/TeacherLayout";
 import TeacherToday from "./pages/teacher/Today";
@@ -40,6 +43,8 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* parent-teacher meeting booking (phase 33): public, one link per class */}
+          <Route path="/meet/:token" element={<Meet />} />
           <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
 
           <Route path="/admin" element={<RequireRole roles={["admin", "staff"]}><AdminLayout /></RequireRole>}>
@@ -58,6 +63,7 @@ export default function App() {
             <Route path="assignments" element={<AssignmentsAdmin />} />
             <Route path="updates" element={<ClassUpdates />} />
             <Route path="redcomet" element={<RedComet />} />
+            <Route path="meetings" element={<MeetingsAdmin />} />
             <Route path="calendar" element={<CalendarAdmin />} />
             <Route path="announcements" element={<AnnouncementsAdmin />} />
             <Route path="feedback" element={<Feedback />} />
@@ -75,6 +81,7 @@ export default function App() {
             <Route path="students/:id" element={<TeacherStudent />} />
             <Route path="update" element={<TeacherUpdate />} />
             <Route path="progress" element={<TeacherProgress />} />
+            <Route path="meetings" element={<TeacherMeetings />} />
             <Route path="me" element={<TeacherMe />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />

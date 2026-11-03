@@ -18,6 +18,7 @@ export const MODULES: Module[] = [
   { key: "fees",          label: "Fees",                      paths: ["/admin/fees"],       note: "plans and payments" },
   { key: "academics",     label: "Academics, assignments & class updates", paths: ["/admin/academics", "/admin/assignments", "/admin/updates"] },
   { key: "redcomet",      label: "Red Comet",                 paths: ["/admin/redcomet"],   note: "workbook photos from the teacher app; edit = upload and delete photos not yet entered (phase 31)" },
+  { key: "meetings",      label: "Parent meetings",           paths: ["/admin/meetings"],   note: "parent-teacher meeting bookings and teachers' remarks; edit = invite list, cancel a booking (phase 33)" },
   { key: "calendar",      label: "Calendar",                  paths: ["/admin/calendar"] },
   { key: "announcements", label: "Announcements",             paths: ["/admin/announcements"] },
   { key: "feedback",      label: "Feedback",                  paths: ["/admin/feedback"] },
