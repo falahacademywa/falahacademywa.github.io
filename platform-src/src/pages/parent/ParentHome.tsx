@@ -6,6 +6,7 @@ import { usDate } from "../../lib/format";
 import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_SHORT, FORM_DOC_TYPE, MEDICAL_COLS, CONSENT_COLS } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 import MeetingCard from "../../components/MeetingCard";
+import OldAnnouncements from "../../components/OldAnnouncements";
 
 interface Child {
   student_id: string;
@@ -48,7 +49,7 @@ interface EcRow { id: string | null; student_id: string; name: string; phone: st
 interface GPerson { key: string; name: string; relationship: string; phone: string; email: string | null; rowIds: string[] }
 interface DocType { id: number; name: string; sort: number }
 interface DocRef { id: string; student_id: string; document_type: string; file_url: string | null; storage_path: string | null; uploaded_date: string }
-interface Ann { id: string; title: string; content: string; category: string; is_pinned: boolean; requires_ack: boolean; publish_date: string | null; announcement_acks: { parent_id: string }[] }
+interface Ann { id: string; title: string; content: string; category: string; status: string; is_pinned: boolean; requires_ack: boolean; publish_date: string | null; announcement_acks: { parent_id: string }[] }
 
 export default function ParentHome() {
   const { profile, session, signOut } = useAuth();
@@ -188,11 +189,11 @@ export default function ParentHome() {
         supabase.from("calendar_events").select("id, title, event_type, start_date, end_date, location, rsvp_enabled")
           .gte("start_date", today).order("start_date").limit(6),
         supabase.from("announcements")
-          .select("id, title, content, category, is_pinned, requires_ack, publish_date, announcement_acks ( parent_id )")
-          .eq("status", "published")
+          .select("id, title, content, category, status, is_pinned, requires_ack, publish_date, announcement_acks ( parent_id )")
+          .in("status", ["published", "archived"])   // archived = "Old announcements" (this school year; phase 34)
           .order("is_pinned", { ascending: false })
           .order("publish_date", { ascending: false })
-          .limit(10),
+          .limit(300),
       ]);
       const c = (kids as unknown as Child[]) ?? [];
       setChildren(c);
@@ -578,6 +579,36 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     await supabase.from("announcement_acks").insert({ announcement_id: a.id, parent_id: session.user.id });
     setAnns((prev) => prev.map((x) => x.id === a.id
       ? { ...x, announcement_acks: [...x.announcement_acks, { parent_id: session.user.id }] } : x));
+  }
+
+  // phase 34: current (published) vs old (archived this school year) announcements
+  const annsNow = anns.filter((a) => a.status !== "archived");
+  const annsOld = anns.filter((a) => a.status === "archived");
+  function annItem(a: Ann, old: boolean) {
+    const acked = a.announcement_acks.some((x) => x.parent_id === session?.user.id);
+    return (
+      <div key={a.id} className={old ? "rounded-lg bg-silver/40 p-3" : "border-b pb-4 last:border-0 last:pb-0"}>
+        <div className="flex flex-wrap items-center gap-2">
+          {a.is_pinned && !old && <span title="Pinned">📌</span>}
+          <span className="font-semibold text-navy">{a.title}</span>
+          <span className="rounded-full bg-silver px-2.5 py-0.5 text-xs text-gray-500">{a.category}</span>
+          <span className="ml-auto text-xs text-gray-400">
+            {a.publish_date ? new Date(a.publish_date).toLocaleDateString() : ""}
+          </span>
+        </div>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{a.content}</p>
+        {a.requires_ack && (
+          acked ? (
+            <p className="mt-2 text-xs font-semibold text-green-600">✓ Acknowledged</p>
+          ) : (
+            <button onClick={() => ack(a)}
+              className="mt-2 rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-navy-dark hover:bg-gold-light">
+              Acknowledge
+            </button>
+          )
+        )}
+      </div>
+    );
   }
 
   const activeEnrollment = active?.students.enrollments.find((e) => e.status === "active") ?? active?.students.enrollments[0];
@@ -1437,34 +1468,10 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
         <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-3">
           <h2 className="mb-4 font-display text-lg font-semibold text-navy">Announcements</h2>
           <div className="space-y-4">
-            {anns.map((a) => {
-              const acked = a.announcement_acks.some((x) => x.parent_id === session?.user.id);
-              return (
-                <div key={a.id} className="border-b pb-4 last:border-0 last:pb-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {a.is_pinned && <span title="Pinned">📌</span>}
-                    <span className="font-semibold text-navy">{a.title}</span>
-                    <span className="rounded-full bg-silver px-2.5 py-0.5 text-xs text-gray-500">{a.category}</span>
-                    <span className="ml-auto text-xs text-gray-400">
-                      {a.publish_date ? new Date(a.publish_date).toLocaleDateString() : ""}
-                    </span>
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{a.content}</p>
-                  {a.requires_ack && (
-                    acked ? (
-                      <p className="mt-2 text-xs font-semibold text-green-600">✓ Acknowledged</p>
-                    ) : (
-                      <button onClick={() => ack(a)}
-                        className="mt-2 rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-navy-dark hover:bg-gold-light">
-                        Acknowledge
-                      </button>
-                    )
-                  )}
-                </div>
-              );
-            })}
-            {!anns.length && !configMissing && <p className="text-sm text-gray-400">No announcements yet.</p>}
+            {annsNow.map((a) => annItem(a, false))}
+            {!annsNow.length && !configMissing && <p className="text-sm text-gray-400">{annsOld.length ? "No new announcements." : "No announcements yet."}</p>}
           </div>
+          <OldAnnouncements items={annsOld} render={(a) => annItem(a, true)} />
         </section>
 
         {/* Upcoming events */}
