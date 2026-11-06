@@ -7,6 +7,7 @@ import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_SHORT, FO
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 import MeetingCard from "../../components/MeetingCard";
 import OldAnnouncements from "../../components/OldAnnouncements";
+import SecureImg, { SecureLink } from "../../components/SecureImg";
 
 interface Child {
   student_id: string;
@@ -252,7 +253,8 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
 <tfoot><tr><td>Total</td><td class="r">$${billed.toFixed(2)}</td><td class="r">$${paid.toFixed(2)}</td><td>${waivedTotal ? "Waived: $" + waivedTotal.toFixed(2) : ""}</td><td class="r">${billed - paid - waivedTotal > 0 ? "Balance $" + (billed - paid - waivedTotal).toFixed(2) : "Paid in full"}</td></tr></tfoot></table>
 <div class="foot">Falah Academy · 25650 101st Ave SE, Kent, WA 98030 · (301) 919-0106 · falahacademywa@gmail.com · falahacademywa.org</div>
 <script>window.onload=function(){window.print()}</script></body></html>`;
-    const w = window.open("", "_blank", "noopener,width=900,height=700");
+    const w = window.open("", "_blank", "width=900,height=700");   // "noopener" made window.open return null, so it never opened
+    if (w) w.opener = null;
     if (!w) { alert("Please allow pop-ups to print the statement."); return; }
     w.document.write(html); w.document.close();
     track("print_statement");
@@ -680,7 +682,7 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                 className={`flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-5 text-base font-semibold transition ${
                   active?.student_id === c.student_id ? "bg-navy text-white shadow-md" : "border border-gray-300 bg-white text-gray-600 hover:bg-white/60"}`}>
                 {c.students.profile_photo_url ? (
-                  <img src={c.students.profile_photo_url} alt=""
+                  <SecureImg src={c.students.profile_photo_url} alt=""
                     className={`h-12 w-12 rounded-full object-cover ${active?.student_id === c.student_id ? "border-2 border-gold" : "border border-gray-200"}`} />
                 ) : (
                   <span className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
@@ -1266,21 +1268,21 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                   {(u.attachment_urls?.length ?? 0) > 1 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {u.attachment_urls!.map((src) => (
-                        <a key={src} href={src} target="_blank" rel="noreferrer">
-                          <img src={src} alt="Attached photo" loading="lazy" className="h-28 w-28 rounded-lg border border-gray-200 object-cover" />
-                        </a>
+                        <SecureLink key={src} href={src} target="_blank" rel="noreferrer">
+                          <SecureImg src={src} alt="Attached photo" loading="lazy" className="h-28 w-28 rounded-lg border border-gray-200 object-cover" />
+                        </SecureLink>
                       ))}
                     </div>
                   )}
                   {(u.attachment_urls?.length ?? 0) <= 1 && u.attachment_thumb && (
-                    <a href={u.attachment_url ?? "#"} target="_blank" rel="noreferrer" className="mt-2 inline-block">
-                      <img src={u.attachment_thumb} alt="Attached photo" loading="lazy"
+                    <SecureLink href={u.attachment_url ?? "#"} target="_blank" rel="noreferrer" className="mt-2 inline-block">
+                      <SecureImg src={u.attachment_thumb} alt="Attached photo" loading="lazy"
                         className="max-h-48 rounded-lg border border-gray-200 object-cover" />
-                    </a>
+                    </SecureLink>
                   )}
                   {(u.attachment_urls?.length ?? 0) <= 1 && !u.attachment_thumb && u.attachment_url && (
-                    <a href={u.attachment_url} target="_blank" rel="noreferrer"
-                      className="mt-2 inline-block text-xs font-semibold text-royal hover:underline">View attachment ↗</a>
+                    <SecureLink href={u.attachment_url} target="_blank" rel="noreferrer"
+                      className="mt-2 inline-block text-xs font-semibold text-royal hover:underline">View attachment ↗</SecureLink>
                   )}
                 </div>
               ))}

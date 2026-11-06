@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
+import SecureImg from "../../components/SecureImg";
 
 interface StudentRow {
   id: string;
@@ -128,7 +129,7 @@ export default function Students() {
                     <td className="px-4 py-2.5">
                       <span className="flex items-center gap-2">
                         {r.profile_photo_url ? (
-                          <img src={r.profile_photo_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                          <SecureImg src={r.profile_photo_url} alt="" className="h-7 w-7 rounded-full object-cover" />
                         ) : (
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-navy/10 text-[10px] font-bold text-navy">
                             {r.first_name[0]}{r.last_name[0]}

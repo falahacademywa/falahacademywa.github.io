@@ -7,6 +7,7 @@ import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr } from "../../lib/dates";
 import { usDate } from "../../lib/format";
 import { type GradeLite, gradeColor, gradeShort, shiftMonth, monthLabel, monthRange, monthCells, isWeekend } from "../../lib/calendar";
+import { SecureLink } from "../../components/SecureImg";
 
 interface Row {
   id: string; subject: string; note: string; update_date: string; homework_due: string | null;
@@ -149,8 +150,8 @@ export default function ClassUpdates() {
                     {u.homework_due && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">★ due {usDate(u.homework_due)}</span>}
                     <span className="ml-auto text-xs text-gray-400">{u.teacher_email ?? "unknown"}</span>
                     {(u.attachment_urls?.length ?? 0) > 1
-                      ? u.attachment_urls!.map((src, i) => <a key={src} href={src} target="_blank" rel="noreferrer" className="text-xs font-semibold text-royal hover:underline">Photo {i + 1}</a>)
-                      : u.attachment_url && <a href={u.attachment_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-royal hover:underline">Attachment</a>}
+                      ? u.attachment_urls!.map((src, i) => <SecureLink key={src} href={src} target="_blank" rel="noreferrer" className="text-xs font-semibold text-royal hover:underline">Photo {i + 1}</SecureLink>)
+                      : u.attachment_url && <SecureLink href={u.attachment_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-royal hover:underline">Attachment</SecureLink>}
                     <button onClick={() => remove(u.id)} className="text-xs text-gray-400 hover:text-red-600">Delete</button>
                   </div>
                   <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{u.note}</p>

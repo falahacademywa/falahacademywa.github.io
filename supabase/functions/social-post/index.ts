@@ -33,7 +33,10 @@ const json = (body: unknown, status = 200) =>
 interface Post {
   id: number; body: string; platforms: string[]; card_url: string | null; image_url: string | null;
   image_no_children: boolean; status: string; template_key: string | null;
+  fb_post_id: string | null; ig_media_id: string | null; ig_permalink: string | null;
 }
+// only our own files may be posted: drawn cards and uploads in the public `social` bucket (phase 39)
+const OWN_FILE = /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\/social\//;
 
 async function graph(path: string, params: Record<string, string>, method = "POST") {
   const token = Deno.env.get("FB_PAGE_TOKEN")!;
@@ -54,19 +57,22 @@ async function postOne(db: SupabaseClient, id: number, userId: string | null, te
   const result: Record<string, string | null> = { fb_post_id: null, ig_media_id: null, ig_permalink: null };
   try {
     if (!p) throw new Error("post not found");
+    // a retry after a partial failure must not post again where it already went out (phase 39)
+    result.fb_post_id = p.fb_post_id; result.ig_media_id = p.ig_media_id; result.ig_permalink = p.ig_permalink;
     if (!p.body.trim()) throw new Error("the post has no text");
     if (/\{[a-z_]+\}/.test(p.body)) throw new Error("fill in every {placeholder} first");
     if (p.image_url && !p.image_no_children) throw new Error("uploaded image is not confirmed as free of children");
     const image = p.image_url ?? p.card_url;
+    if (image && !OWN_FILE.test(image)) throw new Error("the image must be a card drawn in the portal or an upload made there");
     const page = Deno.env.get("FB_PAGE_ID")!, ig = Deno.env.get("IG_USER_ID");
-    if (p.platforms.includes("facebook")) {
+    if (p.platforms.includes("facebook") && !(result.fb_post_id && !test)) {
       const r = image
         ? await graph(`${page}/photos`, { url: image, caption: p.body, published: test ? "false" : "true" })
         : await graph(`${page}/feed`, { message: p.body, published: test ? "false" : "true" });
       result.fb_post_id = r.post_id ?? r.id;
       if (test) await graph(String(r.id), {}, "DELETE").catch(() => null);   // dev: remove the hidden test post
     }
-    if (p.platforms.includes("instagram")) {
+    if (p.platforms.includes("instagram") && !(result.ig_media_id && !test)) {
       if (!ig) throw new Error("IG_USER_ID secret is not set");
       if (!image) throw new Error("Instagram needs an image: prepare the card first");
       const c = await graph(`${ig}/media`, { image_url: image, caption: p.body });
@@ -92,8 +98,11 @@ async function postOne(db: SupabaseClient, id: number, userId: string | null, te
   } catch (e) {
     const msg = (e as Error).message;
     // keep whatever already went out, so a retry does not post twice to the same platform
-    const done = result.fb_post_id ? " (Facebook already posted: " + result.fb_post_id + ")" : "";
-    await db.from("social_posts").update({ status: "failed", error: msg + done, fb_post_id: result.fb_post_id, test_run: test }).eq("id", id);
+    const done = [result.fb_post_id && "Facebook already posted", result.ig_media_id && "Instagram already posted"].filter(Boolean).join(", ");
+    await db.from("social_posts").update({
+      status: "failed", error: msg + (done ? ` (${done}; a retry posts only the rest)` : ""),
+      fb_post_id: result.fb_post_id, ig_media_id: result.ig_media_id, ig_permalink: result.ig_permalink, test_run: test,
+    }).eq("id", id);
     return { id, ok: false, error: msg + done };
   }
 }

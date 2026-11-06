@@ -85,6 +85,15 @@ function ClassCard({ c, ev, canEdit, busy, act }: { c: Cls; ev: Ev; canEdit: boo
   const [copied, setCopied] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [openRemark, setOpenRemark] = useState<string | null>(null);
+  // family codes for the invitation slips (phase 40): read out to a parent who lost theirs
+  const [codes, setCodes] = useState<Record<number, string>>({});
+  useEffect(() => {
+    supabase.from("ptm_codes").select("family_no, code").eq("class_id", c.id)
+      .then(({ data }) => setCodes(Object.fromEntries(((data as { family_no: number; code: string }[]) ?? []).map((x) => [x.family_no, x.code]))));
+  }, [c.id, c.students]);
+  const codeChip = (no: number) => codes[no]
+    ? <span title="Family code (on the invitation slip)" className="rounded bg-silver px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-wider text-navy">{codes[no]}</span>
+    : null;
   // the short link parents can remember (falahacademywa.org/meet/kg, a static redirect page);
   // the long token link keeps working too
   const site = location.origin + location.pathname.replace(/platform\/.*$/, "");
@@ -133,6 +142,7 @@ function ClassCard({ c, ev, canEdit, busy, act }: { c: Cls; ev: Ev; canEdit: boo
                   {fs.map((f) => (
                     <div key={f.no} className="flex flex-wrap items-center gap-x-2">
                       <span className="font-semibold text-gray-800">{names(f.kids)}</span>
+                      {codeChip(f.no)}
                       <span className="text-xs text-gray-500">{[f.parent, f.phone].filter(Boolean).join(" · ")}{f.at ? ` · booked ${new Date(f.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
                       {canEdit && <button disabled={busy} onClick={() => { if (confirm(`Cancel the ${ampm(t.slice(0, 5))} meeting for ${names(f.kids)}? The time becomes free again.`)) act("ptm_admin_cancel", { p_class: c.id, p_family: f.no }, "Booking cancelled; the time is free again."); }}
                         className="text-xs font-semibold text-red-700 hover:underline disabled:opacity-50">cancel</button>}
@@ -153,7 +163,7 @@ function ClassCard({ c, ev, canEdit, busy, act }: { c: Cls; ev: Ev; canEdit: boo
       {notBooked.length > 0 && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
           <div className="font-semibold text-amber-800">Not booked yet ({notBooked.length})</div>
-          <div className="mt-1 text-amber-900">{notBooked.map((f) => names(f.kids)).join(" · ")}</div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-amber-900">{notBooked.map((f) => <span key={f.no} className="inline-flex items-center gap-1">{names(f.kids)} {codeChip(f.no)}</span>)}</div>
         </div>
       )}
 

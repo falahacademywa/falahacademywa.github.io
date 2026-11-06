@@ -11,6 +11,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useRoster, compressImage, todayISO } from "../../lib/teacher";
 import { usDate } from "../../lib/format";
+import SecureImg, { SecureLink } from "../../components/SecureImg";
 
 const CLASS_SUBJECTS = ["English", "Mathematics", "Science", "Islamic Education"] as const;
 interface Picked { file: File; url: string }
@@ -206,7 +207,7 @@ export default function Update() {
             </div>
             <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{p.note}</p>
             {(p.attachment_urls?.length ?? 0) > 0 && (
-              <div className="mt-1.5 flex gap-1.5">{p.attachment_urls!.map((u) => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="" className="h-12 w-12 rounded-md border border-gray-200 object-cover" /></a>)}</div>
+              <div className="mt-1.5 flex gap-1.5">{p.attachment_urls!.map((u) => <SecureLink key={u} href={u} target="_blank" rel="noreferrer"><SecureImg src={u} alt="" className="h-12 w-12 rounded-md border border-gray-200 object-cover" /></SecureLink>)}</div>
             )}
           </div>
         ))}

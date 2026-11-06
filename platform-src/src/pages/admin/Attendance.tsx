@@ -31,7 +31,7 @@ export default function Attendance() {
       supabase.from("enrollments").select("id, grade_id, grade_name, student_id, students ( first_name, last_name, student_no )").eq("status", "active"),
     ]).then(([{ data: g }, { data: e }]) => {
       setGrades((g as GradeLite[]) ?? []);
-      setEnrs(((e as unknown as Enr[]) ?? []).sort((a, b) => a.students.first_name.localeCompare(b.students.first_name)));
+      setEnrs(((e as unknown as Enr[]) ?? []).sort((a, b) => (a.students?.first_name ?? "").localeCompare(b.students?.first_name ?? "")));
     });
   }, []);
 
@@ -73,7 +73,7 @@ export default function Attendance() {
   const dayByGrade = useMemo(() => {
     const m: Record<number, Att[]> = {};
     dayRows.forEach((a) => (m[a.enrollments.grade_id] ??= []).push(a));
-    Object.values(m).forEach((l) => l.sort((a, b) => a.enrollments.students.first_name.localeCompare(b.enrollments.students.first_name)));
+    Object.values(m).forEach((l) => l.sort((a, b) => (a.enrollments?.students?.first_name ?? "").localeCompare(b.enrollments?.students?.first_name ?? "")));
     return m;
   }, [dayRows]);
 

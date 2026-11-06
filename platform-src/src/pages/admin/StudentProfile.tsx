@@ -7,6 +7,7 @@ import { RelBadge } from "./ParentProfile";
 import { useAuth } from "../../lib/auth";
 import { StudentFormDialog, consentBadge, formStatus, allergySummary, medicalSummary, MEDICAL_COLS, CONSENT_COLS, FORM_TITLE, FORM_DOC_TYPE } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
+import SecureImg from "../../components/SecureImg";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; period_month: string | null; amount: number; payment_method: string }[] }
@@ -295,7 +296,7 @@ export default function StudentProfile() {
       <div className="mt-2 mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           {s.profile_photo_url ? (
-            <img src={s.profile_photo_url} alt={s.first_name}
+            <SecureImg src={s.profile_photo_url} alt={s.first_name}
               className="h-16 w-16 rounded-full border-2 border-gold object-cover" />
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy/10 font-display text-xl font-semibold text-navy">
@@ -416,7 +417,7 @@ export default function StudentProfile() {
 
       {s.photo_pending_url && (
         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <img src={s.photo_pending_url} alt="Pending" className="h-20 w-20 rounded-lg object-cover" />
+          <SecureImg src={s.photo_pending_url} alt="Pending" className="h-20 w-20 rounded-lg object-cover" />
           <div className="flex-1 text-sm text-amber-800">
             <strong>Photo awaiting approval</strong> — a parent uploaded this picture for {s.first_name}.
           </div>

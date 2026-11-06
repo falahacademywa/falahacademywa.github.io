@@ -12,6 +12,7 @@ stored, nothing e-mailed), PORTAL_URL. Addresses containing "test.local" are
 never e-mailed (dev seed families). Footer = school information, no EIN.
 """
 import base64
+import html as _html
 import io
 import json
 import os
@@ -155,7 +156,7 @@ def email(to, name, subject, html, attachment=None):
 
 
 def wrap(name, body):
-    return (f"<p>Assalamu Alaikum {name or ''},</p>{body}"
+    return (f"<p>Assalamu Alaikum {_html.escape(name or '')},</p>{body}"
             f"<p>— Falah Academy</p><p style=\"color:#777;font-size:12px\">{FOOTER}</p>")
 
 
@@ -173,29 +174,45 @@ def handle_receipt(o):
     if st >= 400:
         return f"storage HTTP {st}: {str(body)[:120]}"
     kids = ", ".join(ln["student"] for ln in d["lines"])
+    kids_html = _html.escape(kids)
     corrected = d.get("kind") == "corrected"
     subject = f"{SCHOOL} {'corrected ' if corrected else ''}receipt {d['receipt_no']}"
     bal = float(d.get("balance") or 0)
     body_html = (f"<p>{'This corrected receipt replaces the earlier one with the same number. ' if corrected else 'JazakAllah khair. '}"
                  f"We received <b>{money(d['total'])}</b> by {str(d.get('method', '')).capitalize()} on {long_date(d['payment_date'])} "
-                 f"for {kids}, covering {d['period_label']}. Receipt <b>{d['receipt_no']}</b> is attached.</p>"
+                 f"for {kids_html}, covering {_html.escape(str(d['period_label']))}. Receipt <b>{_html.escape(str(d['receipt_no']))}</b> is attached.</p>"
                  + (f"<p>Balance still due for {d['period_label']}: <b>{money(bal)}</b>.</p>" if bal > 0
                     else f"<p>Tuition for {d['period_label']} is paid in full.</p>"))
     result = email(d.get("to_email"), d.get("to_name"), subject, wrap(d.get("to_name"), body_html), (f"Receipt_{d['receipt_no']}.pdf", pdf))
-    api(f"/rest/v1/payments?receipt_group=eq.{o['receipt_group']}", "PATCH",
-        {"receipt_sent_at": datetime.utcnow().isoformat() + "Z", "receipt_path": path}, headers={"Prefer": "return=minimal"})
+    stamp = {"receipt_path": path}
+    if result.startswith("sent HTTP 2"):
+        stamp["receipt_sent_at"] = datetime.utcnow().isoformat() + "Z"
+    elif not result.startswith("skipped"):
+        notify_admins_failed(d.get("receipt_no"), result)
+    api(f"/rest/v1/payments?receipt_group=eq.{o['receipt_group']}", "PATCH", stamp, headers={"Prefer": "return=minimal"})
     if corrected:
         for pid in d.get("parent_ids") or []:
             api("/rest/v1/notifications", "POST", {"recipient_id": pid, "title": f"Corrected receipt {d['receipt_no']}",
                 "message": f"The receipt for {kids}, {d['period_label']}, was corrected to {money(d['total'])}. The new PDF is under Fees.",
                 "priority": "info", "link_path": "/parent", "emailed": True}, headers={"Prefer": "return=minimal"})
-    return f"{path} → {d.get('to_email') or 'no address'}: {result}"
+    return f"{path}: {result}"
+
+
+def notify_admins_failed(receipt_no, result):
+    """A receipt e-mail did not go out: tell the admins in the portal (they can press Resend)."""
+    st, admins = api("/rest/v1/profiles?select=id&role=eq.admin")
+    if st != 200:
+        return
+    for a in admins or []:
+        api("/rest/v1/notifications", "POST", {"recipient_id": a["id"], "title": f"Receipt {receipt_no} e-mail failed",
+            "message": f"The receipt e-mail could not be sent ({str(result)[:120]}). Open Fees and press Resend.",
+            "priority": "important", "link_path": "/admin/fees", "emailed": True}, headers={"Prefer": "return=minimal"})
 
 
 def handle_withdrawn(o):
     p = o.get("payload") or {}
     body_html = (f"<p>The payment of <b>{money(p.get('amount', 0))}</b> dated {long_date(p['payment_date']) if p.get('payment_date') else ''} "
-                 f"for {p.get('student', 'your child')} ({p.get('period_label', '')}) was removed from our records, and receipt "
+                 f"for {_html.escape(str(p.get('student', 'your child')))} ({_html.escape(str(p.get('period_label', '')))}) was removed from our records, and receipt "
                  f"<b>{o.get('receipt_no')}</b> is withdrawn. If this is unexpected, please contact the office.</p>")
     return email(p.get("to_email"), p.get("to_name"), f"{SCHOOL} receipt {o.get('receipt_no')} withdrawn", wrap(p.get("to_name"), body_html))
 

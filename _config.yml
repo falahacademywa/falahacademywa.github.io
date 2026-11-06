@@ -1,0 +1,11 @@
+# GitHub Pages builds this site with Jekyll. Do not publish source code, database scripts, Apps
+# Scripts or internal tooling: the repo is public, but the website should only serve the site
+# itself (security review 2026-11-05).
+exclude:
+  - supabase
+  - google-apps-script
+  - scripts
+  - platform-src
+  - api
+  - .github
+  - README.md

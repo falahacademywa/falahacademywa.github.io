@@ -58,6 +58,12 @@ function syncZelle() {
 
 // "<payer> sent you $1,234.56" + the memo line from the body
 function parseAlert_(msg) {
+  // Only genuine Bank of America alerts (security review 2026-11-05): Gmail's "from:" search also
+  // matches the display name, so check the real sender address and, when present, the DMARC result.
+  var from = String(msg.getFrom() || "");
+  if (!/@ealerts\.bankofamerica\.com>?\s*$/i.test(from)) return null;
+  var authRes = String(msg.getHeader("Authentication-Results") || "");
+  if (authRes && !/dmarc=pass/i.test(authRes)) return null;
   var m = String(msg.getSubject() || "").match(/^(.+?) sent you \$([\d,]+\.\d{2})\s*$/);
   if (!m) return null;
   var payer = m[1].trim();

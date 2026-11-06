@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useRoster, consentBadge, telHref, type Contact } from "../../lib/teacher";
 import { usPhone } from "../../lib/format";
+import SecureImg from "../../components/SecureImg";
 
 export default function StudentDetail() {
   const { id } = useParams();
@@ -39,7 +40,7 @@ export default function StudentDetail() {
     <div>
       <Link to="/teacher" className="text-sm text-royal">‹ Attendance</Link>
       <div className="mt-2 flex items-center gap-3">
-        {r.profile_photo_url ? <img src={r.profile_photo_url} alt="" className="h-16 w-16 rounded-full object-cover" />
+        {r.profile_photo_url ? <SecureImg src={r.profile_photo_url} alt="" className="h-16 w-16 rounded-full object-cover" />
           : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy/10 text-lg font-bold text-navy">{r.first_name[0]}{r.last_name[0]}</div>}
         <div>
           <h1 className="font-display text-xl font-semibold text-navy">{r.first_name} {r.last_name}</h1>

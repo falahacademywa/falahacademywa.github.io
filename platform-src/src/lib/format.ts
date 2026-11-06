@@ -8,7 +8,7 @@ export function usDate(iso: string | null | undefined): string {
   return m ? `${m[2]}/${m[3]}/${m[1]}` : iso;
 }
 
-/** "2068290931" / "206-829-0931" / "+1 206 829 0931" -> "(206) 829-0931".
+/** "2065550123" / "206-555-0123" / "+1 206 555 0123" -> "(206) 555-0123".
  *  Numbers that aren't 10 (or 11 starting with 1) digits are returned as typed. */
 export function usPhone(raw: string | null | undefined): string {
   if (!raw) return "—";

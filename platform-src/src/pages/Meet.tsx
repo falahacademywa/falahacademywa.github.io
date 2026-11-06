@@ -1,10 +1,11 @@
 // Parent-teacher meeting booking (phase 33, President 2026-11-02). Stand-alone page, no
 // sign-in: /platform/#/meet/<token>, one link per class, shared with parents on WhatsApp and
-// not linked from the website. The parent gives the child's first name and the phone number
-// the school has on file; the database (ptm_family / ptm_book) checks both, then the family
-// picks a free time. Siblings in the same class share one time. Taken times show no names.
+// not linked from the website. Phase 40 (2026-11-05): the parent gives the family code from the
+// invitation slip (the slip's QR fills it in via ?c=) and the child's first name; the database
+// (ptm_family / ptm_book) checks both, then the family picks a free time. The phone number is
+// optional (how the office can reach them). Siblings in the same class share one time.
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { supabase, configMissing } from "../lib/supabase";
 import { ampm, longDate, icsFile } from "../lib/meetings";
 
@@ -13,6 +14,8 @@ interface Family { children: string[]; slot: string | null; parent_name: string 
 
 export default function Meet() {
   const { token = "" } = useParams();
+  const [sp] = useSearchParams();
+  const [code, setCode] = useState((sp.get("c") ?? "").toUpperCase());
   const [page, setPage] = useState<Page | null | undefined>(undefined);
   const [child, setChild] = useState("");
   const [phone, setPhone] = useState("");
@@ -33,19 +36,20 @@ export default function Meet() {
 
   async function identify(e: React.FormEvent) {
     e.preventDefault(); setErr(null);
+    if (code.replace(/[^A-Za-z0-9]/g, "").length < 6) return setErr("Please type the 6-character family code from your invitation.");
     if (!child.trim()) return setErr("Please type your child's first name.");
-    if (phone.replace(/\D/g, "").length < 10) return setErr("Please type the full phone number (10 digits).");
     setBusy(true);
-    const { data } = await supabase.rpc("ptm_family", { p_token: token, p_child: child, p_phone: phone });
+    const { data } = await supabase.rpc("ptm_family", { p_token: token, p_code: code, p_child: child });
     setBusy(false);
-    if (!data) return setErr("We could not match that name and phone number. Please use the number the school has on file for your child, or contact the office.");
+    if (!data) return setErr("We could not match that code and first name. Please check the code on your invitation, or contact the office.");
+    if ((data as { error?: string }).error) return setErr((data as { error: string }).error);   // too many tries (phase 39)
     const f = data as Family;
     setFam(f); setPick(f.slot); setParent(f.parent_name ?? "");
   }
 
   async function book(slot: string | null) {
     setErr(null); setBusy(true);
-    const { data, error } = await supabase.rpc("ptm_book", { p_token: token, p_child: child, p_phone: phone, p_slot: slot, p_parent: parent });
+    const { data, error } = await supabase.rpc("ptm_book", { p_token: token, p_code: code, p_child: child, p_slot: slot, p_parent: parent, p_phone: phone || null });
     setBusy(false);
     const r = data as { ok: boolean; error?: string; slot?: string | null } | null;
     if (error || !r?.ok) { setErr(r?.error ?? error?.message ?? "Something went wrong. Please try again."); loadPage(); return; }
@@ -91,12 +95,13 @@ export default function Meet() {
       {page.open && !fam && (
         <form onSubmit={identify} className={card}>
           <h2 className="font-display text-lg font-semibold text-navy">1. Who are you booking for?</h2>
+          <label className="mt-3 block text-sm font-semibold text-gray-700">Family code
+            <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} autoComplete="off" autoCapitalize="characters" maxLength={8}
+              placeholder="e.g. K7PQ3M" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 font-mono text-lg tracking-widest" />
+            <span className="mt-1 block text-xs font-normal text-gray-500">The 6 characters on your invitation slip. Lost it? Call the office.</span>
+          </label>
           <label className="mt-3 block text-sm font-semibold text-gray-700">Your child's first name
             <input value={child} onChange={(e) => setChild(e.target.value)} autoComplete="off" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base" />
-          </label>
-          <label className="mt-3 block text-sm font-semibold text-gray-700">Your phone number
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="(206) 555-0123" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base" />
-            <span className="mt-1 block text-xs font-normal text-gray-500">The number the school has on file for your child.</span>
           </label>
           {err && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}
           <button disabled={busy} className="mt-4 w-full rounded-lg bg-navy py-3 text-base font-semibold text-white disabled:opacity-50">{busy ? "Checking…" : "Continue"}</button>
@@ -133,6 +138,9 @@ export default function Meet() {
           </div>
           <label className="mt-4 block text-sm font-semibold text-gray-700">Your name <span className="font-normal text-gray-400">(optional)</span>
             <input value={parent} onChange={(e) => setParent(e.target.value)} autoComplete="name" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base" />
+          </label>
+          <label className="mt-3 block text-sm font-semibold text-gray-700">Your phone <span className="font-normal text-gray-400">(optional, so the office can reach you)</span>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="(206) 555-0123" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base" />
           </label>
           {err && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}
           <button disabled={!pick || busy || (pick === fam.slot && done === "booked")} onClick={() => book(pick)}

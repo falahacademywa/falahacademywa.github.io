@@ -14,6 +14,9 @@ on:
     - cron: "30 1 * * *"  # daily ~5:30-6:30pm Pacific (class-updates evening digest)
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -64,14 +67,21 @@ jobs:
                 '{sender: {name: "Falah Academy", email: "falahacademywa@gmail.com"},
                   to: [{email: $to, name: $name}],
                   subject: ("Falah Academy: " + $subj),
-                  htmlContent: ("<p>Assalamu Alaikum " + $name + ",</p><p>" + $msg + "</p><p>Details: <a href=\"https://falahacademywa.org/platform/\">Family Portal</a></p><p>— Falah Academy</p>")}')
+                  htmlContent: ("<p>Assalamu Alaikum " + ($name|@html) + ",</p><p>" + ($msg|@html) + "</p><p>Details: <a href=\"https://falahacademywa.org/platform/\">Family Portal</a></p><p>— Falah Academy</p>")}')
               http=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.brevo.com/v3/smtp/email" \
                 -H "api-key: $BREVO" -H "Content-Type: application/json" -d "$payload")
-              echo "notification $id -> $email : HTTP $http"
+              # never print the address: this repo and its Actions logs are public
+              echo "notification $id : HTTP $http"
             else
-              echo "notification $id -> skipped (test/no email)"
+              http=skip
+              echo "notification $id : skipped (test/no email)"
             fi
-            curl -sf -X PATCH "$URL/rest/v1/notifications?id=eq.$id" \
-              -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
-              -H "Content-Type: application/json" -d '{"emailed": true}' > /dev/null
+            # mark as e-mailed only when Brevo accepted it, it was skipped, or it was refused for good
+            # (4xx other than 429); 429/5xx/network errors stay un-emailed and are retried next run
+            case "$http" in
+              2??|skip|400|401|403|404|422) curl -sf -X PATCH "$URL/rest/v1/notifications?id=eq.$id" \
+                  -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+                  -H "Content-Type: application/json" -d '{"emailed": true}' > /dev/null ;;
+              *) echo "notification $id : left for the next run" ;;
+            esac
           done

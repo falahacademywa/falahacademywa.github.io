@@ -19,6 +19,9 @@ on:
         required: false
         default: "0"
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest

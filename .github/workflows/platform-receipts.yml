@@ -13,6 +13,9 @@ on:
     - cron: "40 * * * *"   # :40 every hour — the Zelle sync posts on the hour
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   receipts:
     runs-on: ubuntu-latest

@@ -20,6 +20,7 @@ Env: PLATFORM_SUPABASE_URL, PLATFORM_SUPABASE_SERVICE_KEY, optional BREVO_API_KE
      PHOTO_CHECK_THRESHOLD (default 0.9), PHOTO_CHECK_DRY_RUN=1 (score only, write nothing)
 Local test:  python scripts/photo_check.py --files a.jpg b.jpg   (prints the scores)
 """
+import html
 import io, json, os, sys, urllib.error, urllib.parse, urllib.request
 
 THRESHOLD = float(os.environ.get("PHOTO_CHECK_THRESHOLD", "0.9"))   # calibrated 2026-10-31: 80 real workbook photos all >= 0.96; 17 of 18 wrong images < 0.8
@@ -98,7 +99,7 @@ def email(brevo, to, name, subject, text):
         "sender": {"name": "Falah Academy", "email": "falahacademywa@gmail.com"},
         "to": [{"email": to, "name": name or to}],
         "subject": "Falah Academy: " + subject,
-        "htmlContent": (f"<p>Assalamu Alaikum {name or ''},</p><p>{text}</p>"
+        "htmlContent": (f"<p>Assalamu Alaikum {html.escape(name or '')},</p><p>{html.escape(text)}</p>"
                         f"<p>Open it here: <a href=\"{PORTAL}\">{PORTAL}</a> (Red Comet).</p>"
                         "<p>Muneeb Abbasi<br>Principal, Falah Academy</p>"),
     }

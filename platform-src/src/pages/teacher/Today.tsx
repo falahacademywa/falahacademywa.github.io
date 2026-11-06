@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useRoster, todayISO, medicalFlag, type RosterRow } from "../../lib/teacher";
 import { usDate } from "../../lib/format";
+import SecureImg from "../../components/SecureImg";
 
 type Status = "present" | "late" | "absent";
 const BTN: Record<Status, string> = {
@@ -81,7 +82,7 @@ export default function Today() {
         {rows.map((r) => (
           <div key={r.enrollment_id} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
             <Link to={`/teacher/students/${r.student_id}`}>
-              {r.profile_photo_url ? <img src={r.profile_photo_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+              {r.profile_photo_url ? <SecureImg src={r.profile_photo_url} alt="" className="h-10 w-10 rounded-full object-cover" />
                 : <div className="flex h-10 w-10 items-center justify-center rounded-full bg-navy/10 text-sm font-bold text-navy">{r.first_name[0]}{r.last_name[0]}</div>}
             </Link>
             <Link to={`/teacher/students/${r.student_id}`} className="min-w-0 flex-1 active:opacity-70">

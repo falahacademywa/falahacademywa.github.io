@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { ampm, longDate, KIND_LABEL, type Remark } from "../../lib/meetings";
+import SecureImg from "../../components/SecureImg";
 
 interface Stu { student_id: string; name: string; photo: string | null; family_no: number; slot: string | null; parent_name: string | null; ends_at: string | null; remarks: Record<string, Remark> }
 interface Cls { class_id: number; class: string; title: string; date: string; minutes: number; quran_minutes: number; kinds: string[]; last_end: string; students: Stu[] }
@@ -58,7 +59,7 @@ function StudentRow({ c, s, now, onSaved }: { c: Cls; s: Stu; now: number; onSav
     <div className="rounded-xl bg-white p-3 shadow-sm">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 text-left">
         <span className={`w-16 shrink-0 rounded-lg px-1.5 py-1 text-center text-sm font-bold ${s.slot ? "bg-navy text-white" : "bg-gray-100 text-gray-400"}`}>{s.slot ? ampm(s.slot) : "—"}</span>
-        {s.photo ? <img src={s.photo} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-silver text-sm font-bold text-navy">{s.name[0]}</span>}
+        {s.photo ? <SecureImg src={s.photo} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-silver text-sm font-bold text-navy">{s.name[0]}</span>}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-gray-800">{s.name}</span>
           <span className="block truncate text-[11px] text-gray-500">{s.parent_name ? `Parent: ${s.parent_name}` : s.slot ? "booked" : "no time chosen"}</span>
