@@ -7,6 +7,8 @@
 // database refuses entered ones and allows only the teacher's own grades); photos the
 // hourly photo check flagged show red with "It is school work" / "Delete", and stay in
 // the list past the current week until someone deals with them.
+// Phase 37 (2026-11-05): each subject asks for the last workbook page in the photos (required) and
+// shows "Last page uploaded: N" for the chosen student, from the most recent upload with a page.
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -15,7 +17,8 @@ import { useRoster, compressImage, todayISO } from "../../lib/teacher";
 import { usDate } from "../../lib/format";
 
 interface Picked { file: File; url: string }
-interface Upload { id: number; taken_at: string; note: string | null; status: string; path: string; created_at: string; subject: string | null; check_status?: string; check_label?: string | null }
+interface Upload { id: number; taken_at: string; note: string | null; status: string; path: string; created_at: string; subject: string | null; check_status?: string; check_label?: string | null; page_last?: number | null }
+interface LastPage { page: number; date: string }
 const RC_SUBJECTS = ["English", "Maths", "Science"] as const;   // Red Comet courses the school uses (2026-10-22)
 const STATUS: Record<string, string> = { new: "sent", drafted: "received by office", confirmed: "entered in Red Comet", rejected: "not used" };
 
@@ -28,6 +31,8 @@ export default function Progress() {
   const empty = () => ({ English: [], Maths: [], Science: [] }) as Record<Subject, Picked[]>;
   const [picked, setPicked] = useState<Record<Subject, Picked[]>>(empty());
   const [notes, setNotes] = useState<Record<Subject, string>>({ English: "", Maths: "", Science: "" });
+  const [pages, setPages] = useState<Record<Subject, string>>({ English: "", Maths: "", Science: "" });
+  const [lastPage, setLastPage] = useState<Partial<Record<Subject, LastPage>>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [recent, setRecent] = useState<Upload[]>([]);
@@ -42,6 +47,19 @@ export default function Progress() {
   const student = useMemo(() => roster.find((r) => r.enrollment_id === enr), [roster, enr]);
   const total = RC_SUBJECTS.reduce((n, sb) => n + picked[sb].length, 0);
   const summary = RC_SUBJECTS.filter((sb) => picked[sb].length).map((sb) => `${sb} ${picked[sb].length}`).join(" · ");
+  const pageOk = (v: string) => /^\d{1,4}$/.test(v.trim()) && Number(v) >= 1;
+  const needPage = RC_SUBJECTS.filter((sb) => picked[sb].length && !pageOk(pages[sb]));
+
+  async function loadLastPages(e = enr) {
+    if (!e) { setLastPage({}); return; }
+    const { data } = await supabase.from("work_uploads").select("subject, page_last, taken_at")
+      .eq("enrollment_id", e).not("page_last", "is", null).order("created_at", { ascending: false }).limit(100);
+    const out: Partial<Record<Subject, LastPage>> = {};
+    for (const r of (data as { subject: Subject; page_last: number; taken_at: string }[]) ?? []) {
+      if (r.subject && !out[r.subject]) out[r.subject] = { page: r.page_last, date: r.taken_at };
+    }
+    setLastPage(out);
+  }
 
   async function loadRecent(e = enr) {
     if (!e) return;
@@ -49,7 +67,7 @@ export default function Progress() {
     const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow);
     const weekStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     // …plus any older photo the photo check flagged, so it is never out of sight
-    const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at, subject, check_status, check_label")
+    const { data } = await supabase.from("work_uploads").select("id, taken_at, note, status, path, created_at, subject, check_status, check_label, page_last")
       .eq("enrollment_id", e).or(`taken_at.gte.${weekStart},check_status.eq.flagged`).order("created_at", { ascending: false }).limit(60);
     const rows = (data as Upload[]) ?? [];
     setRecent(rows);
@@ -61,7 +79,7 @@ export default function Progress() {
       setThumbs((t) => ({ ...t, ...add }));
     }
   }
-  useEffect(() => { loadRecent(); setSelecting(false); setSel(new Set()); setListMsg(null); }, [enr]);
+  useEffect(() => { loadRecent(); loadLastPages(); setSelecting(false); setSel(new Set()); setListMsg(null); }, [enr]);
 
   function toggleSel(u: Upload) {
     if (u.status === "confirmed") return;
@@ -103,6 +121,7 @@ export default function Progress() {
     e.preventDefault();
     if (!enr) return setMsg("Choose a student first.");
     if (!total) return setMsg("Add at least one photo under a subject.");
+    if (needPage.length) return setMsg(`Enter the last page number for ${needPage.join(" and ")}.`);
     setMsg(null);
     const day = todayISO(); let done = 0;
     for (const sb of RC_SUBJECTS) {
@@ -112,16 +131,16 @@ export default function Progress() {
         const path = `${enr}/${day}/${crypto.randomUUID()}.jpg`;
         const up = await supabase.storage.from("student-work").upload(path, blob, { contentType: "image/jpeg" });
         if (up.error) { setBusy(null); return setMsg(`${sb} photo failed: ${up.error.message}. ${done} uploaded so far — the rest are still selected, tap Send again.`); }
-        const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: sb, note: notes[sb].trim() || null, uploaded_by: session?.user.id ?? null });
+        const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: sb, note: notes[sb].trim() || null, page_last: Number(pages[sb]), uploaded_by: session?.user.id ?? null });
         if (error) { setBusy(null); return setMsg(`${sb} photo stored but not recorded: ${error.message}`); }
         done++;
         setPicked((prev) => ({ ...prev, [sb]: prev[sb].filter((x) => x !== p) }));   // drop as we go, so a retry only resends what failed
         URL.revokeObjectURL(p.url);
       }
     }
-    setPicked(empty()); setNotes({ English: "", Maths: "", Science: "" }); setBusy(null);
+    setPicked(empty()); setNotes({ English: "", Maths: "", Science: "" }); setPages({ English: "", Maths: "", Science: "" }); setBusy(null);
     setMsg(`${done} photo${done === 1 ? "" : "s"} sent for ${student?.first_name ?? "the student"} (${summary}). The office enters them in Red Comet; the status below changes as that happens.`);
-    loadRecent();
+    loadRecent(); loadLastPages();
   }
 
   const inp = "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm";
@@ -145,6 +164,12 @@ export default function Progress() {
               <div className="text-sm font-semibold text-navy">{sb}</div>
               <div className="text-[11px] text-gray-400">{picked[sb].length ? `${picked[sb].length} photo${picked[sb].length === 1 ? "" : "s"}` : "no photos yet"}</div>
             </div>
+            {enr && (
+              <div className="mt-1 rounded-md bg-silver/70 px-2 py-1 text-xs text-navy">
+                Last Page uploaded: <b>{lastPage[sb] ? lastPage[sb]!.page : "none yet"}</b>
+                {lastPage[sb] && <span className="text-gray-500"> · {usDate(lastPage[sb]!.date)}</span>}
+              </div>
+            )}
             <div className="mt-2 grid grid-cols-4 gap-2">
               {picked[sb].map((p, i) => (
                 <div key={p.url} className="relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-silver">
@@ -163,15 +188,24 @@ export default function Progress() {
                 <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { pick(sb, e.target.files); e.target.value = ""; }} />
               </label>
             </div>
-            {picked[sb].length > 0 && (
-              <input value={notes[sb]} onChange={(e) => setNotes({ ...notes, [sb]: e.target.value })} placeholder={`${sb} note, e.g. unit 3 pages 12–15 (optional)`} className={inp} />
-            )}
+            {picked[sb].length > 0 && (<>
+              <label className="mt-2 block text-xs font-semibold text-gray-600">Last page in these photos (required)
+                <input type="number" inputMode="numeric" min={1} max={9999} value={pages[sb]}
+                  onChange={(e) => { setPages({ ...pages, [sb]: e.target.value }); setMsg(null); }}
+                  placeholder={lastPage[sb] ? `after page ${lastPage[sb]!.page}` : "page number"}
+                  className={`${inp} ${!pageOk(pages[sb]) ? "border-amber-400 bg-amber-50" : ""}`} />
+              </label>
+              {pageOk(pages[sb]) && lastPage[sb] && Number(pages[sb]) <= lastPage[sb]!.page && (
+                <p className="mt-1 text-[11px] text-amber-700">That is not after the last page uploaded ({lastPage[sb]!.page}). Check the number; send anyway if it is right.</p>
+              )}
+              <input value={notes[sb]} onChange={(e) => setNotes({ ...notes, [sb]: e.target.value })} placeholder={`${sb} note, e.g. unit 3 test (optional)`} className={inp} />
+            </>)}
           </div>
         ))}
 
         {msg && <div className={`rounded-lg p-2 text-sm ${/sent for/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
-        <button type="submit" disabled={!!busy || !enr || !total} className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-          {busy ?? (!enr ? "Choose the student first" : !total ? "Add photos under a subject" : `Send ${total} photo${total === 1 ? "" : "s"} for ${student?.first_name ?? ""} (${summary})`)}
+        <button type="submit" disabled={!!busy || !enr || !total || needPage.length > 0} className="w-full rounded-lg bg-navy py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+          {busy ?? (!enr ? "Choose the student first" : !total ? "Add photos under a subject" : needPage.length ? `Enter the last page for ${needPage.join(" and ")}` : `Send ${total} photo${total === 1 ? "" : "s"} for ${student?.first_name ?? ""} (${summary})`)}
         </button>
       </form>
 
@@ -200,7 +234,7 @@ export default function Progress() {
                     <span className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow ${on ? "bg-red-600" : "bg-black/40"}`}>{on ? "✓" : ""}</span>
                   )}
                   <div className="px-1.5 py-1 text-[10px] leading-tight">
-                    <div className="text-gray-500">{usDate(u.taken_at)}{u.subject ? ` · ${u.subject}` : ""}</div>
+                    <div className="text-gray-500">{usDate(u.taken_at)}{u.subject ? ` · ${u.subject}` : ""}{u.page_last ? ` · p.${u.page_last}` : ""}</div>
                     {flagged
                       ? <div className="font-semibold text-red-600">⚠ needs a look</div>
                       : <div className={`font-semibold ${u.status === "confirmed" ? "text-emerald-deep" : u.status === "rejected" ? "text-red-600" : "text-amber-700"}`}>{STATUS[u.status] ?? u.status}</div>}

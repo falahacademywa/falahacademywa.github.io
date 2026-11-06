@@ -1,4 +1,6 @@
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, RequireRole, RequireAuth } from "./lib/auth";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
@@ -23,6 +25,8 @@ import ClassUpdates from "./pages/admin/ClassUpdates";
 import RedComet from "./pages/admin/RedComet";
 import Feedback from "./pages/admin/Feedback";
 import Tasks from "./pages/admin/Tasks";
+import TeacherRequests from "./pages/admin/TeacherRequests";
+import SocialPosts from "./pages/admin/SocialPosts";
 import Volunteers from "./pages/admin/Volunteers";
 import Attendance from "./pages/admin/Attendance";
 import MeetingsAdmin from "./pages/admin/Meetings";
@@ -35,12 +39,20 @@ import TeacherStudent from "./pages/teacher/StudentDetail";
 import TeacherUpdate from "./pages/teacher/Update";
 import TeacherProgress from "./pages/teacher/Progress";
 import TeacherMe from "./pages/teacher/Me";
+import TeacherRequestsTab from "./pages/teacher/Requests";
+
+// a crash on one page shows a Reload card instead of a blank screen; a new route starts clean
+function PageGuard({ children }: { children: ReactNode }) {
+  const loc = useLocation();
+  return <ErrorBoundary resetKey={loc.pathname}>{children}</ErrorBoundary>;
+}
 
 // HashRouter so deep links work on GitHub Pages without server rewrites.
 export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
+        <PageGuard>
         <Routes>
           <Route path="/login" element={<Login />} />
           {/* parent-teacher meeting booking (phase 33): public, one link per class */}
@@ -69,6 +81,8 @@ export default function App() {
             <Route path="feedback" element={<Feedback />} />
             <Route path="reports" element={<Reports />} />
             <Route path="tasks" element={<Tasks />} />
+            <Route path="teacher-requests" element={<TeacherRequests />} />
+            <Route path="social" element={<SocialPosts />} />
             <Route path="parent-activity" element={<ParentActivity />} />
             <Route path="settings" element={<Settings />} />
           </Route>
@@ -82,10 +96,12 @@ export default function App() {
             <Route path="update" element={<TeacherUpdate />} />
             <Route path="progress" element={<TeacherProgress />} />
             <Route path="meetings" element={<TeacherMeetings />} />
+            <Route path="requests" element={<TeacherRequestsTab />} />
             <Route path="me" element={<TeacherMe />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </PageGuard>
       </HashRouter>
     </AuthProvider>
   );

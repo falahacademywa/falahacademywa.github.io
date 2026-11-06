@@ -5,8 +5,8 @@
 // portal and by e-mail; nothing else is sent from the browser.
 // ============================================================
 
-var PLATFORM_URL = 'https://xettxhdspqcgmsitlahq.supabase.co';
-var PLATFORM_KEY = 'sb_publishable_dveRScv2ZdRzSw5ToLoiBg_NM9bdqjC';
+var PLATFORM_URL = 'https://rlaqpzeqmmlrdeqfbjyq.supabase.co';
+var PLATFORM_KEY = 'sb_publishable_pFmJCkvttv7J3JUsLGdD1g_UgXwCzyy';
 
 function v(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
 function checkedValues(name) {
@@ -42,7 +42,7 @@ function ageOn(dobStr) {
   return a;
 }
 
-// show the parent/guardian block only for applicants under 18
+// applicants must be 18 or older (President 2026-11-05): show a note for anyone younger
 window.volunteerDobChanged = function () {
   var age = ageOn(v('v_dob'));
   var block = document.getElementById('v_guardian_block');
@@ -65,12 +65,8 @@ function validate() {
   if (v('v_city').length < 2) { fieldError('v_city', 'Please enter your city'); ok = false; }
   if (!v('v_dob')) { fieldError('v_dob', 'Please enter your date of birth'); ok = false; }
   var age = ageOn(v('v_dob'));
-  if (age !== null && age < 16) { fieldError('v_dob', 'Volunteers must be at least 16'); ok = false; }
+  if (age !== null && age < 18) { fieldError('v_dob', 'Volunteers must be 18 or older'); ok = false; }
   if (age !== null && (age > 90 || age < 0)) { fieldError('v_dob', 'Please check the date of birth'); ok = false; }
-  if (age !== null && age < 18) {
-    if (v('v_guardian_name').length < 3) { fieldError('v_guardian_name', 'A parent or guardian name is required for applicants under 18'); ok = false; }
-    if (!isValidUSPhone(v('v_guardian_phone'))) { fieldError('v_guardian_phone', 'Please enter the parent or guardian phone'); ok = false; }
-  }
   if (!checkedValues('v_avail').length) { groupError('v_avail_group', 'Tick at least one block you could usually offer'); ok = false; }
   if (!checkedValues('v_interest').length) { groupError('v_interest_group', 'Tick at least one area'); ok = false; }
   if (checkedValues('v_interest').indexOf('Other') !== -1 && v('v_interest_other').length < 3) { fieldError('v_interest_other', 'Please tell us the other area'); ok = false; }
@@ -110,9 +106,9 @@ function buildPayload() {
     state: 'WA',
     zip: v('v_zip') || null,
     date_of_birth: v('v_dob') || null,
-    under_18: age !== null && age < 18,
-    guardian_name: age !== null && age < 18 ? v('v_guardian_name') : null,
-    guardian_phone: age !== null && age < 18 ? v('v_guardian_phone') : null,
+    under_18: false,
+    guardian_name: null,
+    guardian_phone: null,
     availability: avail,
     start_date: v('v_start') || null,
     hours_per_week: v('v_hours') || null,
@@ -143,10 +139,8 @@ var FIELD_RULES = {
   v_phone:  function (x) { return isValidUSPhone(x) ? '' : 'Please enter a valid US phone, e.g. (206) 555-0123'; },
   v_city:   function (x) { return x.length >= 2 ? '' : 'Please enter your city'; },
   v_zip:    function (x) { return !x || /^\d{5}$/.test(x) ? '' : 'ZIP is 5 digits'; },
-  v_dob:    function (x) { if (!x) return 'Please enter your date of birth'; var a = ageOn(x); if (a !== null && a < 16) return 'Volunteers must be at least 16'; return a !== null && (a > 90 || a < 0) ? 'Please check the date of birth' : ''; },
+  v_dob:    function (x) { if (!x) return 'Please enter your date of birth'; var a = ageOn(x); if (a !== null && a < 18) return 'Volunteers must be 18 or older'; return a !== null && (a > 90 || a < 0) ? 'Please check the date of birth' : ''; },
   v_experience: function (x) { return x.length >= 10 ? '' : 'A sentence or two about your experience, please'; },
-  v_guardian_name:  function (x) { return x.length >= 3 ? '' : 'A parent or guardian name is required'; },
-  v_guardian_phone: function (x) { return isValidUSPhone(x) ? '' : 'Please enter the parent or guardian phone'; },
   v_ref1_name: function (x) { return x.length >= 3 ? '' : 'Reference name'; },
   v_ref2_name: function (x) { return x.length >= 3 ? '' : 'Reference name'; },
   v_ref1_email: function (x) { return !x || isValidEmail(x) ? '' : 'Please enter a valid e-mail address'; },

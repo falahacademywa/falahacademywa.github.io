@@ -48,7 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // booted: the stored session has been read from the browser. Until then we
   // must NOT redirect anyone to /login — that race was signing users out on refresh.
   const [booted, setBooted] = useState(configMissing);
-  const [profileLoading, setProfileLoading] = useState(false);
+  // whose profile is loaded. When the signed-in user changes (sign out, then another login in the
+  // same tab) the old user's profile must never be shown with the new session: pages rendered for
+  // the old role under the new login, their queries failed and the page went blank (2026-11-05).
+  // Until the new profile is in, the portal shows the splash instead.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (configMissing) return;
@@ -92,14 +96,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session) {
-      setProfile(null);
+      setProfile(null); setPerms({}); setIsTeacher(false); setLoadedFor(null);
       return;
     }
-    setProfileLoading(true);
-    loadProfile(session.user.id).finally(() => setProfileLoading(false));
+    const uid = session.user.id;
+    loadProfile(uid).finally(() => setLoadedFor(uid));
   }, [session]);
 
-  const loading = !booted || profileLoading;
+  // Also fixes the boot race: right after the stored session was read, the profile had not started
+  // loading yet, `loading` was briefly false and pages redirected to /login, losing the deep link
+  // (a reload of #/teacher/requests landed on #/teacher).
+  const current = !!session && loadedFor === session.user.id;
+  const loading = !booted || (!!session && !current);
+  const shownProfile = current ? profile : null;
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -109,14 +118,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   // Admins may do everything; staff only what staff_permissions grants.
   const can = (module: string, level: Level = "view") => {
-    if (profile?.role === "admin") return true;
-    if (profile?.role !== "staff") return false;
+    if (shownProfile?.role === "admin") return true;
+    if (shownProfile?.role !== "staff") return false;
     const l = perms[module];
     return level === "view" ? l === "view" || l === "edit" : l === "edit";
   };
 
   return (
-    <AuthContext.Provider value={{ session, profile, perms, can, isTeacher, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, profile: shownProfile, perms: current ? perms : {}, can, isTeacher: current && isTeacher, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

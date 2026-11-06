@@ -37,6 +37,12 @@ export async function loadMenuCounts(can: (module: string) => boolean): Promise<
   if (can("volunteers"))
     jobs.push(count("volunteer_applications", (q) => q.eq("status", "new")).then((n) => { out["/admin/volunteers"] = [n]; }));
 
+  if (can("teacher_requests"))
+    jobs.push(count("teacher_requests", (q) => q.in("status", ["submitted", "discussing"])).then((n) => { out["/admin/teacher-requests"] = [n]; }));
+
+  if (can("social"))
+    jobs.push(count("social_posts", (q) => q.in("status", ["needs_date", "failed"])).then((n) => { out["/admin/social"] = [n]; }));
+
   if (can("feedback"))
     jobs.push(count("feedback", (q) => q.eq("resolved", false)).then((n) => { out["/admin/feedback"] = [n]; }));
 

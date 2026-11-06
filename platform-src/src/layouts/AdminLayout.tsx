@@ -23,8 +23,10 @@ const nav = [
   { to: "/admin/calendar", label: "Calendar", module: "calendar" },
   { to: "/admin/announcements", label: "Announcements", module: "announcements" },
   { to: "/admin/feedback", label: "Feedback", module: "feedback" },
+  { to: "/admin/social", label: "Social posts", module: "social" },
   { to: "/admin/reports", label: "Reports", module: "reports" },
   { to: "/admin/tasks", label: "Tasks", module: "tasks" },
+  { to: "/admin/teacher-requests", label: "Teacher requests", module: "teacher_requests" },
   { to: "/admin/settings", label: "Settings", module: "settings" },
 ];
 

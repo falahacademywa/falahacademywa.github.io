@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import OldAnnouncements from "../../components/OldAnnouncements";
+import { queueAnnouncement } from "../../lib/social";
 
 interface Ann {
   id: string;
@@ -29,11 +30,12 @@ const catStyles: Record<string, string> = {
   event: "bg-purple-100 text-purple-700",
 };
 
-const emptyForm = { title: "", content: "", category: "general", grade_id: "", is_pinned: false, requires_ack: false };
+const emptyForm = { title: "", content: "", category: "general", grade_id: "", is_pinned: false, requires_ack: false, social: false };
 
 export default function AnnouncementsAdmin() {
   const { profile, can } = useAuth();
   const canEdit = can("announcements", "edit");
+  const isAdminRole = profile?.role === "admin";
   const [rows, setRows] = useState<Ann[]>([]);
   const [grades, setGrades] = useState<{ id: number; name: string }[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -56,7 +58,7 @@ export default function AnnouncementsAdmin() {
 
   async function save(status: "draft" | "published") {
     if (!form.title || !form.content) return setMsg("Title and content are required.");
-    const { error } = await supabase.from("announcements").insert({
+    const { data: saved, error } = await supabase.from("announcements").insert({
       title: form.title,
       content: form.content,
       category: form.category,
@@ -66,8 +68,14 @@ export default function AnnouncementsAdmin() {
       status,
       publish_date: status === "published" ? new Date().toISOString() : null,
       created_by: profile?.id,
-    });
+    }).select("id").single();
     if (error) return setMsg("Save failed: " + error.message);
+    // Also post on Facebook / Instagram (phase 36): President/admins, all-grades announcements only.
+    // Publishing puts a ready draft in Admin → Social posts; the President or an admin clicks Post there.
+    if (status === "published" && form.social && isAdminRole && !form.grade_id && saved) {
+      const err = await queueAnnouncement({ id: (saved as { id: string }).id, title: form.title, content: form.content, category: form.category });
+      if (err) { setForm({ ...emptyForm }); setShowForm(false); load(); return setMsg(err); }
+    }
     setForm({ ...emptyForm });
     setShowForm(false);
     setMsg(null);
@@ -162,6 +170,11 @@ export default function AnnouncementsAdmin() {
             <label className="flex items-center gap-2 text-sm text-gray-600">
               <input type="checkbox" checked={form.requires_ack} onChange={(e) => setForm({ ...form, requires_ack: e.target.checked })} /> Require acknowledgement
             </label>
+            {isAdminRole && !form.grade_id && (
+              <label className="flex items-center gap-2 text-sm text-gray-600" title="On Publish, a draft goes to Admin → Social posts; you click Post there after checking it (no names, no photos of children, nothing private).">
+                <input type="checkbox" checked={form.social} onChange={(e) => setForm({ ...form, social: e.target.checked })} /> Also post on Facebook / Instagram
+              </label>
+            )}
           </div>
           <div className="flex gap-2">
             <button onClick={() => save("published")}

@@ -27,7 +27,7 @@ import { type GradeLite, gradeColor, shiftMonth, monthLabel, monthRange } from "
 interface Row {
   id: number; enrollment_id: string; path: string; taken_at: string; subject: string | null; note: string | null;
   status: string; created_at: string; uploaded_by: string | null;
-  check_status?: string; check_label?: string | null;
+  check_status?: string; check_label?: string | null; page_last?: number | null;
   enrollments: { grade_id: number; students: { first_name: string; last_name: string } } | null;
   profiles: { full_name: string | null } | null;
 }
@@ -93,7 +93,7 @@ export default function RedComet() {
     const list: Row[] = [];
     for (let off = 0; ; off += PAGE) {
       const { data, error } = await supabase.from("work_uploads")
-        .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
+        .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, page_last, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
         .gte("taken_at", from).lte("taken_at", to)
         .order("taken_at", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false })
         .range(off, off + PAGE - 1);
@@ -491,6 +491,9 @@ function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, pi
           </>}
         </div>
       )}
+      {c.rows.some((r) => r.page_last) && (
+        <p className="mt-1.5 text-xs font-semibold text-navy">Up to page {Math.max(...c.rows.map((r) => r.page_last ?? 0))}</p>
+      )}
       {c.rows.some((r) => r.note) && (
         <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{[...new Set(c.rows.map((r) => r.note).filter(Boolean))].join(" · ")}</p>
       )}
@@ -545,6 +548,8 @@ function AdminUpload({ grades, onDone }: { grades: GradeLite[]; onDone: () => vo
   const [subject, setSubject] = useState("English");
   const [day, setDay] = useState(todayISO());
   const [note, setNote] = useState("");
+  const [page, setPage] = useState("");   // last workbook page in these photos (phase 37, required)
+  const [lastPage, setLastPage] = useState<{ page: number; date: string } | null>(null);
   const [picked, setPicked] = useState<Picked[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -557,6 +562,15 @@ function AdminUpload({ grades, onDone }: { grades: GradeLite[]; onDone: () => vo
   const options = enrs.filter((e) => gradeId === "" || e.grade_id === gradeId);
   const student = enrs.find((e) => e.id === enr);
   const finalSubject = subject;
+  const pageOk = /^\d{1,4}$/.test(page.trim()) && Number(page) >= 1;
+  async function loadLastPage() {
+    if (!enr) { setLastPage(null); return; }
+    const { data } = await supabase.from("work_uploads").select("page_last, taken_at").eq("enrollment_id", enr).eq("subject", subject)
+      .not("page_last", "is", null).order("created_at", { ascending: false }).limit(1);
+    const r = (data as { page_last: number; taken_at: string }[] | null)?.[0];
+    setLastPage(r ? { page: r.page_last, date: r.taken_at } : null);
+  }
+  useEffect(() => { loadLastPage(); }, [enr, subject]);
 
   function pick(files: FileList | null) {
     if (!files) return;
@@ -571,6 +585,7 @@ function AdminUpload({ grades, onDone }: { grades: GradeLite[]; onDone: () => vo
     e.preventDefault();
     if (!enr) return setMsg({ ok: false, text: "Choose the student first." });
     if (!picked.length) return setMsg({ ok: false, text: "Add at least one photo." });
+    if (!pageOk) return setMsg({ ok: false, text: "Enter the last page number in these photos." });
     setMsg(null);
     let done = 0;
     for (const p of [...picked]) {
@@ -579,13 +594,13 @@ function AdminUpload({ grades, onDone }: { grades: GradeLite[]; onDone: () => vo
       const path = `${enr}/${day}/${crypto.randomUUID()}.jpg`;
       const up = await supabase.storage.from("student-work").upload(path, blob, { contentType: "image/jpeg" });
       if (up.error) { setBusy(null); return setMsg({ ok: false, text: `Photo failed: ${up.error.message}. ${done} uploaded; the rest are still selected, press Upload again.` }); }
-      const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: finalSubject, note: note.trim() || null, taken_at: day, uploaded_by: profile?.id ?? null });
+      const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: finalSubject, note: note.trim() || null, page_last: Number(page), taken_at: day, uploaded_by: profile?.id ?? null });
       if (error) { setBusy(null); return setMsg({ ok: false, text: `Photo stored but not recorded: ${error.message}` }); }
       done++;
       setPicked((prev) => prev.filter((x) => x !== p));
       URL.revokeObjectURL(p.url);
     }
-    setBusy(null); setNote("");
+    setBusy(null); setNote(""); setPage(""); loadLastPage();
     setMsg({ ok: true, text: `${done} photo${done === 1 ? "" : "s"} uploaded for ${student ? `${student.students.first_name} ${student.students.last_name}` : "the student"} (${finalSubject}, ${usDate(day)}). They now show below as "Not yet in Red Comet" and reach the OneDrive inbox within the hour.` });
     onDone();
   }
@@ -639,7 +654,23 @@ function AdminUpload({ grades, onDone }: { grades: GradeLite[]; onDone: () => vo
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
         </label>
       </div>
-      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note, e.g. unit 3 pages 12–15 (optional)" className={`${inp} mt-3`} />
+      {enr && (
+        <p className="mt-3 rounded-md bg-silver/70 px-2.5 py-1.5 text-xs text-navy">
+          {subject} · Last Page uploaded: <b>{lastPage ? lastPage.page : "none yet"}</b>{lastPage && <span className="text-gray-500"> · {usDate(lastPage.date)}</span>}
+        </p>
+      )}
+      <div className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr]">
+        <label className={lab}>Last page in these photos (required)
+          <input type="number" inputMode="numeric" min={1} max={9999} value={page} onChange={(e) => { setPage(e.target.value); setMsg(null); }}
+            placeholder={lastPage ? `after page ${lastPage.page}` : "page number"} className={`${inp} ${!pageOk ? "border-amber-400 bg-amber-50" : ""}`} />
+        </label>
+        <label className={lab}>Note (optional)
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. unit 3 test" className={inp} />
+        </label>
+      </div>
+      {pageOk && lastPage && Number(page) <= lastPage.page && (
+        <p className="mt-1 text-xs text-amber-700">That is not after the last page uploaded ({lastPage.page}). Check the number; upload anyway if it is right.</p>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button type="submit" disabled={!!busy} className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-royal disabled:opacity-50">
           {busy ?? `Upload ${picked.length || ""} photo${picked.length === 1 ? "" : "s"}`}

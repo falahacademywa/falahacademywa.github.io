@@ -1,0 +1,34 @@
+name: Social poster
+
+# Phase 36 (TODO #110): sends the Facebook/Instagram posts the President or an admin has
+# "Approved & scheduled" in Admin -> Social posts once their time has come. Only the fixed
+# school-calendar posts can be scheduled; everything else is posted by hand in the portal.
+# Calls the Supabase Edge Function `social-post` with the service key (cron mode).
+# In the DEV project the function only makes unpublished test posts.
+# Repo secrets (already used by the other platform workflows):
+#   PLATFORM_SUPABASE_URL, PLATFORM_SUPABASE_SERVICE_KEY
+# The Facebook page key lives only in the Supabase Function secrets, not here.
+
+on:
+  schedule:
+    - cron: "5,35 * * * *"   # every 30 minutes
+  workflow_dispatch: {}
+
+jobs:
+  post-due:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post scheduled social posts that are due
+        run: |
+          URL="${{ secrets.PLATFORM_SUPABASE_URL }}"
+          KEY="${{ secrets.PLATFORM_SUPABASE_SERVICE_KEY }}"
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "Supabase secrets not set yet - skipping."
+            exit 0
+          fi
+          code=$(curl -s -o out.json -w "%{http_code}" -X POST "$URL/functions/v1/social-post" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" -d '{"run_due": true}')
+          echo "HTTP $code"; cat out.json; echo
+          if [ "$code" = "404" ]; then echo "social-post function not deployed yet - skipping."; exit 0; fi
+          [ "$code" -lt 400 ]
