@@ -5,8 +5,8 @@
 // portal and by e-mail; nothing else is sent from the browser.
 // ============================================================
 
-var PLATFORM_URL = 'https://rlaqpzeqmmlrdeqfbjyq.supabase.co';
-var PLATFORM_KEY = 'sb_publishable_pFmJCkvttv7J3JUsLGdD1g_UgXwCzyy';
+var PLATFORM_URL = 'https://xettxhdspqcgmsitlahq.supabase.co';
+var PLATFORM_KEY = 'sb_publishable_dveRScv2ZdRzSw5ToLoiBg_NM9bdqjC';
 
 function v(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
 function checkedValues(name) {
