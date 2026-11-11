@@ -27,7 +27,7 @@ interface Widget {
 export default function Dashboard() {
   const { can } = useAuth();
   // staff only see the tiles of modules they may view (phase 19)
-  const allowed = (w: Widget) => { const m = moduleForPath(w.to); return !m || can(m.key); };
+  const allowed = (w: Widget) => { const m = moduleForPath(w.to.split("?")[0]); return !m || can(m.key); };
   const [widgets, setWidgets] = useState<Widget[]>([
     { label: "Total Students", value: "—", to: "/admin/students" },
     { label: "New Applications", value: "—", to: "/admin/admissions" },
@@ -90,7 +90,7 @@ export default function Dashboard() {
       };
       const today = todayStr();
       const month = today.slice(0, 7);
-      const [students, applicants, parents, teachers, presentToday, absentToday, plans, volunteers] = await Promise.all([
+      const [students, applicants, parents, teachers, presentToday, absentToday, plans, volunteers, docs] = await Promise.all([
         count("students", (q) => q.eq("archived", false)),
         count("applicants", (q) => q.eq("status", "under_review")),
         count("profiles", (q) => q.eq("role", "parent")),
@@ -102,6 +102,15 @@ export default function Dashboard() {
           .eq("status", "active").eq("enrollments.status", "active").gt("total_amount", 0)
           .then(({ data }) => data ?? []),
         count("volunteer_applications", (q) => q.in("status", ["new", "contacted", "screening"])).catch(() => 0),
+        // students missing at least one required document (TODO #138)
+        Promise.all([
+          supabase.from("document_types").select("name").eq("active", true),
+          supabase.from("students").select("id, enrollments!inner ( status ), document_references ( document_type )").eq("archived", false).eq("enrollments.status", "active"),
+        ]).then(([{ data: t }, { data: st }]) => {
+          const req = ((t as { name: string }[]) ?? []).map((x) => x.name);
+          return ((st as unknown as { document_references: { document_type: string }[] }[]) ?? [])
+            .filter((x) => req.some((r) => !x.document_references.some((d) => d.document_type === r))).length;
+        }),
       ]);
       type Pay = { payment_date: string; period_month: string | null; payment_method: string };
       const due = (plans as { start_date: string | null; payments: Pay[] }[])
@@ -113,6 +122,7 @@ export default function Dashboard() {
       const paid = due.length - outstanding - waivedN;
       setWidgets([
         { label: "Total Students", value: students, to: "/admin/students" },
+        { label: "Missing documents", value: docs, to: "/admin/students?view=docs" },
         { label: "New Applications", value: applicants, to: "/admin/admissions" },
         { label: "Volunteers in progress", value: volunteers, to: "/admin/volunteers" },
         { label: "Present Today", value: presentToday, to: "/admin/attendance" },

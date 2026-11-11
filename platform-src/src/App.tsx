@@ -17,8 +17,6 @@ import Settings from "./pages/admin/Settings";
 import CalendarAdmin from "./pages/admin/CalendarAdmin";
 import AnnouncementsAdmin from "./pages/admin/AnnouncementsAdmin";
 import Fees from "./pages/admin/Fees";
-import Academics from "./pages/admin/Academics";
-import Reports from "./pages/admin/Reports";
 import ParentActivity from "./pages/admin/ParentActivity";
 import AssignmentsAdmin from "./pages/admin/AssignmentsAdmin";
 import ClassUpdates from "./pages/admin/ClassUpdates";
@@ -30,6 +28,11 @@ import SocialPosts from "./pages/admin/SocialPosts";
 import Volunteers from "./pages/admin/Volunteers";
 import Attendance from "./pages/admin/Attendance";
 import MeetingsAdmin from "./pages/admin/Meetings";
+import ReportAttendance from "./pages/admin/ReportAttendance";
+import ReportFees from "./pages/admin/ReportFees";
+import ReportActivity from "./pages/admin/ReportActivity";
+import RedCometMessages from "./pages/admin/RedCometMessages";
+import PageTracker from "./components/PageTracker";
 import Meet from "./pages/Meet";
 import TeacherMeetings from "./pages/teacher/Meetings";
 import ParentHome from "./pages/parent/ParentHome";
@@ -53,6 +56,7 @@ export default function App() {
     <AuthProvider>
       <HashRouter>
         <PageGuard>
+        <PageTracker />
         <Routes>
           <Route path="/login" element={<Login />} />
           {/* parent-teacher meeting booking (phase 33): public, one link per class */}
@@ -71,15 +75,17 @@ export default function App() {
             <Route path="teachers" element={<Teachers />} />
             <Route path="teachers/:id" element={<TeacherProfile />} />
             <Route path="fees" element={<Fees />} />
-            <Route path="academics" element={<Academics />} />
             <Route path="assignments" element={<AssignmentsAdmin />} />
             <Route path="updates" element={<ClassUpdates />} />
             <Route path="redcomet" element={<RedComet />} />
+            <Route path="redcomet/messages" element={<RedCometMessages />} />
             <Route path="meetings" element={<MeetingsAdmin />} />
             <Route path="calendar" element={<CalendarAdmin />} />
             <Route path="announcements" element={<AnnouncementsAdmin />} />
             <Route path="feedback" element={<Feedback />} />
-            <Route path="reports" element={<Reports />} />
+            <Route path="reports/attendance" element={<ReportAttendance />} />
+            <Route path="reports/fees" element={<ReportFees />} />
+            <Route path="reports/activity" element={<ReportActivity />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="teacher-requests" element={<TeacherRequests />} />
             <Route path="social" element={<SocialPosts />} />

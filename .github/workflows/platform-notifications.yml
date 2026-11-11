@@ -1,7 +1,7 @@
 name: Platform daily notifications
 
-# Runs the daily notification rules (fee reminders after the 15th) and
-# emails any un-emailed notifications to parents via Brevo.
+# Runs the daily notification rules (class-updates digest; fee e-mails are manual since phase 41)
+# and emails any un-emailed notifications to parents via Brevo. Dev: manual runs only, no e-mails.
 # Repo secrets required:
 #   PLATFORM_SUPABASE_URL          e.g. https://xxxx.supabase.co
 #   PLATFORM_SUPABASE_SERVICE_KEY  the SECRET (service_role) key
@@ -19,6 +19,9 @@ permissions:
 
 jobs:
   notify:
+    # Dev never runs on a timer and never e-mails anyone (President 2026-11-10): the same file runs in
+    # both repos; in falahacademywa-dev only a manual run (Actions -> Run workflow) does anything.
+    if: github.event_name == 'workflow_dispatch' || github.repository != 'falahacademywa/falahacademywa-dev'
     runs-on: ubuntu-latest
     steps:
       - name: Run daily rules and dispatch emails
@@ -62,7 +65,7 @@ jobs:
             name=$(echo "$n" | jq -r '.profiles.full_name // "Parent"')
             title=$(echo "$n" | jq -r '.title')
             message=$(echo "$n" | jq -r '.message')
-            if [ -n "$email" ] && [[ "$email" != *"test.local"* ]]; then
+            if [ -n "$email" ] && [[ "$email" != *"test.local"* ]] && [ "$GITHUB_REPOSITORY" != "falahacademywa/falahacademywa-dev" ]; then
               payload=$(jq -n --arg to "$email" --arg name "$name" --arg subj "$title" --arg msg "$message" \
                 '{sender: {name: "Falah Academy", email: "falahacademywa@gmail.com"},
                   to: [{email: $to, name: $name}],
@@ -74,7 +77,7 @@ jobs:
               echo "notification $id : HTTP $http"
             else
               http=skip
-              echo "notification $id : skipped (test/no email)"
+              echo "notification $id : skipped (test/no email/dev)"
             fi
             # mark as e-mailed only when Brevo accepted it, it was skipped, or it was refused for good
             # (4xx other than 429); 429/5xx/network errors stay un-emailed and are retried next run

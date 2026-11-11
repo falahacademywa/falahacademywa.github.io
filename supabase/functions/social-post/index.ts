@@ -7,6 +7,10 @@
 //                             edit on 'social' only for the unplanned-closure posts T6).
 //   POST { "run_due": true }  with the project's SERVICE key as Bearer -> posts every
 //                             status='scheduled' post whose scheduled_at has passed.
+//   POST { "delete_post": 123 } with the signed-in user's JWT -> social_can_delete() (President,
+//                             admins, staff with edit on 'social'): deletes the post from the
+//                             Facebook page (if it was posted there) and then from the queue.
+//                             Instagram does not let apps delete posts: the reply says so (phase 43).
 //
 // Secrets (Supabase -> Edge Functions -> Secrets, set by the President; never in files):
 //   FB_PAGE_TOKEN  never-expiring Page token (pages_manage_posts + instagram_content_publish)
@@ -127,6 +131,35 @@ Deno.serve(async (req) => {
     for (const r of data ?? []) out.push(await postOne(db, r.id, null, test));
     await db.rpc("social_purge_old");
     return json({ test, posted: out });
+  }
+
+  // delete mode (phase 43): remove from Facebook, then from the queue
+  if (body.delete_post) {
+    const did = Number(body.delete_post);
+    const uDb = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: `Bearer ${bearer}` } }, auth: { persistSession: false },
+    });
+    const { data: du } = await uDb.auth.getUser(bearer);
+    if (!du?.user) return json({ error: "Unauthorized" }, 401);
+    const { data: may, error: me } = await uDb.rpc("social_can_delete", { p_id: did });
+    if (me || !may) return json({ error: "Deleting needs Social posts: edit permission." }, 403);
+    const sdb = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    const { data: dp } = await sdb.from("social_posts").select("*").eq("id", did).single<Post & { test_run: boolean }>();
+    if (!dp) return json({ error: "post not found" }, 404);
+    if (dp.status === "posting") return json({ error: "This post is being posted right now; try again in a minute." }, 409);
+    const out = { ok: true, facebook: "none", instagram: "none", ig_permalink: dp.ig_permalink };
+    if (dp.fb_post_id && !dp.test_run && !test) {
+      try { await graph(dp.fb_post_id, {}, "DELETE"); out.facebook = "deleted"; }
+      catch (e) {
+        const m = (e as Error).message;
+        if (/does not exist|cannot be loaded|Unsupported delete/i.test(m)) out.facebook = "already gone";
+        else return json({ error: "Facebook did not delete the post: " + m + ". Nothing was removed; try again or delete it on the page." }, 502);
+      }
+    }
+    if (dp.ig_media_id && !dp.test_run && !test) out.instagram = "delete it in the Instagram app";
+    const { error: de } = await sdb.from("social_posts").delete().eq("id", did);
+    if (de) return json({ error: de.message }, 500);
+    return json(out);
   }
 
   // user mode: check the caller with their own key, then post with the service role

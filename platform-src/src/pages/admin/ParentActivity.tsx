@@ -50,7 +50,7 @@ export default function ParentActivity() {
 
   return (
     <div className="max-w-3xl">
-      <Link to="/admin/reports" className="text-sm text-royal hover:underline">← Reports</Link>
+      <Link to="/admin/parents" className="text-sm text-royal hover:underline">← Parents</Link>
       <h1 className="mb-1 mt-2 font-display text-2xl font-semibold text-navy">Parent Portal Activity</h1>
       <p className="mb-5 text-sm text-gray-500">
         What each family does in the portal. Click a parent to see their detailed history. Activity is

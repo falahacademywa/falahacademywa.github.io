@@ -41,6 +41,7 @@ export default function AnnouncementsAdmin() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [msg, setMsg] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
 
   async function load() {
     if (configMissing) return;
@@ -88,6 +89,23 @@ export default function AnnouncementsAdmin() {
     load();
   }
 
+  // Delete (phase 43): removes the announcement, its acknowledgements, the parents' bell
+  // notifications and an unposted social draft made from it. Sent e-mails cannot be recalled.
+  async function remove(a: Ann) {
+    const sent = a.status !== "draft";
+    if (!window.confirm(`Delete "${a.title}"?\n\n` + (sent
+      ? "Parents will no longer see it in the portal and its bell notifications are removed. E-mails that already went out cannot be recalled."
+      : "It is only a draft; nobody has seen it.") + "\n\nThis cannot be undone.")) return;
+    const { data, error } = await supabase.rpc("announcement_delete", { p_id: a.id });
+    if (error) return setMsg("Delete failed: " + error.message + (error.message.includes("announcement_delete") ? " - run platform_schema_phase43.sql" : ""));
+    const d = data as { notifications: number; social_drafts: number; social_posted: number };
+    setOk(`Deleted "${a.title}"` + (d.notifications ? ` and ${d.notifications} notification${d.notifications === 1 ? "" : "s"}` : "") + "."
+      + (d.social_drafts ? " Its unposted social draft was removed too." : "")
+      + (d.social_posted ? " It was also posted on Facebook/Instagram — delete that in Social Posts → Archive." : ""));
+    setMsg(null);
+    load();
+  }
+
   const current = rows.filter((a) => a.status !== "archived");
   const old = rows.filter((a) => a.status === "archived");
 
@@ -130,6 +148,8 @@ export default function AnnouncementsAdmin() {
               <button onClick={() => update(a.id, { status: a.publish_date ? "published" : "draft" })} title="Back to the current announcements; parents are not notified again"
                 className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-silver">Restore</button>
             )}
+            <button onClick={() => remove(a)} title="Delete for good (the audit log keeps a copy)"
+              className="ml-auto rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">Delete</button>
           </div>
         )}
       </div>
@@ -146,6 +166,7 @@ export default function AnnouncementsAdmin() {
         </button>}
       </div>
       {msg && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{msg}</div>}
+      {ok && <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-deep">{ok}</div>}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage announcements.</p>}
 
       {showForm && (

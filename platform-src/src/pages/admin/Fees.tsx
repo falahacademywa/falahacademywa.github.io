@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
+import LateFeeReminders from "../../components/LateFeeReminders";
 
 interface PlanRow {
   id: string;
@@ -38,7 +39,7 @@ interface EnrollmentOpt {
 }
 
 export default function Fees() {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [unplanned, setUnplanned] = useState<EnrollmentOpt[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -199,10 +200,10 @@ export default function Fees() {
     <div className="max-w-4xl">
       <h1 className="mb-2 font-display text-2xl font-semibold text-navy">Fees</h1>
       <p className="mb-6 text-sm text-gray-500">
-        One plan per enrollment (BR-010). Each student's fee can differ. $0 plans never trigger reminders (BR-121).
+        One plan per enrollment (BR-010). Each student's fee can differ. $0 plans never get reminders (BR-121).
         Zelle receipts are read from the school Gmail every hour and posted automatically when the sender and amount are certain;
-        the rest wait below. Every payment gets a numbered receipt: the family sees it in the portal at once and receives the PDF by e-mail within the hour
-        (invoice on the 1st, reminders on the 6th and 15th to families with a balance). Every change to a payment is kept in the audit log and re-issues the receipt.
+        the rest wait below. Every payment gets a numbered receipt: the family sees it in the portal at once and receives the PDF by e-mail within the hour.
+        Tuition reminders are never sent automatically (phase 41): open Late-fee reminders below, tick the families and click Send. Every change to a payment is kept in the audit log and re-issues the receipt.
         A <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-semibold text-gray-700">Waived</span> month is not money: no receipt, not counted in totals, and the family sees "waived" instead of "due".
       </p>
       {msg && <div className={`mb-4 rounded-lg p-3 text-sm ${/^Receipt/.test(msg) ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg}</div>}
@@ -240,6 +241,7 @@ export default function Fees() {
         </div>
       )}
       {configMissing && <p className="text-sm text-gray-500">Connect the database to manage fees.</p>}
+      {!configMissing && <LateFeeReminders canSend={profile?.role === "admin" || can("fees", "edit")} />}
 
       {zPending.length > 0 && (
         <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">

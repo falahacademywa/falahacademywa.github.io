@@ -21,12 +21,6 @@ interface Child {
   };
 }
 interface AttRow { date: string; status: "present" | "late" | "absent" }
-interface QuranRow {
-  id: number; assessment_date: string; category: string; surah_topic: string;
-  ayah_from: number | null; ayah_to: number | null; memorization_level: string | null;
-  teacher_comment: string | null; revision: string | null;
-}
-interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
 interface FeePayment { payment_date: string; amount: number; payment_method: string; period_month: string | null; receipt_no: string | null; receipt_path: string | null; receipt_kind: string | null }
 interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: FeePayment[] }
 interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
@@ -60,8 +54,6 @@ export default function ParentHome() {
   const [att, setAtt] = useState<AttRow[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
   const [anns, setAnns] = useState<Ann[]>([]);
-  const [quran, setQuran] = useState<QuranRow[]>([]);
-  const [acad, setAcad] = useState<AcadRow[]>([]);
   const [fee, setFee] = useState<FeePlan | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
@@ -260,17 +252,12 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     track("print_statement");
   }
 
-  // Per-child data: Qur'an, academics, fees
+  // Per-child data: fees, assignments (Qur'an and lessons are in the class updates; the old
+  // Academics & Qur'an records were removed in phase 42)
   useEffect(() => {
-    if (configMissing || !active) { setQuran([]); setAcad([]); setFee(null); return; }
+    if (configMissing || !active) { setFee(null); return; }
     const enr = active.students.enrollments.find((e) => e.status === "active") ?? active.students.enrollments[0];
     if (!enr) return;
-    supabase.from("quran_progress").select("*").eq("enrollment_id", enr.id)
-      .order("assessment_date", { ascending: false }).limit(8)
-      .then(({ data }) => setQuran((data as QuranRow[]) ?? []));
-    supabase.from("academic_progress").select("*").eq("enrollment_id", enr.id)
-      .order("assessment_date", { ascending: false }).limit(40)
-      .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
     supabase.from("fee_plans")
       .select("id, total_amount, billing_frequency, start_date, payments ( payment_date, amount, payment_method, period_month, receipt_no, receipt_path, receipt_kind )")
       .eq("enrollment_id", enr.id).maybeSingle()
@@ -1320,73 +1307,9 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
           </section>
         )}
 
-        {/* Qur'an + Fees */}
-        <div className="grid gap-5 lg:grid-cols-5">
-          <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-3">
-            <h2 className="mb-4 font-display text-lg font-semibold text-navy">
-              Qur'an Learning{active ? ` — ${active.students.first_name}` : ""}
-            </h2>
-            {quran.length ? (
-              <div className="space-y-3">
-                {quran.map((q, i) => (
-                  <div key={q.id} className={`rounded-lg p-3 ${i === 0 ? "bg-emerald-50" : "bg-silver/60"}`}>
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      {i === 0 && <span className="rounded-full bg-emerald-brand px-2 py-0.5 text-[10px] font-bold uppercase text-white">Current</span>}
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-emerald-deep">{q.category}</span>
-                      <span className="font-semibold text-navy">{q.surah_topic}</span>
-                      {q.ayah_from && <span className="text-gray-500">ayah {q.ayah_from}{q.ayah_to ? `–${q.ayah_to}` : ""}</span>}
-                      {q.memorization_level && <span className="text-xs text-gray-500">({q.memorization_level})</span>}
-                      <span className="ml-auto text-xs text-gray-400">{q.assessment_date}</span>
-                    </div>
-                    {q.teacher_comment && <p className="mt-1 text-sm text-gray-600">💬 {q.teacher_comment}</p>}
-                    {q.revision && <p className="mt-1 text-sm font-semibold text-emerald-deep">📖 Practice at home: {q.revision}</p>}
-                  </div>
-                ))}
-              </div>
-            ) : <p className="text-sm text-gray-400">No Qur'an progress recorded yet.</p>}
-            {acad.length > 0 && (() => {
-              const gradeName = active?.students.enrollments.find((e) => e.status === "active")?.grade_name ?? "";
-              const isPreK = gradeName === "Pre-K";
-              const row = (a: AcadRow) => (
-                <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
-                  {isPreK && <span className="font-semibold text-navy">{a.subject}</span>}
-                  <span className="text-xs text-gray-500">{a.assessment_type}</span>
-                  {a.score != null && (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                      {a.score}{a.max_score ? ` / ${a.max_score}` : ""}
-                    </span>
-                  )}
-                  {a.notes && <span className="text-xs text-gray-600">{a.notes}</span>}
-                  <span className="ml-auto text-xs text-gray-400">{a.assessment_date}</span>
-                </div>
-              );
-              if (isPreK) {
-                return (
-                  <>
-                    <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wide text-gray-400">Learning Progress</h3>
-                    <div className="space-y-1.5">{acad.map(row)}</div>
-                  </>
-                );
-              }
-              const ORDER = ["English", "Mathematics", "Science", "Islamic Education"];
-              const groups = new Map<string, AcadRow[]>();
-              acad.forEach((a) => groups.set(a.subject, [...(groups.get(a.subject) ?? []), a]));
-              const keys = [...groups.keys()].sort((a, b) => {
-                const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
-                return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-              });
-              return keys.map((subj) => (
-                <div key={subj}>
-                  <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wide text-gray-400">
-                    {subj} — {active?.students.first_name}
-                  </h3>
-                  <div className="space-y-1.5">{groups.get(subj)!.slice(0, 5).map(row)}</div>
-                </div>
-              ));
-            })()}
-          </section>
-
-          <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-2">
+        {/* Fees */}
+        <div className="grid gap-5">
+          <section className="rounded-xl bg-white p-5 shadow-sm">
             <h2 className="mb-4 font-display text-lg font-semibold text-navy">Fees</h2>
             {fee ? (
               Number(fee.total_amount) === 0 ? (

@@ -131,7 +131,7 @@ export default function SocialPosts() {
               { key: (p) => ymOf(p.posted_at ?? p.updated_at), label: monthLabel },
               { key: (p) => p.category, order: (a, b) => a.localeCompare(b) },
             ]}
-            render={(p) => <ArchivedPost p={p} />} />
+            render={(p) => <ArchivedPost p={p} onChanged={load} onMsg={(m) => { setMsg(m); window.scrollTo({ top: 0, behavior: "smooth" }); }} />} />
         </>
       )}
       {tab === "templates" && <Templates tpls={tpls} canEdit={canEdit} onChanged={load} />}
@@ -139,7 +139,28 @@ export default function SocialPosts() {
   );
 }
 
-function ArchivedPost({ p }: { p: SocialPost }) {
+// Delete (phase 43): skipped posts go straight away; posted ones are removed from the Facebook
+// page by the social-post function first. Instagram posts have to be deleted in the app.
+function ArchivedPost({ p, onChanged, onMsg }: { p: SocialPost; onChanged: () => void; onMsg: (m: string) => void }) {
+  const { can } = useAuth();
+  const [busy, setBusy] = useState(false);
+  async function del() {
+    const live = p.status === "posted" && !p.test_run;
+    const where = [p.fb_post_id && "the Facebook page", p.ig_media_id && "Instagram (you delete that in the Instagram app)"].filter(Boolean).join(" and ");
+    if (!window.confirm(live ? `Delete "${p.title}"?\n\nIt will be removed from ${where || "the portal"} and from this list. This cannot be undone.` : `Delete "${p.title}" from the archive?`)) return;
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("social-post", { body: { delete_post: p.id } });
+    setBusy(false);
+    if (error) {
+      let detail = error.message;
+      try { const b = await (error as { context?: Response }).context?.json(); if (b?.error) detail = b.error; } catch { /* keep message */ }
+      return onMsg("Not deleted: " + detail);
+    }
+    const r = data as { facebook: string; instagram: string; ig_permalink: string | null };
+    onMsg(`Deleted "${p.title}".` + (r.facebook === "deleted" ? " Removed from the Facebook page." : r.facebook === "already gone" ? " It was already gone from Facebook." : "")
+      + (r.instagram !== "none" ? " Instagram: open the post in the Instagram app → ⋯ → Delete" + (r.ig_permalink ? ` (${r.ig_permalink})` : "") + "." : ""));
+    onChanged();
+  }
   return (
     <div className="rounded-xl bg-white p-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -153,6 +174,7 @@ function ArchivedPost({ p }: { p: SocialPost }) {
         {p.fb_post_id && !p.test_run && <a className="text-navy underline" href={`https://www.facebook.com/${p.fb_post_id}`} target="_blank" rel="noreferrer">Facebook post</a>}
         {p.ig_permalink && <a className="text-navy underline" href={p.ig_permalink} target="_blank" rel="noreferrer">Instagram post</a>}
         {(p.card_url || p.image_url) && <a className="text-navy underline" href={p.image_url ?? p.card_url!} target="_blank" rel="noreferrer">Image</a>}
+        {can("social", "edit") && <button onClick={del} disabled={busy} className="ml-auto font-semibold text-red-700 hover:underline disabled:opacity-40">{busy ? "Deleting…" : "Delete"}</button>}
       </div>
     </div>
   );

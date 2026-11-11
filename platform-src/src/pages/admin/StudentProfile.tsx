@@ -11,8 +11,6 @@ import SecureImg from "../../components/SecureImg";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; period_month: string | null; amount: number; payment_method: string }[] }
-interface QuranRow { id: number; assessment_date: string; category: string; surah_topic: string; memorization_level: string | null; teacher_comment: string | null; revision: string | null }
-interface AcadRow { id: number; assessment_date: string; subject: string; assessment_type: string; score: number | null; max_score: number | null; notes: string | null }
 
 interface Student {
   id: string;
@@ -40,8 +38,6 @@ export default function StudentProfile() {
   const [month, setMonth] = useState(() => monthStr());
   const [att, setAtt] = useState<AttRow[]>([]);
   const [feeInfo, setFeeInfo] = useState<FeeInfo | null>(null);
-  const [quran, setQuran] = useState<QuranRow[]>([]);
-  const [acad, setAcad] = useState<AcadRow[]>([]);
   const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
   const [docTypes, setDocTypes] = useState<{ id: number; name: string }[]>([]);
@@ -172,19 +168,13 @@ export default function StudentProfile() {
       .then(({ data }) => setAtt((data as AttRow[]) ?? []));
   }, [activeEnr?.id, month]);
 
-  // Fees + progress
+  // Fees
   useEffect(() => {
     if (configMissing || !activeEnr) return;
     supabase.from("fee_plans")
       .select("total_amount, billing_frequency, start_date, payments ( payment_date, period_month, amount, payment_method )")
       .eq("enrollment_id", activeEnr.id).maybeSingle()
       .then(({ data }) => setFeeInfo((data as unknown as FeeInfo) ?? null));
-    supabase.from("quran_progress").select("id, assessment_date, category, surah_topic, memorization_level, teacher_comment, revision")
-      .eq("enrollment_id", activeEnr.id).order("assessment_date", { ascending: false }).limit(5)
-      .then(({ data }) => setQuran((data as QuranRow[]) ?? []));
-    supabase.from("academic_progress").select("id, assessment_date, subject, assessment_type, score, max_score, notes")
-      .eq("enrollment_id", activeEnr.id).order("assessment_date", { ascending: false }).limit(5)
-      .then(({ data }) => setAcad((data as AcadRow[]) ?? []));
   }, [activeEnr?.id]);
 
   const counts = useMemo(() => {
@@ -498,39 +488,6 @@ export default function StudentProfile() {
               </>
             )
           ) : <p className="text-sm text-gray-400">No fee plan for this enrollment.</p>}
-        </section>
-
-        {/* Progress */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Qur'an &amp; Academic Progress</h2>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div>
-              {quran.map((q, i) => (
-                <div key={q.id} className={`mb-2 rounded-lg p-2.5 text-sm ${i === 0 ? "bg-emerald-50" : "bg-silver/60"}`}>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-emerald-deep">{q.category}</span>
-                  <span className="ml-2 font-semibold text-navy">{q.surah_topic}</span>
-                  {q.memorization_level && <span className="ml-2 text-xs text-gray-500">({q.memorization_level})</span>}
-                  <span className="float-right text-xs text-gray-400">{q.assessment_date}</span>
-                  {(q.teacher_comment || q.revision) && (
-                    <p className="mt-1 text-xs text-gray-500">{q.teacher_comment}{q.revision ? ` · Revision: ${q.revision}` : ""}</p>
-                  )}
-                </div>
-              ))}
-              {!quran.length && <p className="text-sm text-gray-400">No Qur'an entries yet.</p>}
-            </div>
-            <div>
-              {acad.map((a) => (
-                <div key={a.id} className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 p-2.5 text-sm">
-                  <span className="font-semibold text-navy">{a.subject}</span>
-                  <span className="text-xs text-gray-500">{a.assessment_type}</span>
-                  {a.score != null && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">{a.score}{a.max_score ? `/${a.max_score}` : ""}</span>}
-                  {a.notes && <span className="text-xs text-gray-500">{a.notes}</span>}
-                  <span className="ml-auto text-xs text-gray-400">{a.assessment_date}</span>
-                </div>
-              ))}
-              {!acad.length && <p className="text-sm text-gray-400">No academic entries yet.</p>}
-            </div>
-          </div>
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

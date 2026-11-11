@@ -141,6 +141,8 @@ def email(to, name, subject, html, attachment=None):
         return "no BREVO_API_KEY"
     if not to or "test.local" in to:
         return "skipped (test/no address)"
+    if os.environ.get("GITHUB_REPOSITORY", "") == "falahacademywa/falahacademywa-dev":
+        return "skipped (dev never e-mails)"
     payload = {"sender": {"name": SCHOOL, "email": "falahacademywa@gmail.com"},
                "to": [{"email": to, "name": name or "Parent"}], "subject": subject, "htmlContent": html}
     if attachment:

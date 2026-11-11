@@ -27,7 +27,7 @@ import { type GradeLite, gradeColor, shiftMonth, monthLabel, monthRange } from "
 interface Row {
   id: number; enrollment_id: string; path: string; taken_at: string; subject: string | null; note: string | null;
   status: string; created_at: string; uploaded_by: string | null;
-  check_status?: string; check_label?: string | null; page_last?: number | null;
+  check_status?: string; check_label?: string | null; page_last?: number | null; kind?: string;
   enrollments: { grade_id: number; students: { first_name: string; last_name: string } } | null;
   profiles: { full_name: string | null } | null;
 }
@@ -93,7 +93,7 @@ export default function RedComet() {
     const list: Row[] = [];
     for (let off = 0; ; off += PAGE) {
       const { data, error } = await supabase.from("work_uploads")
-        .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, page_last, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
+        .select("id, enrollment_id, path, taken_at, subject, note, status, created_at, uploaded_by, check_status, check_label, page_last, kind, enrollments ( grade_id, students ( first_name, last_name ) ), profiles:uploaded_by ( full_name )")
         .gte("taken_at", from).lte("taken_at", to)
         .order("taken_at", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false })
         .range(off, off + PAGE - 1);
@@ -491,6 +491,7 @@ function EntryCard({ c, grades, thumbs, onBig, withDay, gradeName, selecting, pi
           </>}
         </div>
       )}
+      {c.rows.some((r) => r.kind === "test") && <p className="mt-1.5 inline-block rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-800">TEST / QUIZ — enter answers exactly as marked</p>}
       {c.rows.some((r) => r.page_last) && (
         <p className="mt-1.5 text-xs font-semibold text-navy">Up to page {Math.max(...c.rows.map((r) => r.page_last ?? 0))}</p>
       )}

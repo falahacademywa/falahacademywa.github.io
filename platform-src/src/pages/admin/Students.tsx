@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import SecureImg from "../../components/SecureImg";
+import DocumentsGrid from "../../components/DocumentsGrid";
+import { downloadCsv } from "../../lib/reports";
 
 interface StudentRow {
   id: string;
@@ -24,11 +26,14 @@ export default function Students() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortAsc, setSortAsc] = useState(true);
   const [loading, setLoading] = useState(!configMissing);
+  // List or Documents checklist (TODO #138); ?view=docs opens the checklist (Dashboard tile)
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") === "docs" ? "docs" : "list";
 
   useEffect(() => {
     if (configMissing) return;
     supabase.from("students")
-      .select("id, student_no, first_name, last_name, archived, profile_photo_url, enrollments ( school_year, grade_name, status )")
+      .select("id, student_no, first_name, last_name, date_of_birth, archived, profile_photo_url, enrollments ( school_year, grade_name, status )")
       .then(({ data }) => {
         setRows((data as unknown as StudentRow[]) ?? []);
         setLoading(false);
@@ -78,12 +83,25 @@ export default function Students() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-semibold text-navy">Students</h1>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <h1 className="font-display text-2xl font-semibold text-navy">Students</h1>
+          <div className="flex rounded-lg border border-gray-300 bg-white p-0.5 text-xs font-semibold">
+            {(["list", "docs"] as const).map((v) => (
+              <button key={v} onClick={() => setParams(v === "docs" ? { view: "docs" } : {})}
+                className={`rounded-md px-3 py-1 ${view === v ? "bg-navy text-white" : "text-gray-600 hover:bg-silver"}`}>{v === "list" ? "List" : "Documents"}</button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className={`flex items-center gap-2 text-sm text-gray-600 ${view === "docs" ? "invisible" : ""}`}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
             Show archived
           </label>
+          {view === "list" && (
+            <button onClick={() => downloadCsv("falah-roster.csv", ["Student #", "First name", "Last name", "Date of birth", "Grade", "School year", "Status"],
+              filtered.map((r) => { const e = current(r); return [r.student_no, r.first_name, r.last_name, (r as StudentRow & { date_of_birth?: string }).date_of_birth ?? "", e?.grade_name ?? "", e?.school_year ?? "", r.archived ? "Archived" : "Active"]; }))}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-silver">⬇ Roster CSV</button>
+          )}
           <input
             placeholder="Search name or student ID…"
             className="w-64 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-royal focus:outline-none"
@@ -105,6 +123,8 @@ export default function Students() {
 
       {configMissing ? (
         <p className="text-sm text-gray-500">Connect the database to see students.</p>
+      ) : view === "docs" ? (
+        <DocumentsGrid gradeFilter={gradeFilter} search={search} />
       ) : loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : (

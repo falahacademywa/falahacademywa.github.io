@@ -32,6 +32,8 @@ export default function Progress() {
   const [picked, setPicked] = useState<Record<Subject, Picked[]>>(empty());
   const [notes, setNotes] = useState<Record<Subject, string>>({ English: "", Maths: "", Science: "" });
   const [pages, setPages] = useState<Record<Subject, string>>({ English: "", Maths: "", Science: "" });
+  // phase 44: photos of a test or quiz are marked, so the answers are entered exactly as the student marked them
+  const [tests, setTests] = useState<Record<Subject, boolean>>({ English: false, Maths: false, Science: false });
   const [lastPage, setLastPage] = useState<Partial<Record<Subject, LastPage>>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -131,14 +133,14 @@ export default function Progress() {
         const path = `${enr}/${day}/${crypto.randomUUID()}.jpg`;
         const up = await supabase.storage.from("student-work").upload(path, blob, { contentType: "image/jpeg" });
         if (up.error) { setBusy(null); return setMsg(`${sb} photo failed: ${up.error.message}. ${done} uploaded so far — the rest are still selected, tap Send again.`); }
-        const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: sb, note: notes[sb].trim() || null, page_last: Number(pages[sb]), uploaded_by: session?.user.id ?? null });
+        const { error } = await supabase.from("work_uploads").insert({ enrollment_id: enr, path, subject: sb, note: notes[sb].trim() || null, page_last: Number(pages[sb]), kind: tests[sb] ? "test" : "workbook", uploaded_by: session?.user.id ?? null });
         if (error) { setBusy(null); return setMsg(`${sb} photo stored but not recorded: ${error.message}`); }
         done++;
         setPicked((prev) => ({ ...prev, [sb]: prev[sb].filter((x) => x !== p) }));   // drop as we go, so a retry only resends what failed
         URL.revokeObjectURL(p.url);
       }
     }
-    setPicked(empty()); setNotes({ English: "", Maths: "", Science: "" }); setPages({ English: "", Maths: "", Science: "" }); setBusy(null);
+    setPicked(empty()); setNotes({ English: "", Maths: "", Science: "" }); setPages({ English: "", Maths: "", Science: "" }); setTests({ English: false, Maths: false, Science: false }); setBusy(null);
     setMsg(`${done} photo${done === 1 ? "" : "s"} sent for ${student?.first_name ?? "the student"} (${summary}). The office enters them in Red Comet; the status below changes as that happens.`);
     loadRecent(); loadLastPages();
   }
@@ -198,7 +200,11 @@ export default function Progress() {
               {pageOk(pages[sb]) && lastPage[sb] && Number(pages[sb]) <= lastPage[sb]!.page && (
                 <p className="mt-1 text-[11px] text-amber-700">That is not after the last page uploaded ({lastPage[sb]!.page}). Check the number; send anyway if it is right.</p>
               )}
-              <input value={notes[sb]} onChange={(e) => setNotes({ ...notes, [sb]: e.target.value })} placeholder={`${sb} note, e.g. unit 3 test (optional)`} className={inp} />
+              <label className={`mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold ${tests[sb] ? "bg-purple-50 text-purple-800" : "text-gray-600"}`}>
+                <input type="checkbox" checked={tests[sb]} onChange={(e) => setTests({ ...tests, [sb]: e.target.checked })} />
+                These photos are a test or quiz
+              </label>
+              <input value={notes[sb]} onChange={(e) => setNotes({ ...notes, [sb]: e.target.value })} placeholder={tests[sb] ? `${sb} test name, e.g. Unit 3 test (optional)` : `${sb} note (optional)`} className={inp} />
             </>)}
           </div>
         ))}

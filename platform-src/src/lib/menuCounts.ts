@@ -46,6 +46,10 @@ export async function loadMenuCounts(can: (module: string) => boolean): Promise<
   if (can("feedback"))
     jobs.push(count("feedback", (q) => q.eq("resolved", false)).then((n) => { out["/admin/feedback"] = [n]; }));
 
+  // Red Comet messages waiting for the President: new ones and drafts to approve (phase 44)
+  if (can("redcomet"))
+    jobs.push(count("redcomet_messages", (q) => q.in("status", ["new", "draft_ready"])).then((n) => { out["/admin/redcomet/messages"] = [n]; }).catch(() => {}));
+
   if (can("fees"))
     jobs.push((async () => {
       // paid / unpaid = same rule as the Dashboard "Fees this month" tile

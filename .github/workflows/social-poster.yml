@@ -19,6 +19,9 @@ permissions:
 
 jobs:
   post-due:
+    # Dev never runs on a timer and never e-mails anyone (President 2026-11-10): the same file runs in
+    # both repos; in falahacademywa-dev only a manual run (Actions -> Run workflow) does anything.
+    if: github.event_name == 'workflow_dispatch' || github.repository != 'falahacademywa/falahacademywa-dev'
     runs-on: ubuntu-latest
     steps:
       - name: Post scheduled social posts that are due

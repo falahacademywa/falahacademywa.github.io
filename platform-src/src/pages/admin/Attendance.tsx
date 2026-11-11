@@ -172,7 +172,7 @@ export default function Attendance() {
                   </ul>
                 </div>
               ))}
-              <div className="mt-4 text-xs"><Link to="/admin/reports" className="text-royal hover:underline">Monthly attendance CSV</Link></div>
+              <div className="mt-4 text-xs"><Link to="/admin/reports/attendance" className="text-royal hover:underline">Attendance report (with CSV)</Link></div>
             </>
           )}
         </aside>
