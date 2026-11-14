@@ -6,7 +6,8 @@ import { usDate } from "../../lib/format";
 import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_SHORT, FORM_DOC_TYPE, MEDICAL_COLS, CONSENT_COLS } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 import MeetingCard from "../../components/MeetingCard";
-import OldAnnouncements from "../../components/OldAnnouncements";
+import ParentFeed, { type FeedItem } from "../../components/ParentFeed";
+import { useLiveNotifications, prependUnique } from "../../lib/liveNotifications";
 import SecureImg, { SecureLink } from "../../components/SecureImg";
 
 interface Child {
@@ -23,7 +24,7 @@ interface Child {
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeePayment { payment_date: string; amount: number; payment_method: string; period_month: string | null; receipt_no: string | null; receipt_path: string | null; receipt_kind: string | null }
 interface FeePlan { id: string; total_amount: number; billing_frequency: string; start_date: string | null; payments: FeePayment[] }
-interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string }
+interface Notif { id: number; title: string; message: string; priority: string; is_read: boolean; created_at: string; link_path: string | null }
 
 // Payment channels shown in the "How to pay" dialog. Bank account details are
 // deliberately NOT here — this bundle is publicly readable; the office shares
@@ -195,8 +196,8 @@ export default function ParentHome() {
       setEvents(evs ?? []);
       setAnns((as as unknown as Ann[]) ?? []);
       const { data: n } = await supabase.from("notifications")
-        .select("id, title, message, priority, is_read, created_at")
-        .order("created_at", { ascending: false }).limit(20);
+        .select("id, title, message, priority, is_read, created_at, link_path")
+        .order("created_at", { ascending: false }).limit(60);
       setNotifs((n as Notif[]) ?? []);
       track("open_portal");
     })();
@@ -521,6 +522,9 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // phase 46: live — a new notice reaches the bell and the feed without reloading
+  useLiveNotifications<Notif>(configMissing ? undefined : session?.user.id, (n) => setNotifs((prev) => prependUnique(prev, n, 60)));
+
   async function markAllRead() {
     const unread = notifs.filter((n) => !n.is_read).map((n) => n.id);
     if (unread.length) {
@@ -570,14 +574,12 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
       ? { ...x, announcement_acks: [...x.announcement_acks, { parent_id: session.user.id }] } : x));
   }
 
-  // phase 34: current (published) vs old (archived this school year) announcements
-  const annsNow = anns.filter((a) => a.status !== "archived");
-  const annsOld = anns.filter((a) => a.status === "archived");
   function annItem(a: Ann, old: boolean) {
     const acked = a.announcement_acks.some((x) => x.parent_id === session?.user.id);
     return (
-      <div key={a.id} className={old ? "rounded-lg bg-silver/40 p-3" : "border-b pb-4 last:border-0 last:pb-0"}>
+      <div key={a.id}>
         <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-navy/10 px-2.5 py-0.5 text-xs font-semibold text-navy">📣 Announcement</span>
           {a.is_pinned && !old && <span title="Pinned">📌</span>}
           <span className="font-semibold text-navy">{a.title}</span>
           <span className="rounded-full bg-silver px-2.5 py-0.5 text-xs text-gray-500">{a.category}</span>
@@ -599,6 +601,76 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
       </div>
     );
   }
+
+  // phase 46: one class update as a feed card
+  function updItem(u: Update) {
+    return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{u.subject}</span>
+        {u.enrollment_id && (
+          <span className="rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-semibold text-navy">Just for {active?.students.first_name}</span>
+        )}
+        {u.homework_due && (
+          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Homework due {u.homework_due}</span>
+        )}
+        <span className="ml-auto text-xs text-gray-400">
+          {new Date(u.update_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+        </span>
+      </div>
+      <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{u.note}</p>
+      {(u.attachment_urls?.length ?? 0) > 1 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {u.attachment_urls!.map((src) => (
+            <SecureLink key={src} href={src} target="_blank" rel="noreferrer">
+              <SecureImg src={src} alt="Attached photo" loading="lazy" className="h-28 w-28 rounded-lg border border-gray-200 object-cover" />
+            </SecureLink>
+          ))}
+        </div>
+      )}
+      {(u.attachment_urls?.length ?? 0) <= 1 && u.attachment_thumb && (
+        <SecureLink href={u.attachment_url ?? "#"} target="_blank" rel="noreferrer" className="mt-2 inline-block">
+          <SecureImg src={u.attachment_thumb} alt="Attached photo" loading="lazy"
+            className="max-h-48 rounded-lg border border-gray-200 object-cover" />
+        </SecureLink>
+      )}
+      {(u.attachment_urls?.length ?? 0) <= 1 && !u.attachment_thumb && u.attachment_url && (
+        <SecureLink href={u.attachment_url} target="_blank" rel="noreferrer"
+          className="mt-2 inline-block text-xs font-semibold text-royal hover:underline">View attachment ↗</SecureLink>
+      )}
+    </div>
+    );
+  }
+
+  // phase 46: the parent feed — announcements (current and this year's old ones), the active
+  // child's class updates, and notices that are not just the copy of an announcement
+  const annTitles = new Set(anns.flatMap((a) => [a.title, "EMERGENCY: " + a.title]));
+  const feedItems: FeedItem[] = [
+    ...anns.map((a) => ({
+      key: "a" + a.id, kind: "announcement" as const, date: a.publish_date ?? "",
+      top: a.status !== "archived" && (a.is_pinned || (a.requires_ack && !a.announcement_acks.some((x) => x.parent_id === session?.user.id))),
+      text: `${a.title} ${a.content} ${a.category} announcement`, node: annItem(a, a.status === "archived"),
+    })),
+    ...updates.map((u) => ({
+      key: "u" + u.id, kind: "update" as const, date: u.update_date + "T12:00:00",
+      text: `${u.subject} ${u.note} ${u.homework_due ? "homework" : ""} class update`, node: updItem(u),
+    })),
+    ...notifs.filter((n) => !(n.link_path === "/parent" && annTitles.has(n.title))).map((n) => ({
+      key: "n" + n.id, kind: "notice" as const, date: n.created_at,
+      text: `${n.title} ${n.message} notice`,
+      node: (
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${n.priority === "action" ? "bg-red-100 text-red-700" : n.priority === "important" ? "bg-amber-100 text-amber-800" : "bg-sky-50 text-sky-700"}`}>🔔 Notice</span>
+            <span className="font-semibold text-navy">{n.title}</span>
+            {!n.is_read && <span className="h-2 w-2 rounded-full bg-red-500" title="New" />}
+            <span className="ml-auto text-xs text-gray-400">{new Date(n.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{n.message}</p>
+        </div>
+      ),
+    })),
+  ];
 
   const activeEnrollment = active?.students.enrollments.find((e) => e.status === "active") ?? active?.students.enrollments[0];
   // Months of the current school year only (Aug -> now), newest first
@@ -1230,52 +1302,9 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
             )}
         </section>
 
-        {/* Class Updates feed */}
-        {updates.length > 0 && (
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
-              Class Updates{active ? ` — ${active.students.first_name}` : ""}
-            </h2>
-            <div className="space-y-4">
-              {updates.map((u) => (
-                <div key={u.id} className="border-b pb-4 last:border-0 last:pb-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-deep">{u.subject}</span>
-                    {u.enrollment_id && (
-                      <span className="rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-semibold text-navy">Just for {active?.students.first_name}</span>
-                    )}
-                    {u.homework_due && (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Homework due {u.homework_due}</span>
-                    )}
-                    <span className="ml-auto text-xs text-gray-400">
-                      {new Date(u.update_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-700">{u.note}</p>
-                  {(u.attachment_urls?.length ?? 0) > 1 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {u.attachment_urls!.map((src) => (
-                        <SecureLink key={src} href={src} target="_blank" rel="noreferrer">
-                          <SecureImg src={src} alt="Attached photo" loading="lazy" className="h-28 w-28 rounded-lg border border-gray-200 object-cover" />
-                        </SecureLink>
-                      ))}
-                    </div>
-                  )}
-                  {(u.attachment_urls?.length ?? 0) <= 1 && u.attachment_thumb && (
-                    <SecureLink href={u.attachment_url ?? "#"} target="_blank" rel="noreferrer" className="mt-2 inline-block">
-                      <SecureImg src={u.attachment_thumb} alt="Attached photo" loading="lazy"
-                        className="max-h-48 rounded-lg border border-gray-200 object-cover" />
-                    </SecureLink>
-                  )}
-                  {(u.attachment_urls?.length ?? 0) <= 1 && !u.attachment_thumb && u.attachment_url && (
-                    <SecureLink href={u.attachment_url} target="_blank" rel="noreferrer"
-                      className="mt-2 inline-block text-xs font-semibold text-royal hover:underline">View attachment ↗</SecureLink>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Feed (phase 46): announcements, class updates and notices — newest first, with search */}
+        <ParentFeed items={feedItems} title={`Feed${active ? ` — ${active.students.first_name}` : ""}`}
+          empty={configMissing ? "" : "No announcements or class updates yet."} />
 
         {/* Assignments */}
         {asgs.length > 0 && (
@@ -1389,18 +1418,8 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
         </div>
 
         <div className="grid gap-5 lg:grid-cols-5">
-        {/* Announcements */}
-        <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-3">
-          <h2 className="mb-4 font-display text-lg font-semibold text-navy">Announcements</h2>
-          <div className="space-y-4">
-            {annsNow.map((a) => annItem(a, false))}
-            {!annsNow.length && !configMissing && <p className="text-sm text-gray-400">{annsOld.length ? "No new announcements." : "No announcements yet."}</p>}
-          </div>
-          <OldAnnouncements items={annsOld} render={(a) => annItem(a, true)} />
-        </section>
-
         {/* Upcoming events */}
-        <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-2">
+        <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-semibold text-navy">Upcoming</h2>
             <button onClick={openFullCalendar}

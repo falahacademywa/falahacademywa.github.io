@@ -10,6 +10,7 @@ import { useAuth } from "../lib/auth";
 import { supabase, configMissing } from "../lib/supabase";
 import { moduleForPath } from "../lib/permissions";
 import { loadMenuCounts, markClassUpdatesSeen, type MenuCounts } from "../lib/menuCounts";
+import { useLiveNotifications, prependUnique } from "../lib/liveNotifications";
 
 // Admin menu (President 2026-11-10): grouped, with icons, in three stages — full, icons only,
 // hidden (☰ brings it back). module = the staff permission that unlocks the entry (phase 19);
@@ -150,6 +151,11 @@ export default function AdminLayout() {
       .order("created_at", { ascending: false }).limit(30)
       .then(({ data }) => setNotifs((data as Notif[]) ?? []));
   }, [profile?.id]);
+  // phase 46: live — a new alert appears in the bell and the menu counts refresh without reloading
+  useLiveNotifications<Notif>(configMissing ? undefined : profile?.id, (n) => {
+    setNotifs((prev) => prependUnique(prev, n));
+    loadMenuCounts((m) => can(m)).then(setCounts);
+  });
 
   const unread = notifs.filter((n) => !n.is_read).length;
 
@@ -185,7 +191,7 @@ export default function AdminLayout() {
     return (
       <NavLink key={i.to} to={i.to} end={i.end} onClick={() => setOpen(false)} title={compact ? i.label : undefined}
         className={({ isActive }) =>
-          `relative flex items-center gap-2.5 rounded-lg py-2 text-sm transition ${nested && !inFlyout ? "pl-3 pr-2" : "px-3"} ${compact ? "lg:justify-center lg:px-0" : ""} ${
+          `relative flex items-center gap-2.5 rounded-lg py-2 short:py-1.5 text-sm transition ${nested && !inFlyout ? "pl-3 pr-2" : "px-3"} ${compact ? "lg:justify-center lg:px-0" : ""} ${
             isActive ? "bg-emerald-brand font-semibold text-white" : "text-white/80 hover:bg-white/10"
           }`}>
         {({ isActive }) => (
@@ -318,8 +324,8 @@ export default function AdminLayout() {
       )}
 
       {/* Sidebar: drawer on mobile (always full), on desktop full / icons only / hidden */}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-navy text-white transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shrink-0 lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"} ${mode === "icons" ? "lg:w-16" : "lg:w-60"} ${mode === "hidden" ? "lg:hidden" : ""}`}>
-        <div className={`flex items-center gap-3 border-b border-white/10 px-5 py-4 ${mode === "icons" ? "lg:flex-col lg:gap-2 lg:px-2" : ""}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-navy text-white transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shrink-0 lg:translate-x-0 overflow-y-auto overflow-x-hidden sidebar-scroll ${open ? "translate-x-0" : "-translate-x-full"} ${mode === "icons" ? "lg:w-16" : "lg:w-60"} ${mode === "hidden" ? "lg:hidden" : ""}`}>
+        <div className={`flex items-center gap-3 border-b border-white/10 px-5 py-4 short:py-2 ${mode === "icons" ? "lg:flex-col lg:gap-2 lg:px-2" : ""}`}>
           <img src="../images/logo.jpg" alt="" className="h-9 w-9 rounded-full object-cover" />
           <div className={`flex-1 ${mode === "icons" ? "lg:hidden" : ""}`}>
             <div className="font-display text-sm font-semibold leading-tight">Falah Academy</div>
@@ -329,7 +335,7 @@ export default function AdminLayout() {
           <button onClick={() => setOpen(false)} aria-label="Close menu"
             className="text-white/60 hover:text-white lg:hidden">✕</button>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden p-3">
+        <nav className="flex-1 space-y-0.5 p-3 short:py-2">
           {entries.map((e) => isGroup(e) ? groupRow(e) : itemLink(e, false))}
         </nav>
         {bottom.length > 0 && (
@@ -337,7 +343,7 @@ export default function AdminLayout() {
             {bottom.map((i) => itemLink(i, false))}
           </div>
         )}
-        <div className={`border-t border-white/10 p-4 text-sm ${mode === "icons" ? "lg:px-2" : ""}`}>
+        <div className={`border-t border-white/10 p-4 short:py-2 text-sm ${mode === "icons" ? "lg:px-2" : ""}`}>
           <div className={mode === "icons" ? "lg:hidden" : ""}>
             <div className="mb-2 truncate text-white/70">{profile?.full_name}{isStaff && <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-300">staff</span>}</div>
             {isTeacher && (
@@ -354,7 +360,7 @@ export default function AdminLayout() {
             <button onClick={signOut} title="Sign out" className="text-white/60 hover:text-white"><LogOut size={18} /></button>
           </div>
           {/* stage switch (desktop) */}
-          <div className={`mt-3 hidden gap-1 border-t border-white/10 pt-3 text-xs lg:flex ${mode === "icons" ? "flex-col items-center" : "items-center"}`}>
+          <div className={`mt-3 short:mt-2 short:pt-2 hidden gap-1 border-t border-white/10 pt-3 text-xs lg:flex ${mode === "icons" ? "flex-col items-center" : "items-center"}`}>
             {mode === "full" ? (
               <button onClick={() => setMode("icons")} title="Show icons only" className="flex items-center gap-1 rounded-md px-2 py-1 text-white/60 hover:bg-white/10 hover:text-white"><ChevronsLeft size={15} /> Icons only</button>
             ) : (

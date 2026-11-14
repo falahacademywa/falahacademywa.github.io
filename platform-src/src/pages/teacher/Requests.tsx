@@ -1,13 +1,12 @@
 // Teacher app — Requests (phase 35, TODO #163): every teacher sees every request of this school
 // year; "+ New request" opens the form; own requests can be edited or deleted until the
-// President or an admin decides. Resolved and declined ones move to the Archive
-// (Approved/Declined → Type → Month, all collapsed).
+// President or an admin decides. Resolved and declined ones move to the History: one plain
+// list, newest first (phase 46, President 2026-11-14 — no grouping filters in the teacher app).
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequestCard from "../../components/RequestCard";
 import RequestForm from "../../components/RequestForm";
-import GroupedArchive from "../../components/GroupedArchive";
-import { archiveLevels, isOpen, loadRequests, type Req } from "../../lib/requests";
+import { doneAt, isOpen, loadRequests, type Req } from "../../lib/requests";
 
 export default function Requests() {
   const [sp] = useSearchParams();
@@ -16,6 +15,7 @@ export default function Requests() {
   const [err, setErr] = useState<string | null>(null);
   const [form, setForm] = useState<{ edit: Req | null } | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
+  const [histOpen, setHistOpen] = useState(false);
 
   async function load() { const r = await loadRequests(); setErr(r.error); setRows(r.data); }
   useEffect(() => { load(); }, []);
@@ -26,7 +26,8 @@ export default function Requests() {
 
   const list = mineOnly ? rows.filter((r) => r.mine) : rows;
   const open = list.filter(isOpen).sort((a, b) => (a.urgency === b.urgency ? (a.created_at < b.created_at ? 1 : -1) : a.urgency === "urgent" ? -1 : 1));
-  const old = list.filter((r) => !isOpen(r));
+  const old = list.filter((r) => !isOpen(r)).sort((a, b) => (doneAt(a) < doneAt(b) ? 1 : -1));
+  const showHist = histOpen || (focus != null && old.some((r) => r.id === focus));
 
   return (
     <div className="space-y-3">
@@ -42,8 +43,17 @@ export default function Requests() {
       </label>
       {open.length === 0 && <p className="rounded-xl bg-white p-6 text-center text-sm text-gray-500 shadow-sm">No open requests. Tap “+ New request” to ask for something.</p>}
       {open.map((r) => <RequestCard key={`${r.id}-${r.id === focus}`} r={r} admin={false} startOpen={r.id === focus} onChanged={load} onEdit={(x) => { setForm({ edit: x }); window.scrollTo({ top: 0 }); }} />)}
-      <GroupedArchive key={`a${focus}`} focus={focus} items={old} levels={archiveLevels(false)} noun="request" note="Resolved and declined requests of this school year."
-        render={(r) => <RequestCard r={r} admin={false} startOpen={r.id === focus} onChanged={load} />} />
+      {old.length > 0 && (
+        <div className="mt-5 space-y-2 border-t border-gray-200 pt-4">
+          <button onClick={() => setHistOpen(!showHist)} aria-expanded={showHist}
+            className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left shadow-sm">
+            <span className={`w-4 text-center text-xs text-gray-400 transition-transform ${showHist ? "rotate-90" : ""}`}>▶</span>
+            <span className="text-base font-bold text-navy">History</span>
+            <span className="text-xs text-gray-400">{old.length} resolved or declined · newest first</span>
+          </button>
+          {showHist && old.map((r) => <RequestCard key={`h${r.id}-${r.id === focus}`} r={r} admin={false} startOpen={r.id === focus} onChanged={load} />)}
+        </div>
+      )}
     </div>
   );
 }

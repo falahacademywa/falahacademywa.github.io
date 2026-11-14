@@ -40,7 +40,7 @@ export async function photoUrl(path: string): Promise<string | null> {
 // Archive levels (President 2026-11-05): current year Approved/Declined → Type → Month;
 // admins also see past years first: Year → Approved/Declined → Type → Month.
 const outcome = (r: Req) => (r.status === "declined" ? "Declined" : "Approved");
-const doneAt = (r: Req) => r.archived_at ?? r.updated_at;
+export const doneAt = (r: Req) => r.archived_at ?? r.updated_at;
 export const archiveLevels = (withYear: boolean): Level<Req>[] => [
   ...(withYear ? [{ key: (r: Req) => academicYearOf(r.created_at), label: (k: string) => `${k} school year` }] : []),
   { key: outcome, order: (a, b) => (a === b ? 0 : a === "Approved" ? -1 : 1) },

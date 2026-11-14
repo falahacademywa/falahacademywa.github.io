@@ -27,7 +27,7 @@ export const MODULES: Module[] = [
   { key: "report_fees",   label: "Reports: Fees",             paths: ["/admin/reports/fees"], note: "drill-down by grade, student, payment status and dates (President only until granted)" },
   { key: "report_activity", label: "Reports: Activity Log",   paths: ["/admin/reports/activity"], note: "what parents, teachers and staff did in the portal (President only until granted)" },
   { key: "tasks",         label: "Tasks",                     paths: ["/admin/tasks"] },
-  { key: "teacher_requests", label: "Teacher requests",       paths: ["/admin/teacher-requests"], note: "requests from the teacher app; edit = notes, progress and due dates (approve/decline stays with the President and admins) (phase 35)" },
+  { key: "teacher_requests", label: "Teacher requests",       paths: ["/admin/teacher-requests"], note: "requests from the teacher app; edit = every decision: discuss, approve, decline, progress, resolve, reopen, due dates (phase 46)" },
   { key: "settings",      label: "Settings",                  paths: ["/admin/settings"],   note: "years, grades, document types — staff permissions stay with full admins" },
 ];
 

@@ -1,6 +1,10 @@
 @import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
 
+/* phase 46: "short:" = a laptop screen with little height (high-res laptops scaled to 125–150%);
+   the admin menu tightens its spacing there instead of showing a scrollbar beside the menu */
+@custom-variant short (@media (max-height: 860px));
+
 @theme {
   --color-navy: #1a2f5e;
   --color-navy-dark: #111f3e;
@@ -27,3 +31,8 @@ body {
   opacity: 0.55;
 }
 .view-only a { pointer-events: auto; opacity: 1; }
+
+/* phase 46: the admin menu scrolls as one piece; a slim, faint scrollbar only when it really overflows */
+.sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+.sidebar-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }

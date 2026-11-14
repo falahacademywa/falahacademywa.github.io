@@ -1,5 +1,6 @@
 // Teacher app shell (phase 26): phone-width column, top bar, bottom tabs.
 import { useEffect, useState } from "react";
+import { useLiveNotifications } from "../lib/liveNotifications";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
@@ -25,6 +26,8 @@ export default function TeacherLayout() {
       .order("created_at", { ascending: false }).limit(3)
       .then(({ data }) => setNotes((data as Note[]) ?? []));
   }, []);
+  // phase 46: live — new notices show up without reloading
+  useLiveNotifications<Note>(profile?.id, (n) => setNotes((xs) => xs.some((x) => x.id === n.id) ? xs : [n, ...xs].slice(0, 3)));
   async function dismiss(n: Note, go: boolean) {
     setNotes((xs) => xs.filter((x) => x.id !== n.id));
     await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);

@@ -10,8 +10,8 @@ import { type Req, STATUS_LABEL, STATUS_CLS, canTeacherEdit, photoUrl, shortDate
 export default function RequestCard({ r, admin, onChanged, onEdit, startOpen = false }: {
   r: Req; admin: boolean; onChanged: () => void; onEdit?: (r: Req) => void; startOpen?: boolean;
 }) {
-  const { profile, can } = useAuth();
-  const isAdminRole = profile?.role === "admin";
+  const { can } = useAuth();
+  const isAdminRole = admin && can("teacher_requests", "edit");   // phase 46: every admin with edit decides
   const canProgress = admin && can("teacher_requests", "edit");
   const closed = r.status === "done" || r.status === "declined";
   const [open, setOpen] = useState(startOpen);
@@ -124,7 +124,7 @@ export default function RequestCard({ r, admin, onChanged, onEdit, startOpen = f
                 {canProgress && r.status === "approved" && <button onClick={() => setStatus("in_progress")} disabled={busy} className={`${btn} bg-blue-600 text-white`}>Start (In progress)</button>}
                 {canProgress && (r.status === "approved" || r.status === "in_progress") && <button onClick={() => setStatus("done")} disabled={busy} className={`${btn} bg-green-700 text-white`}>Mark resolved</button>}
                 {isAdminRole && (r.status === "done" || r.status === "declined") && <button onClick={() => setStatus(r.status === "done" ? "in_progress" : "submitted")} disabled={busy} className={`${btn} border border-gray-300 bg-white text-gray-700`}>Reopen</button>}
-                {admin && !isAdminRole && (r.status === "submitted" || r.status === "discussing") && <span className="text-xs text-gray-500">Waiting for the President or an admin to approve or decline.</span>}
+                {admin && !isAdminRole && (r.status === "submitted" || r.status === "discussing") && <span className="text-xs text-gray-500">View only: an admin with edit on Teacher requests approves or declines.</span>}
               </div>
               {canProgress && (r.status === "approved" || r.status === "in_progress") && (
                 <div className="flex flex-wrap items-center gap-2 text-xs">
