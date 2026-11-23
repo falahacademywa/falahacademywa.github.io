@@ -88,6 +88,17 @@ export default function Tasks() {
   const [nFiles, setNFiles] = useState<File[]>([]);
   const [nBusy, setNBusy] = useState(false);
   const [nMsg, setNMsg] = useState<string | null>(null);
+  // Escape (President 2026-11-22): closes the New task form; otherwise the open task. An edit in
+  // progress inside a task is cancelled first (TaskDetail catches that Escape before it gets here).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (newOpen) { if (!nBusy) setNewOpen(false); return; }
+      if (openCode) setOpenCode(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [newOpen, nBusy, openCode]);
 
   function load() {
     if (configMissing) return;
@@ -471,6 +482,17 @@ function TaskDetail({ task: r, u, isAdmin, canEdit, myId, addedBy, whoOptions, r
   const [eRepeat, setERepeat] = useState<string>(r.repeat_every ?? "");
   const [eNotes, setENotes] = useState(r.notes ?? "");
   const [reWho, setReWho] = useState("");
+  // Escape while editing cancels the edit and leaves the task open (capture phase: runs before the page's own Escape)
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      if (!busy) { setEditing(false); setMsg(null); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [editing, busy]);
 
   const fromTeacher = r.source === "teacher";
   const mine = isAdmin || (r.created_by != null && r.created_by === myId);   // may change more than the status

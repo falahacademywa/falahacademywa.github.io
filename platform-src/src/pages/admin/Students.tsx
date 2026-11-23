@@ -109,8 +109,8 @@ export default function Students() {
         </div>
       </div>
 
-      {/* Grade tiles */}
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Grade tiles (the Forms view draws its own: students missing a form per grade) */}
+      {view === "list" && <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map(([grade, count]) => (
           <button key={grade} onClick={() => setGradeFilter(gradeFilter === grade ? null : grade)}
             className={`rounded-xl border p-4 text-left shadow-sm transition ${
@@ -119,12 +119,12 @@ export default function Students() {
             <div className="mt-0.5 text-sm text-gray-500">{grade}{gradeFilter === grade ? " · filtering ✕" : ""}</div>
           </button>
         ))}
-      </div>
+      </div>}
 
       {configMissing ? (
         <p className="text-sm text-gray-500">Connect the database to see students.</p>
       ) : view === "docs" ? (
-        <DocumentsGrid gradeFilter={gradeFilter} search={search} />
+        <DocumentsGrid gradeFilter={gradeFilter} search={search} onGrade={setGradeFilter} />
       ) : loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : (

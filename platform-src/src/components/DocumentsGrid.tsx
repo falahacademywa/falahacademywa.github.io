@@ -18,7 +18,9 @@ export const shortDoc = (n: string) => ({
   "Choice Transfer Confirmation": "Choice transfer",
 }[n] ?? n);
 
-export default function DocumentsGrid({ gradeFilter, search }: { gradeFilter: string | null; search: string }) {
+const GRADE_ORDER = ["Pre-K", "KG", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5"];
+
+export default function DocumentsGrid({ gradeFilter, search, onGrade }: { gradeFilter: string | null; search: string; onGrade: (g: string | null) => void }) {
   const nav = useNavigate();
   const { can } = useAuth();
   const health = can("health");
@@ -49,6 +51,20 @@ export default function DocumentsGrid({ gradeFilter, search }: { gradeFilter: st
       .sort((a, b) => missing(b).length - missing(a).length || `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, health, gradeFilter, search, missingOnly]);
+  // Grade tiles count what the table lists (President 2026-11-22: the tiles said 10 Pre-K, 5 KG, 2 Grade 1,
+  // 1 Grade 3 while the table listed two Pre-K and two KG students): with "Only students with a form
+  // missing" ticked, the students missing a form in each grade; otherwise every student in the grade.
+  const byGrade = useMemo(() => {
+    const m = new Map<string, { total: number; missing: number }>();
+    for (const s of rows ?? []) {
+      const e = m.get(s.grade) ?? { total: 0, missing: 0 };
+      e.total++; if (missing(s).length) e.missing++;
+      m.set(s.grade, e);
+    }
+    const at = (g: string) => { const i = GRADE_ORDER.indexOf(g); return i === -1 ? 99 : i; };
+    return [...m.entries()].sort((a, b) => at(a[0]) - at(b[0]) || a[0].localeCompare(b[0]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, health]);
   const scope = (rows ?? []).filter((s) => !gradeFilter || s.grade === gradeFilter);
   const complete = scope.filter((s) => missing(s).length === 0).length;
   const cols = showPaper ? paperTypes : [];
@@ -56,6 +72,20 @@ export default function DocumentsGrid({ gradeFilter, search }: { gradeFilter: st
   if (rows === null) return <p className="text-sm text-gray-500">Loading…</p>;
   return (
     <div>
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {byGrade.map(([g, c]) => {
+          const n = missingOnly ? c.missing : c.total;
+          return (
+            <button key={g} onClick={() => onGrade(gradeFilter === g ? null : g)}
+              className={`rounded-xl border p-4 text-left shadow-sm transition ${
+                gradeFilter === g ? "border-emerald-brand bg-emerald-50" : "border-gray-200 bg-white hover:border-royal"}`}>
+              <div className={`font-display text-3xl font-semibold ${missingOnly && n === 0 ? "text-emerald-deep" : "text-navy"}`}>{n}</div>
+              <div className="mt-0.5 text-sm text-gray-500">{g}{gradeFilter === g ? " · filtering ✕" : ""}</div>
+              {missingOnly && <div className={`text-xs ${n ? "text-red-600" : "text-emerald-deep"}`}>{n ? `missing a form · of ${c.total}` : `all ${c.total} complete`}</div>}
+            </button>
+          );
+        })}
+      </div>
       <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
         <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-deep">{complete} of {scope.length} students complete</span>
         <span className="rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700">{scope.length - complete} missing a form</span>

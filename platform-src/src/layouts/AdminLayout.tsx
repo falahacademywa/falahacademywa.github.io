@@ -133,6 +133,14 @@ export default function AdminLayout() {
   useEffect(() => { setFly(null); }, [loc.pathname]);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  // Escape closes the notification panel (President 2026-11-22). Capture phase, so a page underneath
+  // (an open task, say) does not also close on the same key press.
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setBellOpen(false); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [bellOpen]);
   const [counts, setCounts] = useState<MenuCounts>({});
 
   // Action counts beside menu items (#131): reload on every page change; opening Class Updates marks posts seen.
