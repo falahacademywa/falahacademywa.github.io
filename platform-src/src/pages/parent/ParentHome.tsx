@@ -1354,18 +1354,19 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
 
         {/* Fees: above the feed, so the family sees what is due before the news (President 2026-11-22) */}
         <div className="grid scroll-mt-4 gap-5" id="fees">
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <h2 className="mb-4 font-display text-lg font-semibold text-navy">Fees</h2>
+          {/* compact (President 2026-11-22): title, amount, this month's status and Print on one line, like Attendance */}
+          <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
             {fee ? (
               Number(fee.total_amount) === 0 ? (
-                <p className="text-sm text-gray-500">No fees apply for this enrollment.</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
+                  <span className="text-sm text-gray-500">No fees apply for this enrollment.</span>
+                </div>
               ) : (
                 <>
-                  <div className="mb-3 flex items-center justify-between rounded-lg bg-silver p-3">
-                    <div>
-                      <div className="font-display text-xl font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}</div>
-                      <div className="text-xs text-gray-500">per {fee.billing_frequency.replace("ly", "")}</div>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
+                    <span className="text-sm font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}<span className="font-normal text-gray-500"> per {fee.billing_frequency.replace("ly", "")}</span></span>
                     {fee.start_date && fee.start_date > todayStr() ? (
                       <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                         Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -1377,12 +1378,9 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                     ) : (
                       <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
                     )}
+                    <button onClick={() => printStatement()} className="ml-auto text-xs font-semibold text-royal hover:underline">Print statement</button>
                   </div>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">Monthly status</h3>
-                    <button onClick={() => printStatement()} className="text-xs font-semibold text-royal hover:underline">Print statement</button>
-                  </div>
-                  <div className="space-y-1 text-sm">
+                  <div className="mt-1.5 text-sm">
                     {(() => {
                       const today = new Date();
                       const curKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -1406,7 +1404,7 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                       const shown = list.filter((m) => m.key === curKey || !m.payment);   // this month + anything still due
                       const folded = list.filter((m) => m.key !== curKey && !!m.payment); // paid or waived earlier months
                       const row = (m: (typeof list)[number]) => (
-                        <div key={m.key} className="flex items-center justify-between border-b py-1.5 last:border-0">
+                        <div key={m.key} className="flex items-center justify-between border-b py-1 last:border-0">
                           <span className="text-gray-600">{m.label}</span>
                           {m.payment?.payment_method === "waived" ? (
                             <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700" title="Waived by the school — nothing is due for this month">
@@ -1444,7 +1442,12 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                   </div>
                 </>
               )
-            ) : <p className="text-sm text-gray-400">No fee plan set for this enrollment yet.</p>}
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
+                <span className="text-sm text-gray-400">No fee plan set for this enrollment yet.</span>
+              </div>
+            )}
           </section>
         </div>
 
