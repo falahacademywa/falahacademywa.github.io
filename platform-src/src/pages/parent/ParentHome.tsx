@@ -817,10 +817,28 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                 </label>
               )
             )}
-            <button onClick={() => { track("open_feedback"); setFbOpen(true); setFbState("idle"); }}
-              className="ml-auto rounded-full border-2 border-emerald-brand bg-white px-4 py-2 text-sm font-semibold text-emerald-deep transition hover:bg-emerald-brand hover:text-white">
-              💬 Feedback
-            </button>
+            {/* profile completeness ring + Feedback (President 2026-11-22); the ring's panel opens under this group */}
+            <div className="relative ml-auto flex items-center gap-2">
+              <ProfileCompleteness userId={profile?.id} refresh={myOpen} formRows={formRows}
+                kids={children.map((c) => ({ id: c.students.id, first_name: c.students.first_name,
+                  hasPhoto: !!(c.students.profile_photo_url || c.students.photo_pending_url) }))}
+                onFamily={(tab) => { setFamTab(tab); openMyInfo(); }}
+                onForm={(kind, kidId) => {
+                  const child = children.find((c) => c.students.id === kidId);
+                  if (!child) return;
+                  track("open_form", `${kind}:${child.students.first_name}`);
+                  setFormOpen({ kind, child });
+                }}
+                onPhoto={(kidId) => {
+                  const child = children.find((c) => c.students.id === kidId);
+                  if (child) setActive(child);
+                  document.getElementById("child-bar")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }} />
+              <button onClick={() => { track("open_feedback"); setFbOpen(true); setFbState("idle"); }}
+                className="rounded-full border-2 border-emerald-brand bg-white px-4 py-2 text-sm font-semibold text-emerald-deep transition hover:bg-emerald-brand hover:text-white">
+                💬 Feedback
+              </button>
+            </div>
           </div>
         )}
         {!configMissing && !children.length && (
@@ -842,24 +860,6 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
             </button>
           </div>
         )}
-
-        {/* Profile completeness (President 2026-11-22): the % plus a button for every missing item.
-            It includes the three school forms per child, so it replaces the old forms reminder. */}
-        <ProfileCompleteness userId={profile?.id} refresh={myOpen} formRows={formRows}
-          kids={children.map((c) => ({ id: c.students.id, first_name: c.students.first_name,
-            hasPhoto: !!(c.students.profile_photo_url || c.students.photo_pending_url) }))}
-          onFamily={(tab) => { setFamTab(tab); openMyInfo(); }}
-          onForm={(kind, kidId) => {
-            const child = children.find((c) => c.students.id === kidId);
-            if (!child) return;
-            track("open_form", `${kind}:${child.students.first_name}`);
-            setFormOpen({ kind, child });
-          }}
-          onPhoto={(kidId) => {
-            const child = children.find((c) => c.students.id === kidId);
-            if (child) setActive(child);
-            document.getElementById("child-bar")?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }} />
 
         {/* How-to-pay dialog */}
         {payOpen && (
