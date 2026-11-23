@@ -1306,41 +1306,7 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
             )}
         </section>
 
-        {/* Feed (phase 46): announcements, class updates and notices — newest first, with search */}
-        <ParentFeed items={feedItems} title={`Feed${active ? ` — ${active.students.first_name}` : ""}`}
-          empty={configMissing ? "" : "No announcements or class updates yet."} />
-
-        {/* Assignments */}
-        {asgs.length > 0 && (
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
-              Assignments{active ? ` — ${active.students.first_name}` : ""}
-            </h2>
-            <div className="space-y-2">
-              {asgs.map((a) => {
-                const overdue = a.due_date && a.due_date < todayStr();
-                return (
-                  <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy">{a.subject}</span>
-                    <span className="font-semibold text-gray-800">{a.title}</span>
-                    {a.due_date && (
-                      <span className={`text-xs font-semibold ${overdue ? "text-red-600" : "text-gray-500"}`}>
-                        due {a.due_date}
-                      </span>
-                    )}
-                    {a.instructions && <span className="text-xs text-gray-500">{a.instructions}</span>}
-                    {a.file_url && (
-                      <a href={a.file_url} target="_blank" rel="noreferrer"
-                        className="ml-auto text-xs font-semibold text-royal hover:underline">Open ↗</a>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Fees */}
+        {/* Fees: above the feed, so the family sees what is due before the news (President 2026-11-22) */}
         <div className="grid gap-5">
           <section className="rounded-xl bg-white p-5 shadow-sm">
             <h2 className="mb-4 font-display text-lg font-semibold text-navy">Fees</h2>
@@ -1420,6 +1386,40 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
             ) : <p className="text-sm text-gray-400">No fee plan set for this enrollment yet.</p>}
           </section>
         </div>
+
+        {/* Feed (phase 46): announcements, class updates and notices — newest first, with search */}
+        <ParentFeed items={feedItems} title={`Feed${active ? ` — ${active.students.first_name}` : ""}`}
+          empty={configMissing ? "" : "No announcements or class updates yet."} />
+
+        {/* Assignments */}
+        {asgs.length > 0 && (
+          <section className="rounded-xl bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
+              Assignments{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            <div className="space-y-2">
+              {asgs.map((a) => {
+                const overdue = a.due_date && a.due_date < todayStr();
+                return (
+                  <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy">{a.subject}</span>
+                    <span className="font-semibold text-gray-800">{a.title}</span>
+                    {a.due_date && (
+                      <span className={`text-xs font-semibold ${overdue ? "text-red-600" : "text-gray-500"}`}>
+                        due {a.due_date}
+                      </span>
+                    )}
+                    {a.instructions && <span className="text-xs text-gray-500">{a.instructions}</span>}
+                    {a.file_url && (
+                      <a href={a.file_url} target="_blank" rel="noreferrer"
+                        className="ml-auto text-xs font-semibold text-royal hover:underline">Open ↗</a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <div className="grid gap-5 lg:grid-cols-5">
         {/* Upcoming events */}
