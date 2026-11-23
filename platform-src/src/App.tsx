@@ -34,6 +34,7 @@ import ReportFees from "./pages/admin/ReportFees";
 import ReportActivity from "./pages/admin/ReportActivity";
 import RedCometMessages from "./pages/admin/RedCometMessages";
 import PageTracker from "./components/PageTracker";
+import UpdateWatcher from "./components/UpdateWatcher";
 import Meet from "./pages/Meet";
 import TeacherMeetings from "./pages/teacher/Meetings";
 import ParentHome from "./pages/parent/ParentHome";
@@ -75,6 +76,7 @@ export default function App() {
         <PageGuard>
         <PageTracker />
         <PushNavigator />
+        <UpdateWatcher />
         <Routes>
           <Route path="/login" element={<Login />} />
           {/* parent-teacher meeting booking (phase 33): public, one link per class */}

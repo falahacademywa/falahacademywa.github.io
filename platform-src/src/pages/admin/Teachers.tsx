@@ -12,7 +12,7 @@ interface TeacherRow {
   app_access: boolean;
   user_id: string | null;
   app_last_sign_in: string | null;
-  teacher_grades: { id: number; role: string; grades: { name: string } }[];
+  teacher_grades: { id: number; role: string; grade_id: number; school_year_id: number; grades: { name: string } }[];
 }
 
 export default function Teachers() {
@@ -27,7 +27,7 @@ export default function Teachers() {
     if (configMissing) return;
     const [{ data: t }, { data: g }, { data: y }] = await Promise.all([
       supabase.from("teachers")
-        .select("id, first_name, last_name, email, phone, active, app_access, user_id, app_last_sign_in, teacher_grades ( id, role, grades ( name ) )")
+        .select("id, first_name, last_name, email, phone, active, app_access, user_id, app_last_sign_in, teacher_grades ( id, role, grade_id, school_year_id, grades ( name ) )")
         .order("last_name"),
       supabase.from("grades").select("id, name").eq("is_active", true).order("level_order"),
       supabase.from("school_years").select("id").eq("is_current", true).single(),
@@ -51,9 +51,20 @@ export default function Teachers() {
     if (!yearId) return setMsg("Set a current school year in Settings first.");
     const { error } = await supabase.from("teacher_grades")
       .insert({ teacher_id: teacherId, grade_id: gradeId, school_year_id: yearId, role });
-    if (error) setMsg("Assign failed: " + error.message);
+    // the list only offers what is free, so a duplicate means someone else assigned it meanwhile
+    if (error) setMsg(/duplicate key/i.test(error.message) ? "That class is already assigned to this teacher." : "Assign failed: " + error.message);
+    else setMsg(null);
     load();
   }
+  // A class + role this teacher already has this school year is not offered again (President
+  // 2026-11-22: choosing one again only produced a database error).
+  const ROLES: { key: string; label: string; cls: string }[] = [
+    { key: "homeroom", label: "Homeroom", cls: "bg-silver hover:bg-gray-200" },
+    { key: "quran", label: "Qur'an", cls: "bg-emerald-50 text-emerald-deep hover:bg-emerald-100" },
+  ];
+  const freeFor = (t: TeacherRow) => grades
+    .map((g) => ({ g, roles: ROLES.filter((r) => !t.teacher_grades.some((tg) => tg.grade_id === g.id && tg.role === r.key && tg.school_year_id === yearId)) }))
+    .filter((x) => x.roles.length > 0);
   async function unassign(id: number) {
     await supabase.from("teacher_grades").delete().eq("id", id);
     load();
@@ -136,22 +147,26 @@ export default function Teachers() {
                   <button onClick={() => unassign(tg.id)} className="text-gray-400 hover:text-red-600">✕</button>
                 </span>
               ))}
-              <details className="relative">
-                <summary className="cursor-pointer list-none rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-500 hover:bg-silver">+ Assign grade</summary>
-                <div className="absolute z-10 mt-1 w-52 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
-                  {grades.map((g) => (
-                    <div key={g.id} className="flex items-center justify-between px-2 py-1 text-sm">
-                      <span>{g.name}</span>
-                      <span className="flex gap-1">
-                        <button onClick={() => assign(t.id, g.id, "homeroom")}
-                          className="rounded bg-silver px-2 py-0.5 text-xs hover:bg-gray-200">Homeroom</button>
-                        <button onClick={() => assign(t.id, g.id, "quran")}
-                          className="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-deep hover:bg-emerald-100">Qur'an</button>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </details>
+              {freeFor(t).length > 0 ? (
+                <details className="relative">
+                  <summary className="cursor-pointer list-none rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-500 hover:bg-silver">+ Assign grade</summary>
+                  <div className="absolute z-10 mt-1 w-52 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+                    {freeFor(t).map(({ g, roles }) => (
+                      <div key={g.id} className="flex items-center justify-between px-2 py-1 text-sm">
+                        <span>{g.name}</span>
+                        <span className="flex gap-1">
+                          {roles.map((r) => (
+                            <button key={r.key} onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open"); assign(t.id, g.id, r.key); }}
+                              className={`rounded px-2 py-0.5 text-xs ${r.cls}`}>{r.label}</button>
+                          ))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : grades.length > 0 && (
+                <span className="rounded-full px-2 py-1 text-xs text-gray-400" title="Remove a class with ✕ to change it">Every class assigned</span>
+              )}
             </div>
           </div>
         ))}

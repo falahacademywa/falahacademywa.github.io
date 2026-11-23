@@ -694,13 +694,18 @@ export default function StudentProfile() {
             const kinds = FORM_DOC_TYPE[t.name] ?? [];
             const online = kinds.length > 0 && kinds.every((k) => formStatus(k, med, consent).done)
               ? kinds.map((k) => formStatus(k, med, consent).date!).sort().pop()! : null;
-            const ok = !!sub || !!online;
+            // the two contact forms are satisfied by what is on file in the portal (same rule as Students → Forms)
+            const inPortal = !sub && !online && (
+              (t.name === "Primary Contact Information" && s.guardians.some((g) => (g.phone ?? "").trim() !== "")) ||
+              (t.name === "Emergency Contact Information" && s.emergency_contacts.length > 0));
+            const ok = !!sub || !!online || inPortal;
             return (
               <div key={t.id} className="flex flex-wrap items-center gap-2.5 border-b py-2 text-sm last:border-0">
                 <span className={ok ? "text-emerald-deep" : "text-gray-300"}>{ok ? "✅" : "⬜"}</span>
                 <span className={ok ? "font-semibold text-navy" : "text-gray-500"}>{t.name}</span>
                 {sub && <span className="text-xs text-gray-400">{new Date(sub.uploaded_date).toLocaleDateString()}</span>}
                 {!sub && online && <span className="text-xs text-emerald-deep">completed online {usDate(online)}</span>}
+                {inPortal && <span className="text-xs text-emerald-deep">on file in the portal</span>}
                 <span className="ml-auto flex items-center gap-2">
                   {sub && (sub.storage_path || sub.file_url) && (
                     <button onClick={() => viewDoc(sub)}

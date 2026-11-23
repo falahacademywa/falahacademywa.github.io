@@ -26,7 +26,7 @@ export default function Students() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortAsc, setSortAsc] = useState(true);
   const [loading, setLoading] = useState(!configMissing);
-  // List or Documents checklist (TODO #138); ?view=docs opens the checklist (Dashboard tile)
+  // List or the electronic-forms checklist (TODO #138); ?view=docs opens the checklist (Dashboard tile "Missing forms")
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "docs" ? "docs" : "list";
 
@@ -88,7 +88,7 @@ export default function Students() {
           <div className="flex rounded-lg border border-gray-300 bg-white p-0.5 text-xs font-semibold">
             {(["list", "docs"] as const).map((v) => (
               <button key={v} onClick={() => setParams(v === "docs" ? { view: "docs" } : {})}
-                className={`rounded-md px-3 py-1 ${view === v ? "bg-navy text-white" : "text-gray-600 hover:bg-silver"}`}>{v === "list" ? "List" : "Documents"}</button>
+                className={`rounded-md px-3 py-1 ${view === v ? "bg-navy text-white" : "text-gray-600 hover:bg-silver"}`}>{v === "list" ? "List" : "Forms"}</button>
             ))}
           </div>
         </div>
