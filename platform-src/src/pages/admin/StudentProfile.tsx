@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { openLater } from "../../lib/openFile";
+import BackLink from "../../components/BackLink";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
@@ -97,12 +99,13 @@ export default function StudentProfile() {
     load();
   }
   async function viewDoc(d: DocRef) {
+    const go = openLater();   // open the tab during the tap (iPhone), fill it in when the link is ready
     if (d.storage_path) {
       const { data } = await supabase.storage.from("student-documents").createSignedUrl(d.storage_path, 3600);
-      if (data?.signedUrl) { window.open(data.signedUrl, "_blank"); return; }
+      if (data?.signedUrl) { go(data.signedUrl); return; }
       const dl = await supabase.storage.from("student-documents").download(d.storage_path);
-      if (dl.data) window.open(URL.createObjectURL(dl.data), "_blank");
-    } else if (d.file_url) window.open(d.file_url, "_blank");
+      go(dl.data ? URL.createObjectURL(dl.data) : null);
+    } else go(d.file_url);
   }
 
   // Siblings: students sharing a guardian email with this one (parent-portal-style switcher)
@@ -282,7 +285,7 @@ export default function StudentProfile() {
 
   return (
     <div className="max-w-4xl">
-      <Link to="/admin/students" className="text-sm text-royal hover:underline">← Students</Link>
+      <BackLink to="/admin/students" label="Students" />
       <div className="mt-2 mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           {s.profile_photo_url ? (

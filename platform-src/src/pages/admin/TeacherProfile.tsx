@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import BackLink from "../../components/BackLink";
 import { Link, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 
@@ -61,7 +62,7 @@ export default function TeacherProfile() {
 
   return (
     <div className="max-w-4xl">
-      <Link to="/admin/teachers" className="text-sm text-royal hover:underline">← Teachers</Link>
+      <BackLink to="/admin/teachers" label="Teachers" />
       <div className="mt-2 mb-6 flex items-start gap-4">
         {t.photo_url
           ? <img src={t.photo_url} alt="" className="h-24 w-24 rounded-full border border-gray-200 object-cover" />

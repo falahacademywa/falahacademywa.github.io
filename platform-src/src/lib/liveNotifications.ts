@@ -2,6 +2,7 @@
 // is created, without a page refresh. Supabase Realtime on the notifications table (free plan,
 // $0); the filter and RLS mean each person only ever receives their own rows.
 import { useEffect, useRef } from "react";
+import { chime } from "./sound";
 import { supabase } from "./supabase";
 
 export function useLiveNotifications<T extends { id: number }>(userId: string | undefined, onNew: (row: T) => void) {
@@ -13,7 +14,7 @@ export function useLiveNotifications<T extends { id: number }>(userId: string | 
       .channel(`notifications:${userId}`)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `recipient_id=eq.${userId}` },
-        (p) => cb.current(p.new as T))
+        (p) => { chime(); cb.current(p.new as T); })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [userId]);

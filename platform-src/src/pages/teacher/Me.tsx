@@ -1,6 +1,7 @@
 // Teacher app — my profile: photo, name (office-managed), assigned grades
 // (read-only), phone, short bio, address, emergency contact; install hint; sign out.
 import { useEffect, useState } from "react";
+import { PushStatusRow } from "../../components/NotifyPrompt";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useMyTeacher, compressImage } from "../../lib/teacher";
@@ -86,6 +87,7 @@ export default function Me() {
           <b>Install this app:</b> {ios ? "tap the Share button in Safari, then “Add to Home Screen”." : "open the browser menu (⋮) and tap “Install app” or “Add to Home screen”."} You stay signed in.
         </div>
       )}
+      <PushStatusRow className="mt-3 px-1" />
       <button onClick={signOut} className="mt-4 w-full rounded-lg border border-gray-300 bg-white py-2.5 text-sm font-semibold text-gray-600">Sign out</button>
     </div>
   );

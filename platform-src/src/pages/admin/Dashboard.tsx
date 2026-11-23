@@ -137,7 +137,7 @@ export default function Dashboard() {
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-navy">Dashboard</h1>
-      <p className="mb-6 mt-1 text-sm text-gray-500">
+      <p className="mb-3 mt-1 text-sm text-gray-500">
         Every metric is clickable — drill down to the detail behind it.
       </p>
       {configMissing && (
@@ -146,19 +146,19 @@ export default function Dashboard() {
           project URL and anon key in <code>src/lib/supabase.ts</code>.
         </div>
       )}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {widgets.filter(allowed).map((w) => (
           <Link key={w.label} to={w.to}
-            className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md">
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm transition hover:border-royal hover:shadow-md">
             {w.pair ? (
-              <div className="flex items-end gap-4">
-                <div><div className="font-display text-3xl font-semibold text-green-600">{w.pair.paid}</div><div className="text-xs font-semibold text-green-700">Paid</div></div>
-                <div><div className={`font-display text-3xl font-semibold ${w.pair.unpaid ? "text-red-600" : "text-gray-300"}`}>{w.pair.unpaid}</div><div className={`text-xs font-semibold ${w.pair.unpaid ? "text-red-700" : "text-gray-400"}`}>Unpaid</div></div>
+              <div className="flex items-end gap-3">
+                <div><div className="font-display text-xl font-semibold leading-tight text-green-600">{w.pair.paid}</div><div className="text-[10px] font-semibold text-green-700">Paid</div></div>
+                <div><div className={`font-display text-xl font-semibold leading-tight ${w.pair.unpaid ? "text-red-600" : "text-gray-300"}`}>{w.pair.unpaid}</div><div className={`text-[10px] font-semibold ${w.pair.unpaid ? "text-red-700" : "text-gray-400"}`}>Unpaid</div></div>
               </div>
             ) : (
-              <div className="font-display text-3xl font-semibold text-navy">{w.value}</div>
+              <div className="font-display text-xl font-semibold leading-tight text-navy">{w.value}</div>
             )}
-            <div className="mt-1 text-sm text-gray-500">{w.label}</div>
+            <div className="mt-0.5 text-xs leading-tight text-gray-500">{w.label}</div>
           </Link>
         ))}
 
@@ -166,10 +166,10 @@ export default function Dashboard() {
           const total = new Set(Object.values(rcPending).flatMap((e) => [...e.students])).size;
           return (
             <Link to="/admin/redcomet?status=pending" title="Students with workbook photos not yet entered in Red Comet · click to open"
-              className="rounded-xl border border-amber-300 bg-amber-50/60 p-5 shadow-sm transition hover:border-royal hover:shadow-md">
-              <div className="font-display text-3xl font-semibold text-amber-700">{total}</div>
-              <div className="mt-1 text-sm text-gray-500">Red Comet: waiting</div>
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              className="col-span-2 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 shadow-sm transition hover:border-royal hover:shadow-md">
+              <div className="flex items-baseline gap-2"><div className="font-display text-xl font-semibold leading-tight text-amber-700">{total}</div>
+              <div className="text-xs text-gray-500">Red Comet: waiting</div></div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
                 {grades.filter((g) => rcPending[g.id]).map((g) => (
                   <span key={g.id} className="flex items-center gap-1 font-semibold text-navy" title={`${rcPending[g.id].photos} photo${rcPending[g.id].photos === 1 ? "" : "s"}`}>
                     <span className={`h-2 w-2 rounded-full ${gradeColor(grades, g.id).dot}`} />{g.name} <span className="text-amber-700">{rcPending[g.id].students.size}</span>
@@ -181,16 +181,16 @@ export default function Dashboard() {
         })()}
 
         {can("academics") && <Link to="/admin/updates" title="Open Class Updates"
-          className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
+          className="col-span-full rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm transition hover:border-royal hover:shadow-md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <div className="font-display text-xl font-semibold text-navy">Class updates this week</div>
+            <div className="font-display text-base font-semibold text-navy">Class updates this week</div>
             <div className="text-xs text-gray-400">Mon {usDate(week[0])} – Sun {usDate(week[1])} · click to open</div>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
             {grades.map((g) => { const subs = weekSubjects?.[g.id] ?? []; const c = gradeColor(grades, g.id); return (
-              <div key={g.id} className={`rounded-lg border p-3 ${subs.length ? "border-gray-200 bg-silver/50" : "border-dashed border-gray-200"}`}>
-                <div className="flex items-center gap-2 text-sm font-bold text-navy"><span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />{g.name}</div>
-                <div className={`mt-1 text-sm ${subs.length ? "text-gray-700" : "text-gray-400"}`}>{weekSubjects == null ? "…" : subs.length ? subs.join(", ") : "no updates yet"}</div>
+              <div key={g.id} className={`rounded-lg border px-2.5 py-1.5 ${subs.length ? "border-gray-200 bg-silver/50" : "border-dashed border-gray-200"}`}>
+                <div className="flex items-center gap-2 text-xs font-bold text-navy"><span className={`h-2 w-2 rounded-full ${c.dot}`} />{g.name}</div>
+                <div className={`mt-0.5 text-xs ${subs.length ? "text-gray-700" : "text-gray-400"}`}>{weekSubjects == null ? "…" : subs.length ? subs.join(", ") : "no updates yet"}</div>
               </div>
             ); })}
             {!grades.length && <div className="text-sm text-gray-400">{weekSubjects == null ? "Loading…" : "No active grades."}</div>}
@@ -198,18 +198,18 @@ export default function Dashboard() {
         </Link>}
 
         {can("tasks") && <Link to="/admin/tasks"
-          className="col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-royal hover:shadow-md lg:col-span-4">
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-            <div className="min-w-[8rem]">
-              <div className="font-display text-5xl font-semibold text-navy">{openTasks ?? "—"}</div>
-              <div className="mt-1 text-sm text-gray-500">Open tasks</div>
+          className="col-span-full rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm transition hover:border-royal hover:shadow-md">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="min-w-[5.5rem]">
+              <div className="font-display text-3xl font-semibold leading-tight text-navy">{openTasks ?? "—"}</div>
+              <div className="text-xs text-gray-500">Open tasks</div>
             </div>
             <div className="flex flex-1 flex-wrap gap-2">
               {BUCKETS.map((b) => (
-                <div key={b.icon} className={`flex min-w-[6.5rem] flex-1 items-center gap-2 rounded-lg border px-3 py-2 ${b.className}`}>
-                  <span className="text-lg">{b.icon}</span>
+                <div key={b.icon} className={`flex min-w-[5.5rem] flex-1 items-center gap-2 rounded-lg border px-2.5 py-1 ${b.className}`}>
+                  <span className="text-sm">{b.icon}</span>
                   <div>
-                    <div className="font-display text-2xl font-semibold leading-none">{taskBuckets ? taskBuckets[b.icon] ?? 0 : "—"}</div>
+                    <div className="font-display text-lg font-semibold leading-none">{taskBuckets ? taskBuckets[b.icon] ?? 0 : "—"}</div>
                     <div className="text-[11px] font-medium" title={b.name}>{labels[b.icon]}</div>
                   </div>
                 </div>

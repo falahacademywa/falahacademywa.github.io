@@ -1,5 +1,6 @@
 // Teacher app shell (phase 26): phone-width column, top bar, bottom tabs.
 import { useEffect, useState } from "react";
+import NotifyPrompt from "../components/NotifyPrompt";
 import { useLiveNotifications } from "../lib/liveNotifications";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
@@ -46,6 +47,7 @@ export default function TeacherLayout() {
         )}
       </header>
       <main className="flex-1 px-3 pb-24 pt-3">
+        <NotifyPrompt className="mb-3" />
         {notes.map((n) => (
           <div key={n.id} className="mb-3 rounded-xl border border-gold/60 bg-gold/10 p-3 text-sm text-navy shadow-sm">
             <div className="font-semibold">{n.title}</div>

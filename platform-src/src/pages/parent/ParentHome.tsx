@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import NotifyPrompt, { PushStatusRow } from "../../components/NotifyPrompt";
+import ProfileCompleteness from "../../components/ProfileCompleteness";
+import { openLater } from "../../lib/openFile";
 import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
 import { usDate } from "../../lib/format";
-import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_SHORT, FORM_DOC_TYPE, MEDICAL_COLS, CONSENT_COLS } from "../../components/StudentForms";
+import { StudentFormDialog, formStatus, missingForms, FORM_TITLE, FORM_DOC_TYPE, MEDICAL_COLS, CONSENT_COLS } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 import MeetingCard from "../../components/MeetingCard";
 import ParentFeed, { type FeedItem } from "../../components/ParentFeed";
@@ -205,10 +208,11 @@ export default function ParentHome() {
 
   // Receipts (phase 27): PDFs live in the private `receipts` bucket; a short-lived link opens them
   async function openReceipt(path: string) {
+    const go = openLater();
     const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 600);
-    if (error || !data?.signedUrl) { alert("The receipt could not be opened right now. Please try again in a minute."); return; }
+    if (error || !data?.signedUrl) { go(null); alert("The receipt could not be opened right now. Please try again in a minute."); return; }
     track("open_receipt", path);
-    window.open(data.signedUrl, "_blank", "noopener");
+    go(data.signedUrl);
   }
   // Statement for this child's school year: a print-ready window (Save as PDF from the print dialog)
   function printStatement() {
@@ -360,14 +364,13 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
   // Open a submitted document (private bucket -> short-lived signed URL)
   async function viewDoc(d: DocRef) {
     track("view_document", d.document_type);
+    const go = openLater();
     if (d.storage_path) {
       const { data } = await supabase.storage.from("student-documents").createSignedUrl(d.storage_path, 3600);
-      if (data?.signedUrl) { window.open(data.signedUrl, "_blank"); return; }
+      if (data?.signedUrl) { go(data.signedUrl); return; }
       const dl = await supabase.storage.from("student-documents").download(d.storage_path);
-      if (dl.data) window.open(URL.createObjectURL(dl.data), "_blank");
-    } else if (d.file_url) {
-      window.open(d.file_url, "_blank");
-    }
+      go(dl.data ? URL.createObjectURL(dl.data) : null);
+    } else go(d.file_url);
   }
 
   // Unsaved edits on the current Family Information tab?
@@ -708,8 +711,10 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                   </span>
                 )}
               </button>
+              {/* tap anywhere outside the panel to close it (President 2026-11-22) */}
+              {bellOpen && <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} aria-hidden="true" />}
               {bellOpen && (
-                <div className="absolute right-0 z-20 mt-2 max-h-96 w-80 overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl">
+                <div className="absolute right-0 z-20 mt-2 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl">
                   {notifs.map((n) => (
                     <div key={n.id} className="border-b p-2.5 text-sm last:border-0">
                       <div className="flex items-center gap-1.5 font-semibold text-navy">
@@ -720,6 +725,7 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                     </div>
                   ))}
                   {!notifs.length && <p className="p-3 text-sm text-gray-400">No notifications.</p>}
+                  <PushStatusRow className="border-t px-2.5 pb-1 pt-2" />
                 </div>
               )}
             </div>
@@ -732,10 +738,11 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
 
       <main className="mx-auto max-w-5xl space-y-5 p-4 lg:p-6">
         {configMissing && <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Platform is not connected to a database yet.</div>}
+        <NotifyPrompt />
 
         {/* Child switcher */}
         {children.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div id="child-bar" className="flex flex-wrap items-center gap-2">
             {children.map((c) => (
               <button key={c.student_id} onClick={() => { setActive(c); if (c.student_id !== active?.student_id) track("view_child", c.students.first_name); }}
                 className={`flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-5 text-base font-semibold transition ${
@@ -790,26 +797,23 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
           </div>
         )}
 
-        {/* School forms reminder: shown until every child's three forms are completed */}
-        {formsTodo.length > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
-            <div className="text-sm font-semibold text-amber-800">📝 Please complete the school forms below — it takes about two minutes each.</div>
-            <div className="mt-2 space-y-1.5">
-              {formsTodo.map(({ child, missing }) => (
-                <div key={child.student_id} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="w-28 shrink-0 font-semibold text-navy">{child.students.first_name}:</span>
-                  {missing.map((k) => (
-                    <button key={k} onClick={() => { track("open_form", `${k}:${child.students.first_name}`); setFormOpen({ kind: k, child }); }}
-                      className="rounded-full border border-amber-400 bg-white px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                      {FORM_SHORT[k]} →
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className="mt-1.5 text-[11px] text-amber-700">Already handed in a paper form? It may not be entered yet — filling it in here takes precedence and the office is notified.</div>
-          </div>
-        )}
+        {/* Profile completeness (President 2026-11-22): the % plus a button for every missing item.
+            It includes the three school forms per child, so it replaces the old forms reminder. */}
+        <ProfileCompleteness userId={profile?.id} refresh={myOpen} formRows={formRows}
+          kids={children.map((c) => ({ id: c.students.id, first_name: c.students.first_name,
+            hasPhoto: !!(c.students.profile_photo_url || c.students.photo_pending_url) }))}
+          onFamily={(tab) => { setFamTab(tab); openMyInfo(); }}
+          onForm={(kind, kidId) => {
+            const child = children.find((c) => c.students.id === kidId);
+            if (!child) return;
+            track("open_form", `${kind}:${child.students.first_name}`);
+            setFormOpen({ kind, child });
+          }}
+          onPhoto={(kidId) => {
+            const child = children.find((c) => c.students.id === kidId);
+            if (child) setActive(child);
+            document.getElementById("child-bar")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }} />
 
         {/* How-to-pay dialog */}
         {payOpen && (

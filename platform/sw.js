@@ -26,3 +26,35 @@ self.addEventListener("fetch", (e) => {
     })));
   }
 });
+
+/* Phone notifications (phase 48). The server sends each portal notification here even when the
+   portal is closed; the text arrives encrypted for this one browser. iPhone requires that every
+   push is shown, so one always is. */
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Falah Academy", {
+    body: d.body || "",
+    icon: "./icons/icon-192.png",
+    badge: "./icons/icon-192.png",
+    tag: d.id ? "n" + d.id : undefined,
+    data: { path: d.url || "" },
+  }));
+});
+
+/* A tap opens the portal on the page the alert is about: the open window if there is one,
+   otherwise a new one. */
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const path = (e.notification.data && e.notification.data.path) || "";
+  const scope = self.registration.scope;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const c of list) {
+      if (c.url.indexOf(scope) === 0 && "focus" in c) {
+        c.postMessage({ type: "open", path: path });
+        return c.focus();
+      }
+    }
+    return self.clients.openWindow(scope + (path ? "#" + path : ""));
+  }));
+});

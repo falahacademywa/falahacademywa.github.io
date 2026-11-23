@@ -1,6 +1,7 @@
 // Teacher app — one student's limited profile: contacts (tap to call),
 // allergy/medical summary, photo-consent status. Nothing else leaves the server.
 import { useEffect, useState } from "react";
+import BackLink from "../../components/BackLink";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useRoster, consentBadge, telHref, type Contact } from "../../lib/teacher";
@@ -38,7 +39,7 @@ export default function StudentDetail() {
   );
   return (
     <div>
-      <Link to="/teacher" className="text-sm text-royal">‹ Attendance</Link>
+      <BackLink to="/teacher" label="Attendance" className="text-sm text-royal" arrow="‹" />
       <div className="mt-2 flex items-center gap-3">
         {r.profile_photo_url ? <SecureImg src={r.profile_photo_url} alt="" className="h-16 w-16 rounded-full object-cover" />
           : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy/10 text-lg font-bold text-navy">{r.first_name[0]}{r.last_name[0]}</div>}

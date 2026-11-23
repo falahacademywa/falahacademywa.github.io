@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { dropSubscription } from "./push";
 import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Navigate } from "react-router-dom";
@@ -111,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const shownProfile = current ? profile : null;
 
   const signOut = async () => {
+    await dropSubscription();   // this device stops getting this person's phone notifications
     await supabase.auth.signOut();
   };
   const refreshProfile = async () => {

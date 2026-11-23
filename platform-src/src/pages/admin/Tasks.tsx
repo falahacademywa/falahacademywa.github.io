@@ -1,23 +1,26 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { openLater } from "../../lib/openFile";
 import { useSearchParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
-import { type Task, urgency, PRIORITIES } from "../../lib/tasks";
+import { type Task, type TaskNote, type Repeat, urgency, PRIORITIES, REPEATS, STATUSES, repeatLabel } from "../../lib/tasks";
 import { useAuth } from "../../lib/auth";
 import { todayStr } from "../../lib/dates";
 import { usDate } from "../../lib/format";
 
 const ASSIGNEES = ["Muneeb (President)", "Muneeb (accountant)", "Muneeb (Principal)", "Claude", "Nuruddin (Treasurer)"];
 // Delegation (phase 31, President 2026-10-31): any admin or staff login can be given a task.
-// Staff see only the tasks assigned to them (enforced in the database); teachers are not
-// assignable for now. A reassigned hub task carries assign_pending until the hourly sync
-// writes the new name into TODO.md.
+// Staff see only the tasks assigned to them or created by them (enforced in the database);
+// teachers are not assignable for now.
 interface Person { id: string; full_name: string; title: string | null; role: string }
 const personLabel = (p: Person) => `${p.full_name.trim()} (${p.title?.trim() || (p.role === "admin" ? "Admin" : "Office Staff")})`;
 // Departments (President, 2026-10-14) — the same ten as TODO.md; every task belongs to exactly one.
 const CATEGORIES = ["Executive Office", "Academics", "Students & Families", "HR", "Finance", "Development", "Marketing", "Operations", "IT", "Legal & Compliance"];
 
-// The school's working to-do list (mirror of the hub's TODO.md, phase 15).
-// Read-only grid: sort on any column, filter box, "x out of y items" counter.
+// The school's working to-do list (phase 15), worked in the portal since phase 47 (President
+// 2026-11-22): every task has one permanent number from the moment it is created; admins edit
+// everything, staff move the status of their tasks and close them; every task carries comments
+// and a change history; a task can repeat (the next one appears when this one is closed).
+// The office records (TODO.md) stay in step through the hourly sync, in both directions.
 
 type SortKey = "urgency" | "code" | "category" | "task" | "assigned_to" | "due" | "status";
 
@@ -40,21 +43,39 @@ const statusStyles: Record<string, string> = {
   done: "bg-green-100 text-green-700",
 };
 
+const label = "text-[11px] font-semibold uppercase tracking-wide text-gray-400";
+const input = "mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800";
+const when = (ts: string) => new Date(ts).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+
 export default function Tasks() {
   const { can, session, profile } = useAuth();
   const isStaff = profile?.role === "staff";
+  const isAdmin = profile?.role === "admin";
+  const canEdit = can("tasks", "edit");
   const [sp] = useSearchParams();
   const [people, setPeople] = useState<Person[]>([]);
-  const [reWho, setReWho] = useState("");
-  const [reMsg, setReMsg] = useState<string | null>(null);
   const [rows, setRows] = useState<Task[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});   // comments per task
   const [filter, setFilter] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("urgency");
   const [asc, setAsc] = useState(true);
   const [loaded, setLoaded] = useState<string | null>(null);
-  const [openCode, setOpenCode] = useState<string | null>(() => sp.get("task"));   // row expanded for details (?task= from a notification)
-  // "+ New task" (phase 20): saved with source = 'portal' and a P-code, pulled into the office records within the hour
+  const [openCode, setOpenCode] = useState<string | null>(null);   // row expanded for details
+  const linkTarget = useRef<string | null>(null);                  // ?task= from a notification, until it has been shown
+  // The grid scrolls sideways on a phone; an open task's panel must not. It is kept as wide as the
+  // visible part of the grid and pinned to its left edge.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridW, setGridW] = useState<number | null>(null);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setGridW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const [linkMissing, setLinkMissing] = useState<string | null>(null);
+  // "+ New task": saved with its permanent number at once (phase 47)
   const [newOpen, setNewOpen] = useState(false);
   const [nText, setNText] = useState("");
   const [nCat, setNCat] = useState("Operations");
@@ -62,6 +83,7 @@ export default function Tasks() {
   const [nWhoOther, setNWhoOther] = useState("");
   const [nPrio, setNPrio] = useState("week");
   const [nDate, setNDate] = useState("");
+  const [nRepeat, setNRepeat] = useState<"" | Repeat>("");
   const [nNotes, setNNotes] = useState("");
   const [nFiles, setNFiles] = useState<File[]>([]);
   const [nBusy, setNBusy] = useState(false);
@@ -73,7 +95,12 @@ export default function Tasks() {
       const list = (data as Task[]) ?? [];
       setRows(list);
       const latest = list.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), "");
-      setLoaded(latest ? new Date(latest).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : null);
+      setLoaded(latest ? when(latest) : null);
+    });
+    supabase.from("task_notes").select("task_code").eq("kind", "comment").then(({ data }) => {
+      const c: Record<string, number> = {};
+      for (const n of (data as { task_code: string }[] | null) ?? []) c[n.task_code] = (c[n.task_code] ?? 0) + 1;
+      setCounts(c);
     });
   }
   useEffect(() => { load(); }, []);
@@ -81,7 +108,7 @@ export default function Tasks() {
     if (configMissing) return;
     supabase.rpc("task_assignees").then(({ data }) => setPeople((data as Person[]) ?? []));
   }, []);
-  // staff file new tasks for themselves by default (they only see their own)
+  // staff file new tasks for themselves by default
   useEffect(() => { if (isStaff && profile) setNWho(`u:${profile.id}`); }, [isStaff, profile?.id]);
   // "u:<id>" = a login, anything else = a plain name from ASSIGNEES / Other
   const resolveWho = (v: string, other = ""): { assigned_to: string; assigned_user: string | null } => {
@@ -97,18 +124,7 @@ export default function Tasks() {
       {people.length > 0 && <optgroup label="Portal logins (get a notification)">{people.map((p) => <option key={p.id} value={`u:${p.id}`}>{personLabel(p)}</option>)}</optgroup>}
     </>
   );
-  async function reassign(t: Task) {
-    setReMsg(null);
-    if (!reWho) return;
-    const w = resolveWho(reWho);
-    const { error } = await supabase.from("admin_tasks")
-      .update({ ...w, assign_pending: t.source !== "portal" })
-      .eq("code", t.code);
-    if (error) return setReMsg("Could not reassign: " + error.message);
-    setReMsg(`Assigned to ${w.assigned_to}${w.assigned_user ? " — they get a notification" : ""}.`);
-    setReWho("");
-    load();
-  }
+  const nameOf = (id?: string | null) => { const p = people.find((x) => x.id === id); return p ? p.full_name.trim() : null; };
 
   async function saveNew() {
     setNMsg(null);
@@ -125,11 +141,14 @@ export default function Tasks() {
       if (p.days == null) { status = "Parked"; }
       else { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + p.days); due_date = d.toISOString().slice(0, 10); due_text = due_date; }
     }
+    if (nRepeat && !due_date) return setNMsg("A repeating task needs a due date: pick a priority with a date, or an exact date.");
     for (const f of nFiles) if (f.size > 25 * 1024 * 1024) return setNMsg(`${f.name} is over 25 MB.`);
     setNBusy(true);
     try {
-      const { data: code, error: e1 } = await supabase.rpc("next_portal_task_code");
-      if (e1 || !code) throw new Error(e1?.message ?? "no code");
+      // the permanent number, from the one counter the office records use too
+      const { data: no, error: e1 } = await supabase.rpc("next_task_no");
+      if (e1 || !no) throw new Error(e1?.message ?? "no task number");
+      const code = String(no);
       const attachments: { name: string; path: string; size: number }[] = [];
       for (const f of nFiles) {
         const key = f.name.normalize("NFKD").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-|-$/g, "") || "file";
@@ -139,12 +158,14 @@ export default function Tasks() {
         attachments.push({ name: f.name, path, size: f.size });
       }
       const { error: e3 } = await supabase.from("admin_tasks").insert({
-        code, task_no: null, is_done: false, category, task: text, assigned_to: who, assigned_user,
-        due_text, due_date, status, done_on: null, source: "portal",
+        code, task_no: no, is_done: false, category, task: text, assigned_to: who, assigned_user,
+        due_text, due_date, status, done_on: null, source: nRepeat ? "recurring" : "portal", repeat_every: nRepeat || null,
         notes: nNotes.trim() || null, created_by: session?.user.id ?? null, attachments,
       });
       if (e3) throw new Error(e3.message);
-      setNewOpen(false); setNText(""); setNNotes(""); setNFiles([]); setNPrio("week"); setNDate(""); setNWho(isStaff && profile ? `u:${profile.id}` : ASSIGNEES[0]);
+      setNewOpen(false); setNText(""); setNNotes(""); setNFiles([]); setNPrio("week"); setNDate(""); setNRepeat("");
+      setNWho(isStaff && profile ? `u:${profile.id}` : ASSIGNEES[0]);
+      setOpenCode(code);
       load();
     } catch (err) {
       setNMsg(String((err as Error).message ?? err));
@@ -153,11 +174,12 @@ export default function Tasks() {
     }
   }
 
-  async function deletePortalTask(t: Task) {
-    if (!confirm(`Delete task ${t.code}? (Only tasks not yet pulled into the records can be deleted here.)`)) return;
+  async function deleteTask(t: Task) {
+    if (!confirm(`Delete task ${t.code}? This cannot be undone.`)) return;
     const paths = (t.attachments ?? []).map((d) => d.path);
     if (paths.length) await supabase.storage.from("task-docs").remove(paths);
-    await supabase.from("admin_tasks").delete().eq("code", t.code);
+    const { error } = await supabase.from("admin_tasks").delete().eq("code", t.code);
+    if (error) { alert("Could not delete: " + error.message); return; }
     setOpenCode(null); load();
   }
 
@@ -181,6 +203,24 @@ export default function Tasks() {
   }, [rows.length, categories, assignees, statuses, catF, whoF, statF]);
   const anyFilter = Boolean(filter || catF || whoF || statF);
   const clearAll = () => { setFilter(""); setCatF(""); setWhoF(""); setStatF(""); };
+
+  // ?task=<number> from a notification: open that task. The link may arrive while this page is
+  // already showing (a second notification), so it is read on every change, not only on first load.
+  const linked = sp.get("task");
+  useEffect(() => {
+    if (!linked) return;
+    linkTarget.current = linked;
+    setLinkMissing(null); setOpenCode(linked); clearAll();
+  }, [linked]);
+  useEffect(() => {
+    const code = linkTarget.current;
+    if (!code || !rows.length) return;
+    const r = rows.find((x) => x.code === code);
+    if (!r) { linkTarget.current = null; setLinkMissing(code); return; }
+    if (r.is_done && !showDone) { setShowDone(true); return; }   // runs again once the done rows are in the grid
+    linkTarget.current = null;
+    requestAnimationFrame(() => document.getElementById(`task-${code}`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  }, [rows, showDone, linked]);
 
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -207,13 +247,6 @@ export default function Tasks() {
     return [...hit].sort((a, b) => cmp(a, b) * dir);
   }, [pool, filter, catF, whoF, statF, sortKey, asc]);
 
-  // Attachments live in the private "task-docs" bucket; open through a 10-minute signed URL.
-  async function openDoc(path: string) {
-    const { data, error } = await supabase.storage.from("task-docs").createSignedUrl(path, 600);
-    if (error || !data?.signedUrl) { alert("Could not open the document: " + (error?.message ?? "no URL")); return; }
-    window.open(data.signedUrl, "_blank", "noopener");
-  }
-
   function sortBy(k: SortKey) {
     if (k === sortKey) setAsc(!asc);
     else { setSortKey(k); setAsc(true); }
@@ -234,20 +267,27 @@ export default function Tasks() {
         <div>
           <h1 className="font-display text-2xl font-semibold text-navy">Tasks</h1>
           <p className="text-xs text-gray-500">{isStaff
-            ? "The tasks assigned to you. New ones arrive with a notification."
-            : <>The school's working to-do list, maintained in the office records{loaded ? ` · last updated ${loaded}` : ""}. Tasks added here (P-numbers) are pulled into the records within the hour and get their real number. Give a task to a staff login and only they (and admins) see it.</>}</p>
+            ? "The tasks given to you and the ones you added. Open a task to change its status, close it or leave a comment."
+            : <>The school's working to-do list{loaded ? ` · last updated ${loaded}` : ""}. Open a task to edit it, close it or comment. Changes made here reach the office records within the hour. Give a task to a staff login and only they (and admins) see it.</>}</p>
         </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
             Show done
           </label>
-          {can("tasks", "edit") && (
+          {canEdit && (
             <button onClick={() => { setNewOpen(true); setNMsg(null); }}
               className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-royal">+ New task</button>
           )}
         </div>
       </div>
+
+      {linkMissing && (
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <span>Task {linkMissing} is not in your list any more. It may have been deleted, given to someone else, or (for an older alert with a P-number) renumbered: look for it by its text below.</span>
+          <button onClick={() => setLinkMissing(null)} className="font-semibold">✕</button>
+        </div>
+      )}
 
       {newOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={() => !nBusy && setNewOpen(false)}>
@@ -257,24 +297,24 @@ export default function Tasks() {
               <button onClick={() => setNewOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
             </div>
             <div className="space-y-3 text-sm">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">What needs doing
+              <label className={`block ${label}`}>What needs doing
                 <textarea autoFocus rows={3} value={nText} onChange={(e) => setNText(e.target.value)} placeholder="e.g. Pay the ESD late fee · Reply to the parent about pickup · File the letter that came today"
-                  className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />
+                  className={input} />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Department
-                  <select value={nCat} onChange={(e) => setNCat(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
+                <label className={`block ${label}`}>Department
+                  <select value={nCat} onChange={(e) => setNCat(e.target.value)} className={input}>
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </label>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">For
-                  <select value={nWho} onChange={(e) => setNWho(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800">
+                <label className={`block ${label}`}>For
+                  <select value={nWho} onChange={(e) => setNWho(e.target.value)} className={input}>
                     {whoOptions}<option value="Other">Other</option>
                   </select>
-                  {nWho === "Other" && <input value={nWhoOther} onChange={(e) => setNWhoOther(e.target.value)} placeholder="Name (role)" className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
+                  {nWho === "Other" && <input value={nWhoOther} onChange={(e) => setNWhoOther(e.target.value)} placeholder="Name (role)" className={input} />}
                 </label>
               </div>
-              <div className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Priority
+              <div className={`block ${label}`}>Priority
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {PRIORITIES.map((p) => (
                     <button key={p.key} type="button" onClick={() => setNPrio(p.key)}
@@ -283,13 +323,20 @@ export default function Tasks() {
                   <button type="button" onClick={() => setNPrio("date")}
                     className={`rounded-full border px-3 py-1 text-xs font-semibold normal-case tracking-normal ${nPrio === "date" ? "border-navy bg-navy text-white" : "border-gray-300 bg-white text-gray-600"}`}>📅 Exact date</button>
                 </div>
-                {nPrio === "date" && <input type="date" value={nDate} onChange={(e) => setNDate(e.target.value)} min={todayStr()} className="mt-2 rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />}
+                {nPrio === "date" && <input type="date" value={nDate} onChange={(e) => setNDate(e.target.value)} min={todayStr()} className="mt-2 rounded-lg border border-gray-300 p-2 text-sm font-normal text-gray-800" />}
               </div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Notes (optional)
-                <textarea rows={2} value={nNotes} onChange={(e) => setNNotes(e.target.value)} placeholder="Where the paper is, who to call, anything Claude should know"
-                  className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal normal-case tracking-normal text-gray-800" />
+              <label className={`block ${label}`}>Repeat
+                <select value={nRepeat} onChange={(e) => setNRepeat(e.target.value as "" | Repeat)} className={input}>
+                  <option value="">Does not repeat</option>
+                  {REPEATS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                </select>
+                {nRepeat && <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-gray-500">🔁 The next one is created when this one is closed{nRepeat === "daily" ? " (school days only: Monday–Thursday, holidays skipped)" : ""}. Repeating tasks stay in the portal.</span>}
               </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Photo or file (optional)
+              <label className={`block ${label}`}>Notes (optional)
+                <textarea rows={2} value={nNotes} onChange={(e) => setNNotes(e.target.value)} placeholder="Where the paper is, who to call, anything Claude should know"
+                  className={input} />
+              </label>
+              <label className={`block ${label}`}>Photo or file (optional)
                 <input type="file" multiple accept="image/*,application/pdf" onChange={(e) => setNFiles(Array.from(e.target.files ?? []))}
                   className="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:rounded-full file:border-0 file:bg-silver file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-navy" />
                 {nFiles.length > 0 && <div className="mt-1 text-[11px] font-normal normal-case tracking-normal text-gray-500">{nFiles.map((f) => `${f.name} (${(f.size / 1024).toFixed(0)} KB)`).join(" · ")}</div>}
@@ -299,7 +346,7 @@ export default function Tasks() {
                 <button onClick={saveNew} disabled={nBusy} className="rounded-full bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-royal disabled:opacity-40">{nBusy ? "Saving…" : "Add task"}</button>
                 <button onClick={() => setNewOpen(false)} disabled={nBusy} className="rounded-full border border-gray-300 px-5 py-2 text-sm font-semibold text-gray-600 hover:bg-silver">Cancel</button>
               </div>
-              <p className="text-[11px] font-normal normal-case tracking-normal text-gray-400">Files land in the office's OneDrive Inbox within the hour and are filed from there; the portal copy is removed once filed.</p>
+              {!nRepeat && <p className="text-[11px] font-normal normal-case tracking-normal text-gray-400">The task gets its permanent number at once. Files land in the office's OneDrive Inbox within the hour and are filed from there.</p>}
             </div>
           </div>
         </div>
@@ -317,11 +364,11 @@ export default function Tasks() {
 
       {configMissing && <p className="text-sm text-gray-500">Connect the database to see the task list.</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div ref={gridRef} className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 bg-silver/60">
             <tr>
-              <Th k="code" className="w-12">#</Th>
+              <Th k="code" className="w-14">#</Th>
               <Th k="urgency" className="w-10">⏰</Th>
               <Th k="category" className="w-40">Department</Th>
               <Th k="task">Task</Th>
@@ -361,14 +408,18 @@ export default function Tasks() {
               const isOpen = openCode === r.code;
               return (
                 <Fragment key={r.code}>
-                  <tr onClick={() => { setOpenCode(isOpen ? null : r.code); setReWho(""); setReMsg(null); }} title="Click for details"
-                    className={`cursor-pointer border-t border-gray-100 align-top hover:bg-silver/40 ${r.is_done ? "text-gray-400" : "text-gray-700"} ${isOpen ? "bg-silver/40" : ""}`}>
-                    <td className="px-3 py-2 font-semibold text-navy">{r.code}</td>
+                  <tr id={`task-${r.code}`} onClick={() => setOpenCode(isOpen ? null : r.code)} title="Click for details"
+                    className={`cursor-pointer scroll-mt-16 border-t border-gray-100 align-top hover:bg-silver/40 ${r.is_done ? "text-gray-400" : "text-gray-700"} ${isOpen ? "bg-silver/40" : ""}`}>
+                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-navy">{r.code}</td>
                     <td className="px-3 py-2" title={u.label}>{u.icon}</td>
                     <td className="px-3 py-2 text-xs">{r.category}</td>
                     <td className="px-3 py-2 leading-snug">
                       <div className={isOpen ? "" : "line-clamp-3"}>{renderTask(r.task)}</div>
-                      {!isOpen && r.task.length > 160 && <div className="mt-0.5 text-[11px] text-royal">click for full text</div>}
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px]">
+                        {!isOpen && r.task.length > 160 && <span className="text-royal">click for full text</span>}
+                        {r.repeat_every && <span className="text-gray-500" title="The next one is created when this one is closed">🔁 {repeatLabel(r.repeat_every)}</span>}
+                        {counts[r.code] ? <span className="text-gray-500">💬 {counts[r.code]}</span> : null}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-xs">{r.assigned_to}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-xs">{r.is_done ? r.done_on : (r.due_date ? usDate(r.due_date) : r.due_text)}</td>
@@ -378,48 +429,12 @@ export default function Tasks() {
                   </tr>
                   {isOpen && (
                     <tr className="border-t border-gray-100 bg-silver/20">
-                      <td colSpan={7} className="px-6 py-4">
-                        <div className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Urgency</div><div>{u.icon} {u.label}</div></div>
-                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Assigned to</div><div>{r.assigned_to || "—"}{r.assign_pending && <span className="ml-1 text-[10px] text-amber-700" title="Reassigned here; the office records update within the hour">(updating records…)</span>}</div></div>
-                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.is_done ? "Done on" : "Due"}</div><div>{r.is_done ? r.done_on ?? "—" : r.due_text || "—"}</div></div>
-                          <div><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.source === "portal" ? "Added here" : "Last synced"}</div><div>{new Date(r.source === "portal" && r.created_at ? r.created_at : r.updated_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</div></div>
+                      <td colSpan={7} className="p-0">
+                        <div className="sticky left-0 px-3 py-4 sm:px-6" style={gridW ? { width: gridW } : undefined}>
+                        <TaskDetail task={r} u={u} isAdmin={isAdmin} canEdit={canEdit} myId={profile?.id ?? null}
+                          addedBy={nameOf(r.created_by)} whoOptions={whoOptions} resolveWho={resolveWho}
+                          onChanged={load} onDelete={() => deleteTask(r)} />
                         </div>
-                        {profile?.role === "admin" && !r.is_done && (
-                          <div className="mt-3 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Reassign</span>
-                            <select value={reWho} onChange={(e) => setReWho(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
-                              <option value="">Choose a person…</option>
-                              {whoOptions}
-                            </select>
-                            <button onClick={() => reassign(r)} disabled={!reWho} className="rounded-full bg-navy px-3 py-1 text-xs font-semibold text-white hover:bg-royal disabled:opacity-40">Assign</button>
-                            {reMsg && <span className="text-xs text-gray-600">{reMsg}</span>}
-                          </div>
-                        )}
-                        {r.source === "portal" && (
-                          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            📱 Added from the portal. It keeps the code {r.code} until the office pull copies it into the records (hourly) and gives it a real number.
-                            {can("tasks", "edit") && <button onClick={(e) => { e.stopPropagation(); deletePortalTask(r); }} className="ml-3 font-semibold text-red-600 hover:underline">Delete</button>}
-                          </div>
-                        )}
-                        <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Full task</div>
-                        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{renderTask(r.task)}</p>
-                        {r.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-gray-600"><span className="font-semibold">Notes:</span> {r.notes}</p>}
-                        {(r.attachments?.length ?? 0) > 0 && (
-                          <div className="mt-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Documents</div>
-                            <ul className="mt-1 flex flex-wrap gap-2">
-                              {r.attachments!.map((d) => (
-                                <li key={d.path}>
-                                  <button onClick={(e) => { e.stopPropagation(); openDoc(d.path); }}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:border-royal hover:text-royal">
-                                    📎 {d.name}{d.size ? <span className="font-normal text-gray-400">· {(d.size / 1024).toFixed(0)} KB</span> : null}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   )}
@@ -428,13 +443,204 @@ export default function Tasks() {
             })}
             {!visible.length && !configMissing && (
               <tr><td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-400">
-                {rows.length ? "No tasks match the filter." : "No tasks loaded yet — run the sync SQL to fill the list."}
+                {rows.length ? "No tasks match the filter." : isStaff ? "No tasks for you right now." : "No tasks loaded yet."}
               </td></tr>
             )}
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-[11px] text-gray-400">🔴 due within 7 days or overdue · 🟠 within 3 weeks · 🟡 within 6 weeks · 🟢 later · 🔵 waiting on someone else · ⚪ parked · ✅ done</p>
+      <p className="mt-2 text-[11px] text-gray-400">🔴 due within 7 days or overdue · 🟠 within 3 weeks · 🟡 within 6 weeks · 🟢 later · 🔵 waiting on someone else · ⚪ parked · ✅ done · 🔁 repeats · 💬 comments</p>
+    </div>
+  );
+}
+
+// ---------------- one open task: status, edit, reassign, comments, history ----------------
+function TaskDetail({ task: r, u, isAdmin, canEdit, myId, addedBy, whoOptions, resolveWho, onChanged, onDelete }: {
+  task: Task; u: { icon: string; label: string }; isAdmin: boolean; canEdit: boolean; myId: string | null; addedBy: string | null;
+  whoOptions: React.ReactNode; resolveWho: (v: string, other?: string) => { assigned_to: string; assigned_user: string | null };
+  onChanged: () => void; onDelete: () => void;
+}) {
+  const [notes, setNotes] = useState<TaskNote[]>([]);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [eText, setEText] = useState(r.task);
+  const [eCat, setECat] = useState(r.category);
+  const [eDue, setEDue] = useState(r.due_date ?? "");
+  const [eRepeat, setERepeat] = useState<string>(r.repeat_every ?? "");
+  const [eNotes, setENotes] = useState(r.notes ?? "");
+  const [reWho, setReWho] = useState("");
+
+  const fromTeacher = r.source === "teacher";
+  const mine = isAdmin || (r.created_by != null && r.created_by === myId);   // may change more than the status
+  const legacyDone = /^D/.test(r.code);        // closed under the old D-numbering: read-only (comments still work)
+  const mayStatus = canEdit && !fromTeacher && !legacyDone;
+  const mayEdit = canEdit && mine && !fromTeacher;
+  const mayDelete = canEdit && (r.source === "portal" || r.source === "recurring") && mine;
+
+  function loadNotes() {
+    supabase.from("task_notes").select("*").eq("task_code", r.code).order("created_at").then(({ data }) => setNotes((data as TaskNote[]) ?? []));
+  }
+  useEffect(() => { loadNotes(); }, [r.code]);
+
+  async function edit(patch: Record<string, unknown>, done?: () => void) {
+    setBusy(true); setMsg(null);
+    const { error } = await supabase.rpc("task_edit", { p_code: r.code, p: patch });
+    setBusy(false);
+    if (error) return setMsg(error.message);
+    done?.(); loadNotes(); onChanged();
+  }
+  async function addComment() {
+    const body = comment.trim();
+    if (!body) return;
+    setBusy(true); setMsg(null);
+    const { error } = await supabase.rpc("task_comment", { p_code: r.code, p_body: body });
+    setBusy(false);
+    if (error) return setMsg(error.message);
+    setComment(""); loadNotes(); onChanged();
+  }
+  function startEdit() {
+    setEText(r.task); setECat(r.category); setEDue(r.due_date ?? ""); setERepeat(r.repeat_every ?? ""); setENotes(r.notes ?? "");
+    setEditing(true); setMsg(null);
+  }
+  function saveEdit() {
+    const patch: Record<string, unknown> = { task: eText, category: eCat, due_date: eDue || null, notes: eNotes };
+    if (r.source !== "TODO.md") patch.repeat_every = eRepeat || null;
+    if (eRepeat && !eDue) return setMsg("A repeating task needs a due date.");
+    edit(patch, () => setEditing(false));
+  }
+  // Attachments live in the private "task-docs" bucket; open through a 10-minute signed URL.
+  async function openDoc(path: string) {
+    const go = openLater();
+    const { data, error } = await supabase.storage.from("task-docs").createSignedUrl(path, 600);
+    if (error || !data?.signedUrl) { go(null); alert("Could not open the document: " + (error?.message ?? "no URL")); return; }
+    go(data.signedUrl);
+  }
+
+  const pending = r.edit_pending || r.assign_pending;
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className="font-display text-lg font-semibold text-navy">Task {r.code}</div>
+        {r.repeat_every && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">🔁 Repeats {repeatLabel(r.repeat_every)}</span>}
+        {pending && <span className="text-[11px] text-amber-700" title="Changed here; the office records update within the hour">updating the office records…</span>}
+      </div>
+      <div className="mt-2 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div><div className={label}>Urgency</div><div>{u.icon} {u.label}</div></div>
+        <div><div className={label}>Assigned to</div><div>{r.assigned_to || "—"}</div></div>
+        <div><div className={label}>{r.is_done ? "Done on" : "Due"}</div><div>{r.is_done ? (r.done_on ? usDate(r.done_on) : "—") : (r.due_date ? usDate(r.due_date) : r.due_text || "—")}</div></div>
+        <div><div className={label}>Added</div><div>{r.created_at ? when(r.created_at) : "—"}{addedBy ? ` · ${addedBy}` : r.source === "TODO.md" ? " · office records" : ""}</div></div>
+      </div>
+
+      {/* status + actions */}
+      {mayStatus && !editing && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={label}>Status</span>
+          <select value={STATUSES.includes(r.status) ? r.status : ""} disabled={busy} onChange={(e) => e.target.value && edit({ status: e.target.value })}
+            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
+            {!STATUSES.includes(r.status) && <option value="">{r.status || "—"}</option>}
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {!r.is_done && <button onClick={() => edit({ status: "Done" })} disabled={busy}
+            className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">✓ Mark done</button>}
+          {mayEdit && !r.is_done && <button onClick={startEdit} disabled={busy}
+            className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-navy hover:border-royal">✎ Edit</button>}
+          {isAdmin && !r.is_done && (
+            <span className="flex flex-wrap items-center gap-2 sm:ml-3">
+              <span className={label}>Reassign</span>
+              <select value={reWho} onChange={(e) => setReWho(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">
+                <option value="">Choose a person…</option>
+                {whoOptions}
+              </select>
+              <button onClick={() => edit(resolveWho(reWho), () => setReWho(""))} disabled={!reWho || busy}
+                className="rounded-full bg-navy px-3 py-1 text-xs font-semibold text-white hover:bg-royal disabled:opacity-40">Assign</button>
+            </span>
+          )}
+          {mayDelete && <button onClick={onDelete} disabled={busy} className="ml-auto text-xs font-semibold text-red-600 hover:underline">Delete</button>}
+        </div>
+      )}
+      {fromTeacher && <p className="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">This came from a teacher request: its status is managed on the Teacher requests page. Comments can be left here.</p>}
+      {r.is_done && r.repeat_every && <p className="mt-2 text-xs text-gray-500">🔁 The next one was created when this was closed.</p>}
+
+      {editing ? (
+        <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+          <label className={`block ${label}`}>Task
+            <textarea rows={4} value={eText} onChange={(e) => setEText(e.target.value)} className={input} />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className={`block ${label}`}>Department
+              <select value={eCat} onChange={(e) => setECat(e.target.value)} className={input}>
+                {!CATEGORIES.includes(eCat) && <option value={eCat}>{eCat}</option>}
+                {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className={`block ${label}`}>Due date
+              <input type="date" value={eDue} onChange={(e) => setEDue(e.target.value)} className={input} />
+            </label>
+            {r.source !== "TODO.md" && (
+              <label className={`block ${label}`}>Repeat
+                <select value={eRepeat} onChange={(e) => setERepeat(e.target.value)} className={input}>
+                  <option value="">Does not repeat</option>
+                  {REPEATS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+          <label className={`block ${label}`}>Notes
+            <textarea rows={2} value={eNotes} onChange={(e) => setENotes(e.target.value)} className={input} />
+          </label>
+          <div className="flex gap-2">
+            <button onClick={saveEdit} disabled={busy} className="rounded-full bg-navy px-4 py-1.5 text-xs font-semibold text-white hover:bg-royal disabled:opacity-40">{busy ? "Saving…" : "Save"}</button>
+            <button onClick={() => { setEditing(false); setMsg(null); }} disabled={busy} className="rounded-full border border-gray-300 px-4 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className={`mt-3 ${label}`}>Full task</div>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{renderTask(r.task)}</p>
+          {r.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-gray-600"><span className="font-semibold">Notes:</span> {r.notes}</p>}
+        </>
+      )}
+      {msg && <p className="mt-2 text-xs text-red-600">{msg}</p>}
+
+      {(r.attachments?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <div className={label}>Documents</div>
+          <ul className="mt-1 flex flex-wrap gap-2">
+            {r.attachments!.map((d) => (
+              <li key={d.path}>
+                <button onClick={() => openDoc(d.path)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:border-royal hover:text-royal">
+                  📎 {d.name}{d.size ? <span className="font-normal text-gray-400">· {(d.size / 1024).toFixed(0)} KB</span> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* comments + change history: kept for good, nobody can edit or delete a line */}
+      <div className="mt-4 border-t border-gray-200 pt-3">
+        <div className={label}>Comments and history</div>
+        <ul className="mt-2 space-y-2">
+          {notes.map((n) => n.kind === "comment" ? (
+            <li key={n.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+              <div className="text-[11px] text-gray-500"><span className="font-semibold text-navy">💬 {n.author_name || "—"}</span> · {when(n.created_at)}</div>
+              <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800">{n.body}</p>
+            </li>
+          ) : (
+            <li key={n.id} className="px-1 text-[11px] text-gray-500">✎ {n.body} — {n.author_name || "—"}, {when(n.created_at)}</li>
+          ))}
+          {!notes.length && <li className="text-xs text-gray-400">No comments yet.</li>}
+        </ul>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Add a comment: what was done, what is blocking, a question…"
+            className="w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-800" />
+          <button onClick={addComment} disabled={busy || !comment.trim()}
+            className="shrink-0 rounded-full bg-navy px-4 py-2 text-xs font-semibold text-white hover:bg-royal disabled:opacity-40">Add comment</button>
+        </div>
+      </div>
     </div>
   );
 }

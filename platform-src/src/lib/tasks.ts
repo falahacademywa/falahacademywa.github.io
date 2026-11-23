@@ -18,7 +18,27 @@ export interface Task {
   created_at?: string;
   assigned_user?: string | null;   // phase 31: the admin/staff login the task is delegated to
   assign_pending?: boolean;        // phase 31: reassigned in the portal, TODO.md not updated yet
+  // phase 47: tasks are worked in the portal
+  created_by?: string | null;
+  edit_pending?: boolean;          // changed here; the hourly sync has not written it into the office records yet
+  edited_at?: string | null;
+  repeat_every?: Repeat | null;    // the next occurrence is created when this one is closed
+  repeat_of?: string | null;
 }
+
+export type Repeat = "daily" | "weekly" | "monthly" | "yearly";
+export const REPEATS: { key: Repeat; label: string }[] = [
+  { key: "daily", label: "Every school day" },
+  { key: "weekly", label: "Every week" },
+  { key: "monthly", label: "Every month" },
+  { key: "yearly", label: "Every year" },
+];
+export const repeatLabel = (r?: string | null) => REPEATS.find((x) => x.key === r)?.label.toLowerCase() ?? "";
+
+export const STATUSES = ["Not started", "In progress", "Ready", "Waiting", "On hold", "Parked", "Done"];
+
+// A comment or a change-history line on a task (task_notes, phase 47). Never edited or deleted.
+export interface TaskNote { id: number; task_code: string; author_id: string | null; author_name: string; kind: "comment" | "change"; body: string; created_at: string }
 
 // Priority picker on the phone form → due date (the tracker's urgency comes from the date)
 export const PRIORITIES: { key: string; label: string; days: number | null }[] = [

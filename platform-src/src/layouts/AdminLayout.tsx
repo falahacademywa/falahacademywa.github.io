@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import NotifyPrompt, { PushStatusRow } from "../components/NotifyPrompt";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   type LucideIcon, LayoutDashboard, FileText, GraduationCap, School, ClipboardCheck, Wallet, Notebook, BookOpen,
@@ -311,6 +312,7 @@ export default function AdminLayout() {
               </div>
             ))}
             {!notifs.length && <p className="p-3 text-sm text-gray-400">No notifications.</p>}
+            <PushStatusRow className="border-t px-2.5 pb-1 pt-2" />
           </div>
         </>
       )}
@@ -394,6 +396,7 @@ export default function AdminLayout() {
           </div>
         ) : (
           <>
+            <NotifyPrompt className="mb-4" />
             {viewOnly && (
               <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-800">
                 👁 View only — you can read this section but not change it.

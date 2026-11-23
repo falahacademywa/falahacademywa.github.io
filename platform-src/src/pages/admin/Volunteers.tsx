@@ -3,6 +3,7 @@
 // and the signed agreement, then approves or declines (background checks — WATCH,
 // registry — are deferred to hub TODO #139; add them back to CHECKS then). Every admin is alerted when a new one lands.
 import { useEffect, useMemo, useState } from "react";
+import { openLater } from "../../lib/openFile";
 import { supabase, configMissing } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { usDate, usPhone } from "../../lib/format";
@@ -22,9 +23,10 @@ interface Row {
 
 // private bucket: a short-lived signed link, opened in a new tab
 async function openResume(path: string, onErr: (m: string) => void) {
+  const go = openLater();
   const { data, error } = await supabase.storage.from("volunteer-docs").createSignedUrl(path, 600);
-  if (error || !data?.signedUrl) return onErr("Could not open the résumé: " + (error?.message ?? "no link"));
-  window.open(data.signedUrl, "_blank", "noopener");
+  if (error || !data?.signedUrl) { go(null); return onErr("Could not open the résumé: " + (error?.message ?? "no link")); }
+  go(data.signedUrl);
 }
 interface Grade { id: number; name: string }
 

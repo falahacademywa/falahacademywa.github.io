@@ -1,4 +1,5 @@
-import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, RequireRole, RequireAuth } from "./lib/auth";
@@ -50,6 +51,22 @@ function PageGuard({ children }: { children: ReactNode }) {
   return <ErrorBoundary resetKey={loc.pathname}>{children}</ErrorBoundary>;
 }
 
+// A phone notification was tapped while the portal is open: the service worker passes on the page
+// it is about (phase 48). When the portal is closed the worker opens that page itself.
+function PushNavigator() {
+  const nav = useNavigate();
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { type?: string; path?: string } | null;
+      if (d?.type === "open" && d.path && d.path.startsWith("/")) nav(d.path);
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, [nav]);
+  return null;
+}
+
 // HashRouter so deep links work on GitHub Pages without server rewrites.
 export default function App() {
   return (
@@ -57,6 +74,7 @@ export default function App() {
       <HashRouter>
         <PageGuard>
         <PageTracker />
+        <PushNavigator />
         <Routes>
           <Route path="/login" element={<Login />} />
           {/* parent-teacher meeting booking (phase 33): public, one link per class */}

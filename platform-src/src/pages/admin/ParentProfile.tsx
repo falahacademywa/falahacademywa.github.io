@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import BackLink from "../../components/BackLink";
 import { Link, useParams } from "react-router-dom";
 import { supabase, configMissing } from "../../lib/supabase";
 import { usPhone } from "../../lib/format";
@@ -107,7 +108,7 @@ export default function ParentProfile() {
 
   return (
     <div className="max-w-4xl">
-      <Link to="/admin/parents" className="text-xs text-gray-500 hover:text-navy">← Parents</Link>
+      <BackLink to="/admin/parents" label="Parents" className="text-xs text-gray-500 hover:text-navy" />
 
       <div className="mt-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">

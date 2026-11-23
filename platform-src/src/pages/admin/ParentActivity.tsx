@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import BackLink from "../../components/BackLink";
 import { supabase, configMissing } from "../../lib/supabase";
 
 interface Summary { user_id: string; full_name: string; events_count: number; days_active: number; last_event_at: string | null }
@@ -50,7 +50,7 @@ export default function ParentActivity() {
 
   return (
     <div className="max-w-3xl">
-      <Link to="/admin/parents" className="text-sm text-royal hover:underline">← Parents</Link>
+      <BackLink to="/admin/parents" label="Parents" />
       <h1 className="mb-1 mt-2 font-display text-2xl font-semibold text-navy">Parent Portal Activity</h1>
       <p className="mb-5 text-sm text-gray-500">
         What each family does in the portal. Click a parent to see their detailed history. Activity is
