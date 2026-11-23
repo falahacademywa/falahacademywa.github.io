@@ -61,6 +61,12 @@ export default function ParentHome() {
   const [fee, setFee] = useState<FeePlan | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  // Fees: paid and waived past months are folded away until asked for (President 2026-11-22)
+  const [pastOpen, setPastOpen] = useState(false);
+  // Receipt notifications open their PDF (President 2026-11-22: "I am not able to click on it").
+  // The receipts named in the bell are looked up when it opens, so the tap itself can open the
+  // file at once (iPhone only allows a new tab during the tap).
+  const [receiptOf, setReceiptOf] = useState<Record<string, { path: string | null; studentId: string | null }>>({});
   const [calOpen, setCalOpen] = useState(false);
   const [asgs, setAsgs] = useState<Asg[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
@@ -214,6 +220,41 @@ export default function ParentHome() {
     track("open_receipt", path);
     go(data.signedUrl);
   }
+  const receiptNo = (title: string) => title.match(/R-\d{4}-\d+/)?.[0] ?? null;
+  useEffect(() => {
+    if (!bellOpen || configMissing) return;
+    const nos = [...new Set(notifs.map((n) => receiptNo(n.title)).filter((x): x is string => !!x))];
+    if (!nos.length) return;
+    supabase.from("payments").select("receipt_no, receipt_path, fee_plans ( enrollments ( student_id ) )").in("receipt_no", nos)
+      .then(({ data }) => {
+        const m: Record<string, { path: string | null; studentId: string | null }> = {};
+        for (const r of (data as unknown as { receipt_no: string; receipt_path: string | null; fee_plans: { enrollments: { student_id: string } | null } | null }[]) ?? [])
+          m[r.receipt_no] = { path: r.receipt_path, studentId: r.fee_plans?.enrollments?.student_id ?? null };
+        setReceiptOf(m);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bellOpen]);
+  // A tap on a notification: a receipt opens its PDF and the page goes to that child's Fees;
+  // anything else goes to the Feed, where announcements, class updates and notices are listed.
+  function openNotif(n: Notif) {
+    setBellOpen(false);
+    const rno = receiptNo(n.title);
+    if (rno) {
+      const r = receiptOf[rno];
+      const child = r?.studentId ? children.find((c) => c.student_id === r.studentId) : undefined;
+      if (child && child.student_id !== active?.student_id) setActive(child);
+      setPastOpen(true);                      // the receipt may be for an earlier month
+      if (r?.path) openReceipt(r.path);
+      track("open_notification", "receipt");
+      window.setTimeout(() => document.getElementById("fees")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+      return;
+    }
+    track("open_notification", n.title.slice(0, 40));
+    const target = isFeeNotif(n) ? "fees" : "feed";    // "Payment received" and other fee notices go to Fees
+    window.setTimeout(() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+  function isFeeNotif(n: Notif) { return /payment|tuition|fees?/i.test(n.title); }
+
   // Statement for this child's school year: a print-ready window (Save as PDF from the print dialog)
   function printStatement() {
     if (!fee || !active) return;
@@ -714,15 +755,20 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
               {/* tap anywhere outside the panel to close it (President 2026-11-22) */}
               {bellOpen && <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} aria-hidden="true" />}
               {bellOpen && (
-                <div className="absolute right-0 z-20 mt-2 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl">
+                // on a phone the panel spans the screen under the header (anchored to the bell it ran off the left edge)
+                <div className="fixed inset-x-3 top-16 z-20 max-h-[70vh] overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-96 sm:w-80">
                   {notifs.map((n) => (
-                    <div key={n.id} className="border-b p-2.5 text-sm last:border-0">
+                    <button key={n.id} type="button" onClick={() => openNotif(n)}
+                      className="block w-full rounded-lg border-b p-2.5 text-left text-sm last:border-0 hover:bg-silver/60">
                       <div className="flex items-center gap-1.5 font-semibold text-navy">
                         {n.priority === "action" ? "🔴" : n.priority === "important" ? "🟡" : "🔵"} {n.title}
                       </div>
                       <p className="mt-0.5 text-xs text-gray-500">{n.message}</p>
-                      <p className="mt-0.5 text-[10px] text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
-                    </div>
+                      <p className="mt-0.5 flex items-center justify-between text-[10px] text-gray-400">
+                        <span>{new Date(n.created_at).toLocaleString()}</span>
+                        <span className="font-semibold text-royal">{receiptNo(n.title) ? (receiptOf[receiptNo(n.title)!]?.path ? "Open receipt ⬇" : "See fees →") : isFeeNotif(n) ? "See fees →" : "Open →"}</span>
+                      </p>
+                    </button>
                   ))}
                   {!notifs.length && <p className="p-3 text-sm text-gray-400">No notifications.</p>}
                   <PushStatusRow className="border-t px-2.5 pb-1 pt-2" />
@@ -1307,7 +1353,7 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
         </section>
 
         {/* Fees: above the feed, so the family sees what is due before the news (President 2026-11-22) */}
-        <div className="grid gap-5">
+        <div className="grid scroll-mt-4 gap-5" id="fees">
           <section className="rounded-xl bg-white p-5 shadow-sm">
             <h2 className="mb-4 font-display text-lg font-semibold text-navy">Fees</h2>
             {fee ? (
@@ -1356,7 +1402,10 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                         d.setMonth(d.getMonth() + 1);
                       }
                       if (!months.length) return <p className="text-xs text-gray-400">First month begins {fee.start_date ? new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "soon"}.</p>;
-                      return months.reverse().map((m) => (
+                      const list = months.reverse();
+                      const shown = list.filter((m) => m.key === curKey || !m.payment);   // this month + anything still due
+                      const folded = list.filter((m) => m.key !== curKey && !!m.payment); // paid or waived earlier months
+                      const row = (m: (typeof list)[number]) => (
                         <div key={m.key} className="flex items-center justify-between border-b py-1.5 last:border-0">
                           <span className="text-gray-600">{m.label}</span>
                           {m.payment?.payment_method === "waived" ? (
@@ -1378,7 +1427,19 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                             <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Fees Due</span>
                           )}
                         </div>
-                      ));
+                      );
+                      return (
+                        <>
+                          {shown.map(row)}
+                          {folded.length > 0 && (
+                            <button type="button" onClick={() => setPastOpen(!pastOpen)}
+                              className="flex w-full items-center gap-1 pt-1.5 text-left text-xs font-semibold text-royal hover:underline">
+                              {pastOpen ? "▾ Hide earlier months" : `▸ Earlier months (${folded.length})`}
+                            </button>
+                          )}
+                          {pastOpen && folded.map(row)}
+                        </>
+                      );
                     })()}
                   </div>
                 </>
@@ -1388,8 +1449,10 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
         </div>
 
         {/* Feed (phase 46): announcements, class updates and notices — newest first, with search */}
+        <div id="feed" className="scroll-mt-4">
         <ParentFeed items={feedItems} title={`Feed${active ? ` — ${active.students.first_name}` : ""}`}
           empty={configMissing ? "" : "No announcements or class updates yet."} />
+        </div>
 
         {/* Assignments */}
         {asgs.length > 0 && (
