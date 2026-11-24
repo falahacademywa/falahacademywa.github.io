@@ -247,7 +247,9 @@ export function StudentFormDialog({ kind, studentId, studentName, isAdmin, signe
 
   async function markReviewed() {
     const table = kind === "consent" ? "media_consent" : "medical_info";
-    await supabase.from(table).update({ reviewed_at: new Date().toISOString() }).eq("student_id", studentId);
+    // phase 50: reviewed by the server clock, so a review always clears the flag
+    const { error } = await supabase.rpc("form_mark_reviewed", { p_student: studentId, p_form: kind === "consent" ? "consent" : "medical" });
+    if (error) await supabase.from(table).update({ reviewed_at: new Date().toISOString() }).eq("student_id", studentId);
     await load(); onSaved?.();
   }
 

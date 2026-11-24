@@ -10,6 +10,7 @@ import { useAuth } from "../../lib/auth";
 import { StudentFormDialog, consentBadge, formStatus, allergySummary, medicalSummary, MEDICAL_COLS, CONSENT_COLS, FORM_TITLE, FORM_DOC_TYPE } from "../../components/StudentForms";
 import type { FormKind, MedicalRow, ConsentRow } from "../../components/StudentForms";
 import SecureImg from "../../components/SecureImg";
+import FormChanges from "../../components/FormChanges";
 
 interface AttRow { date: string; status: "present" | "late" | "absent" }
 interface FeeInfo { total_amount: number; billing_frequency: string; start_date: string | null; payments: { payment_date: string; period_month: string | null; amount: number; payment_method: string }[] }
@@ -406,6 +407,12 @@ export default function StudentProfile() {
             </Link>
           ))}
         </div>
+      )}
+
+      {/* what a parent changed in the forms since the last review (phase 50) */}
+      {can("health") && (
+        <FormChanges studentId={s.id} firstName={s.first_name} med={med} consent={consent} canEdit={can("health", "edit")}
+          onOpen={(k) => setFormOpen(k)} onReviewed={load} />
       )}
 
       {s.photo_pending_url && (

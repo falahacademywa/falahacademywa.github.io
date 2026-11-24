@@ -168,7 +168,17 @@ export default function AdminLayout() {
 
   const unread = notifs.filter((n) => !n.is_read).length;
 
-  async function openBell() {
+  // On a computer the panel opens right beside the bell (President 2026-11-23: it opened at the far
+  // right of the screen while the bell is in the left menu); on a phone it stays under the top bar.
+  const [bellAt, setBellAt] = useState<{ left: number; top: number; arrow: number } | null>(null);
+  async function openBell(e?: React.MouseEvent<HTMLButtonElement>) {
+    if (e && window.matchMedia("(min-width: 1024px)").matches) {
+      const r = e.currentTarget.getBoundingClientRect();
+      const edge = e.currentTarget.closest("aside")?.getBoundingClientRect().right ?? r.right;
+      const left = Math.min(edge + 12, window.innerWidth - 352 - 12);
+      const top = Math.max(12, r.top - 10);
+      setBellAt({ left, top, arrow: r.top + r.height / 2 - top });
+    } else setBellAt(null);
     setBellOpen(!bellOpen);
     if (bellOpen) return;
     const ids = notifs.filter((n) => !n.is_read).map((n) => n.id);
@@ -303,7 +313,9 @@ export default function AdminLayout() {
       {bellOpen && (
         <>
           <div className="fixed inset-0 z-[65]" onClick={() => setBellOpen(false)} />
-          <div className="fixed left-1/2 top-16 z-[70] max-h-[70vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl lg:left-auto lg:right-6 lg:top-6 lg:translate-x-0">
+          {/* a small pointer from the panel to the bell (computer only) */}
+          {bellAt && <span aria-hidden="true" className="fixed z-[71] h-3.5 w-3.5 rotate-45 bg-white" style={{ left: bellAt.left - 7, top: bellAt.top + bellAt.arrow - 7 }} />}
+          <div style={bellAt ? { left: bellAt.left, top: bellAt.top, transform: "none" } : undefined} className="fixed left-1/2 top-16 z-[70] max-h-[70vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl bg-white p-2 text-gray-800 shadow-2xl lg:translate-x-0">
             <div className="flex items-center justify-between px-2 py-1.5">
               <span className="text-sm font-bold text-navy">Notifications</span>
               <button onClick={() => setBellOpen(false)} className="text-gray-400 hover:text-navy">✕</button>

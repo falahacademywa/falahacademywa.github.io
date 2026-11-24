@@ -4,6 +4,8 @@ import { supabase, configMissing } from "../../lib/supabase";
 import SecureImg from "../../components/SecureImg";
 import DocumentsGrid from "../../components/DocumentsGrid";
 import { downloadCsv } from "../../lib/reports";
+import { useAuth } from "../../lib/auth";
+import { needsReview } from "../../components/FormChanges";
 
 interface StudentRow {
   id: string;
@@ -12,6 +14,7 @@ interface StudentRow {
   last_name: string;
   archived: boolean;
   profile_photo_url: string | null;
+  photo_pending_url: string | null;
   enrollments: { school_year: string; grade_name: string; status: string }[];
 }
 
@@ -19,6 +22,10 @@ type SortKey = "student_no" | "name" | "grade" | "status";
 
 export default function Students() {
   const nav = useNavigate();
+  const { can } = useAuth();
+  // What parents changed and the office has not reviewed yet (President 2026-11-23): highlighted rows
+  const [review, setReview] = useState<Record<string, string[]>>({});
+  const [reviewOnly, setReviewOnly] = useState(false);
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -33,11 +40,26 @@ export default function Students() {
   useEffect(() => {
     if (configMissing) return;
     supabase.from("students")
-      .select("id, student_no, first_name, last_name, date_of_birth, archived, profile_photo_url, enrollments ( school_year, grade_name, status )")
+      .select("id, student_no, first_name, last_name, date_of_birth, archived, profile_photo_url, photo_pending_url, enrollments ( school_year, grade_name, status )")
       .then(({ data }) => {
-        setRows((data as unknown as StudentRow[]) ?? []);
+        const list = (data as unknown as StudentRow[]) ?? [];
+        setRows(list);
         setLoading(false);
+        const m: Record<string, string[]> = {};
+        const add = (id: string, what: string) => { (m[id] ??= []).push(what); };
+        list.forEach((r) => { if (r.photo_pending_url) add(r.id, "Photo to approve"); });
+        if (!can("health")) { setReview(m); return; }
+        Promise.all([
+          supabase.from("medical_info").select("student_id, updated_at, reviewed_at"),
+          supabase.from("media_consent").select("student_id, updated_at, reviewed_at"),
+        ]).then(([{ data: med }, { data: con }]) => {
+          type R = { student_id: string; updated_at: string | null; reviewed_at: string | null };
+          ((med as R[]) ?? []).filter(needsReview).forEach((r) => add(r.student_id, "Health form"));
+          ((con as R[]) ?? []).filter(needsReview).forEach((r) => add(r.student_id, "Photo consent"));
+          setReview({ ...m });
+        });
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const current = (r: StudentRow) =>
@@ -59,6 +81,7 @@ export default function Students() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     const list = rows.filter((r) => {
+      if (reviewOnly && !review[r.id]) return false;
       if (!showArchived && r.archived) return false;
       if (gradeFilter && current(r)?.grade_name !== gradeFilter) return false;
       return !q || `${r.first_name} ${r.last_name}`.toLowerCase().includes(q) || String(r.student_no).includes(q);
@@ -72,7 +95,8 @@ export default function Students() {
         default: return (`${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)) * dir;
       }
     });
-  }, [rows, search, showArchived, gradeFilter, sortKey, sortAsc]);
+  }, [rows, search, showArchived, gradeFilter, sortKey, sortAsc, reviewOnly, review]);
+  const toReview = rows.filter((r) => review[r.id]).length;
 
   function sortBy(k: SortKey) {
     if (sortKey === k) setSortAsc(!sortAsc);
@@ -128,6 +152,16 @@ export default function Students() {
       ) : loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : (
+        <>
+        {toReview > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+            <span><b>{toReview} student{toReview === 1 ? "" : "s"}</b> {toReview === 1 ? "has" : "have"} changes from parents to review (highlighted). Open one to see exactly what changed.</span>
+            <button onClick={() => setReviewOnly(!reviewOnly)}
+              className="ml-auto rounded-full border border-amber-400 bg-white px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+              {reviewOnly ? "Show all students" : "Show only these"}
+            </button>
+          </div>
+        )}
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>
@@ -144,7 +178,7 @@ export default function Students() {
                 const e = current(r);
                 return (
                   <tr key={r.id} onClick={() => nav(`/admin/students/${r.id}`)}
-                    className="cursor-pointer border-b last:border-0 hover:bg-silver/60">
+                    className={`cursor-pointer border-b last:border-0 ${review[r.id] ? "bg-amber-50 shadow-[inset_4px_0_0_#f59e0b] hover:bg-amber-100" : "hover:bg-silver/60"}`}>
                     <td className="px-4 py-2.5 font-mono">{String(r.student_no).padStart(5, "0")}</td>
                     <td className="px-4 py-2.5">
                       <span className="flex items-center gap-2">
@@ -156,6 +190,11 @@ export default function Students() {
                           </span>
                         )}
                         <span className="font-semibold text-navy">{r.first_name} {r.last_name}</span>
+                        {review[r.id] && (
+                          <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-900" title="Changed by a parent: open the student to see what changed">
+                            ⚠ Review: {review[r.id].join(" · ")}
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">{e?.school_year ?? "—"}</td>
@@ -176,6 +215,7 @@ export default function Students() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
