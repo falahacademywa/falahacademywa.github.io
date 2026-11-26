@@ -27,6 +27,7 @@ import Tasks from "./pages/admin/Tasks";
 import TeacherRequests from "./pages/admin/TeacherRequests";
 import SocialPosts from "./pages/admin/SocialPosts";
 import Volunteers from "./pages/admin/Volunteers";
+import Donors from "./pages/admin/Donors";
 import Attendance from "./pages/admin/Attendance";
 import MeetingsAdmin from "./pages/admin/Meetings";
 import ReportAttendance from "./pages/admin/ReportAttendance";
@@ -89,6 +90,8 @@ export default function App() {
             <Route path="students/:id" element={<StudentProfile />} />
             <Route path="admissions" element={<Admissions />} />
             <Route path="volunteers" element={<Volunteers />} />
+            <Route path="donors" element={<Donors />} />
+            <Route path="donors/:id" element={<Donors />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="parents" element={<Parents />} />
             <Route path="parents/:id" element={<ParentProfile />} />

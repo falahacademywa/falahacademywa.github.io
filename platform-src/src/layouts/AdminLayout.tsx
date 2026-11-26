@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import {
   type LucideIcon, LayoutDashboard, FileText, GraduationCap, School, ClipboardCheck, Wallet, Notebook, BookOpen,
   Users, UserRound, Presentation, Briefcase, IdCard, ClipboardList, HandHeart, Rocket, Images, Inbox, Megaphone,
-  Share2, CalendarDays, MessageSquare, BarChart3, Banknote, Activity, ListChecks, Settings, ChevronDown, ChevronRight,
+  Share2, CalendarDays, MessageSquare, BarChart3, Banknote, Activity, ListChecks, Settings, ChevronDown, ChevronRight, HandCoins,
   PanelLeftClose, PanelLeftOpen, ChevronsLeft, Menu, LogOut, ArrowLeftRight,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -51,6 +51,7 @@ const nav: Entry[] = [
   ] },
   { to: "/admin/calendar", label: "Calendar", module: "calendar", icon: CalendarDays },
   { to: "/admin/feedback", label: "Feedback", module: "feedback", icon: MessageSquare },
+  { to: "/admin/donors", label: "Donors", module: "donors", icon: HandCoins },   // full admins only (phase 51)
   { group: "reports", label: "Reports", icon: BarChart3, items: [
     { to: "/admin/reports/attendance", label: "Attendance", module: "report_attendance", icon: ClipboardCheck },
     { to: "/admin/reports/fees", label: "Fees", module: "report_fees", icon: Banknote },

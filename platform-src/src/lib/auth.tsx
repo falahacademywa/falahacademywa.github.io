@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Navigate } from "react-router-dom";
 import { supabase, configMissing } from "./supabase";
+import { ADMIN_ONLY } from "./permissions";
 
 export type Role = "admin" | "parent" | "staff" | "teacher";
 export type Level = "view" | "edit";
@@ -122,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const can = (module: string, level: Level = "view") => {
     if (shownProfile?.role === "admin") return true;
     if (shownProfile?.role !== "staff") return false;
+    if (ADMIN_ONLY.has(module)) return false;   // e.g. Donors: full admins only, whatever is granted
     const l = perms[module];
     return level === "view" ? l === "view" || l === "edit" : l === "edit";
   };

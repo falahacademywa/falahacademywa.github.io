@@ -6,7 +6,7 @@
 // covered by a module or by ALWAYS_OPEN below.
 export type Level = "view" | "edit";
 
-export interface Module { key: string; label: string; paths: string[]; note?: string }
+export interface Module { key: string; label: string; paths: string[]; note?: string; adminOnly?: boolean }
 
 export const MODULES: Module[] = [
   { key: "students",      label: "Students",                  paths: ["/admin/students", "/admin/attendance"], note: "profiles, guardians, documents, attendance calendar" },
@@ -26,11 +26,15 @@ export const MODULES: Module[] = [
   { key: "report_attendance", label: "Reports: Attendance",   paths: ["/admin/reports/attendance"], note: "drill-down by grade, student, status and dates (President 2026-11-10: President only until granted)" },
   { key: "report_fees",   label: "Reports: Fees",             paths: ["/admin/reports/fees"], note: "drill-down by grade, student, payment status and dates (President only until granted)" },
   { key: "report_activity", label: "Reports: Activity Log",   paths: ["/admin/reports/activity"], note: "what parents, teachers and staff did in the portal (President only until granted)" },
+  { key: "donors",        label: "Donors",                    paths: ["/admin/donors"], adminOnly: true, note: "donors, pledges and donations — full admins only (President 2026-11-26): never offered to staff, and the database refuses staff even with a grant (phase 51)" },
   { key: "tasks",         label: "Tasks",                     paths: ["/admin/tasks"] },
   { key: "teacher_requests", label: "Teacher requests",       paths: ["/admin/teacher-requests"], note: "requests from the teacher app; edit = every decision: discuss, approve, decline, progress, resolve, reopen, due dates (phase 46)" },
   { key: "settings",      label: "Settings",                  paths: ["/admin/settings"],   note: "years, grades, document types — staff permissions stay with full admins" },
 ];
 
+
+// Modules that only full admins may ever use: hidden from Staff & Permissions, refused to staff by can().
+export const ADMIN_ONLY = new Set(MODULES.filter((m) => m.adminOnly).map((m) => m.key));
 
 // Admin routes every admin/staff login may open (no module): the dashboard and profile pages
 // that follow the module of the list they belong to are handled by their path prefix.

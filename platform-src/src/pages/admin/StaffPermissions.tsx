@@ -60,7 +60,7 @@ export default function StaffPermissions() {
 
   async function save(uid: string) {
     setBusy(uid); setMsg(null);
-    const rows = Object.entries(grid[uid] ?? {}).filter(([, l]) => l !== "none")
+    const rows = Object.entries(grid[uid] ?? {}).filter(([m, l]) => l !== "none" && !MODULES.find((x) => x.key === m)?.adminOnly)
       .map(([module, level]) => ({ user_id: uid, module, level, granted_by: session?.user.id ?? null }));
     const del = await supabase.from("staff_permissions").delete().eq("user_id", uid);
     const ins = rows.length ? await supabase.from("staff_permissions").insert(rows) : { error: null };
@@ -103,7 +103,7 @@ export default function StaffPermissions() {
             </label>
           </div>
           <div className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {MODULES.map((m) => (
+            {MODULES.filter((m) => !m.adminOnly).map((m) => (   /* full-admin-only modules (Donors) are never offered */
               <div key={m.key} className="flex items-center justify-between gap-3 border-b py-1 text-sm last:border-0">
                 <span title={m.note}><span className="font-medium text-gray-800">{m.label}</span>{m.note && <span className="ml-1 text-[10px] text-gray-400">ⓘ</span>}</span>
                 <select value={grid[s.id]?.[m.key] ?? "none"} onChange={(e) => setLevel(s.id, m.key, e.target.value as Level | "none")}

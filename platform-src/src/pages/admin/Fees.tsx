@@ -3,6 +3,8 @@ import { supabase, configMissing } from "../../lib/supabase";
 import { todayStr, monthStr } from "../../lib/dates";
 import { useAuth } from "../../lib/auth";
 import LateFeeReminders from "../../components/LateFeeReminders";
+import ZelleDonation, { type ZelleForDonation } from "../../components/ZelleDonation";
+import { useNavigate } from "react-router-dom";
 
 interface PlanRow {
   id: string;
@@ -40,6 +42,11 @@ interface EnrollmentOpt {
 
 export default function Fees() {
   const { profile, can } = useAuth();
+  const nav = useNavigate();
+  // phase 52: a Zelle that is a gift is recorded under a donor (full admins only)
+  const [zDonate, setZDonate] = useState<ZelleForDonation | null>(null);
+  const [zDone, setZDone] = useState<{ donorId: string | null; payer: string } | null>(null);
+  const isFullAdmin = profile?.role === "admin";
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [unplanned, setUnplanned] = useState<EnrollmentOpt[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -159,7 +166,7 @@ export default function Fees() {
     setMsg(null); load();
   }
   async function ignoreZelle(z: ZelleRow) {
-    if (!confirm(`Ignore the $${Number(z.amount).toFixed(2)} from ${z.payer}? (Use for non-tuition money such as donations.)`)) return;
+    if (!confirm(`Ignore the $${Number(z.amount).toFixed(2)} from ${z.payer}? (Use for money that is neither tuition nor a donation; a donation goes under "Donation…".)`)) return;
     await supabase.from("zelle_inbox").update({ status: "ignored", resolved_at: new Date().toISOString(), resolved_by: profile?.id }).eq("id", z.id);
     load();
   }
@@ -202,7 +209,7 @@ export default function Fees() {
       <p className="mb-6 text-sm text-gray-500">
         One plan per enrollment (BR-010). Each student's fee can differ. $0 plans never get reminders (BR-121).
         Zelle receipts are read from the school Gmail every hour and posted automatically when the sender and amount are certain;
-        the rest wait below. Every payment gets a numbered receipt: the family sees it in the portal at once and receives the PDF by e-mail within the hour.
+        fees are matched first, then a sender who is a known donor is recorded as a donation (Admin → Donors); the rest wait below. Every payment gets a numbered receipt: the family sees it in the portal at once and receives the PDF by e-mail within the hour.
         Tuition reminders are never sent automatically (phase 41): open Late-fee reminders below, tick the families and click Send. Every change to a payment is kept in the audit log and re-issues the receipt.
         A <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-semibold text-gray-700">Waived</span> month is not money: no receipt, not counted in totals, and the family sees "waived" instead of "due".
       </p>
@@ -246,7 +253,7 @@ export default function Fees() {
       {zPending.length > 0 && (
         <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <h2 className="text-sm font-bold text-amber-800">💸 Zelle received — needs a match ({zPending.length})</h2>
-          <p className="mb-3 text-xs text-amber-700">Tick the student(s) the money is for and post. The sender is remembered, so next month it posts by itself.</p>
+          <p className="mb-3 text-xs text-amber-700">Tick the student(s) the money is for and post{isFullAdmin ? <>, or press <b>Donation…</b> if it is a gift</> : null}. The sender is remembered, so next time it is matched by itself.</p>
           <div className="space-y-3">
             {zPending.map((z) => (
               <div key={z.id} className="rounded-lg border border-amber-200 bg-white p-3 text-sm">
@@ -275,12 +282,26 @@ export default function Fees() {
                     className="rounded-lg bg-emerald-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-deep disabled:opacity-50">
                     {zBusy === z.id ? "Posting…" : `Post $${Number(z.amount).toFixed(0)} to ${(zPick[z.id] ?? []).length || "…"} student${(zPick[z.id] ?? []).length === 1 ? "" : "s"}`}
                   </button>
-                  <button onClick={() => ignoreZelle(z)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">Not tuition — ignore</button>
+                  {isFullAdmin && (
+                    <button onClick={() => { setZDonate(z); setZDone(null); }} className="rounded-lg border-2 border-royal bg-white px-3 py-1.5 text-xs font-semibold text-royal hover:bg-royal hover:text-white">🎁 Donation…</button>
+                  )}
+                  <button onClick={() => ignoreZelle(z)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">Neither — ignore</button>
                 </div>
               </div>
             ))}
           </div>
         </section>
+      )}
+      {zDone && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-deep">
+          🎁 The Zelle from {zDone.payer} is recorded as a donation.
+          {zDone.donorId && <button onClick={() => nav(`/admin/donors/${zDone.donorId}`)} className="font-semibold underline">Open the donor →</button>}
+          <button onClick={() => setZDone(null)} className="ml-auto text-xs text-gray-500 hover:text-navy">✕</button>
+        </div>
+      )}
+      {zDonate && (
+        <ZelleDonation z={zDonate} onClose={() => setZDonate(null)}
+          onDone={(donorId) => { setZDone({ donorId, payer: zDonate.payer }); setZDonate(null); load(); }} />
       )}
       {zRecent.length > 0 && (
         <details className="mb-6 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
@@ -292,8 +313,14 @@ export default function Fees() {
                   <td className="py-1 text-gray-500">{new Date(z.received_at).toLocaleDateString()}</td>
                   <td className="py-1 font-semibold text-navy">{z.payer}</td>
                   <td className="py-1">${Number(z.amount).toFixed(2)}</td>
-                  <td className="py-1 text-gray-500">{z.status === "posted" ? "posted → " + (z.matched_student_ids ?? []).map(studentName).join(", ") : "ignored"}</td>
-                  <td className="py-1 text-gray-400">{z.match_note}</td>
+                  <td className="py-1 text-gray-500">{z.status === "posted" ? "posted → " + (z.matched_student_ids ?? []).map(studentName).join(", ") : z.status === "donation" ? "🎁 donation" : "ignored"}</td>
+                  <td className="py-1 text-gray-400">
+                    {z.match_note}
+                    {/* an ignored gift (e.g. before phase 52) can still be recorded as a donation */}
+                    {isFullAdmin && z.status === "ignored" && (
+                      <button onClick={() => { setZDonate(z); setZDone(null); }} className="ml-2 font-semibold text-royal hover:underline">🎁 Record as donation</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
