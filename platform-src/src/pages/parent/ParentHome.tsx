@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import NotifyPrompt, { PushStatusRow } from "../../components/NotifyPrompt";
 import ProfileCompleteness from "../../components/ProfileCompleteness";
 import { openLater } from "../../lib/openFile";
@@ -12,6 +13,8 @@ import MeetingCard from "../../components/MeetingCard";
 import ParentFeed, { type FeedItem } from "../../components/ParentFeed";
 import { useLiveNotifications, prependUnique } from "../../lib/liveNotifications";
 import SecureImg, { SecureLink } from "../../components/SecureImg";
+import ProgressCard from "../../components/ProgressCard";
+import { InstallHint } from "../../components/InstallApp";
 
 interface Child {
   student_id: string;
@@ -48,10 +51,24 @@ interface EcRow { id: string | null; student_id: string; name: string; phone: st
 interface GPerson { key: string; name: string; relationship: string; phone: string; email: string | null; rowIds: string[] }
 interface DocType { id: number; name: string; sort: number }
 interface DocRef { id: string; student_id: string; document_type: string; file_url: string | null; storage_path: string | null; uploaded_date: string }
+// Bottom tabs on a phone, a tab row on a computer (President 2026-11-26), like the teacher app.
+type Tab = "home" | "progress" | "fees" | "calendar" | "profile";
+const TABS: { key: Tab; label: string; icon: string }[] = [
+  { key: "home", label: "Home", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
+  { key: "progress", label: "Progress", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+  { key: "fees", label: "Fees", icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
+  { key: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
+  { key: "profile", label: "Profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+];
 interface Ann { id: string; title: string; content: string; category: string; status: string; is_pinned: boolean; requires_ack: boolean; publish_date: string | null; announcement_acks: { parent_id: string }[] }
 
 export default function ParentHome() {
   const { profile, session, signOut } = useAuth();
+  // The open tab comes from the address (/parent, /parent/fees, ...), so Back and a reload keep it.
+  const loc = useLocation();
+  const nav = useNavigate();
+  const seg = loc.pathname.split("/")[2] ?? "";
+  const tab: Tab = TABS.some((t) => t.key === seg) ? (seg as Tab) : "home";
   const [children, setChildren] = useState<Child[]>([]);
   const [active, setActive] = useState<Child | null>(null);
   const [month, setMonth] = useState(() => monthStr());
@@ -67,18 +84,17 @@ export default function ParentHome() {
   // The receipts named in the bell are looked up when it opens, so the tap itself can open the
   // file at once (iPhone only allows a new tab during the tap).
   const [receiptOf, setReceiptOf] = useState<Record<string, { path: string | null; studentId: string | null }>>({});
-  const [calOpen, setCalOpen] = useState(false);
+  const [calOpen, setCalOpen] = useState(true);   // the Progress tab shows the month at once
   const [asgs, setAsgs] = useState<Asg[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [feeSummary, setFeeSummary] = useState<{ due: number; anyStarted: boolean; futureStart: string | null; hasPaidPlans: boolean } | null>(null);
   const [payOpen, setPayOpen] = useState(false);
-  const [calModalOpen, setCalModalOpen] = useState(false);
+  const [calPast, setCalPast] = useState(false);   // Calendar tab: months already over are folded away
   const [allEvents, setAllEvents] = useState<Ev[] | null>(null);
   const [fbOpen, setFbOpen] = useState(false);
   const [fbCategory, setFbCategory] = useState("general");
   const [fbMessage, setFbMessage] = useState("");
   const [fbState, setFbState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [myOpen, setMyOpen] = useState(false);
   const [famTab, setFamTab] = useState<"students" | "parents" | "contacts" | "forms" | "documents">("students");
   // Digital forms (phase 18): per child, the medical_info + media_consent rows
   const [formRows, setFormRows] = useState<Record<string, { med: MedicalRow | null; con: ConsentRow | null }>>({});
@@ -128,17 +144,16 @@ export default function ParentHome() {
       .then(() => {});
   }
 
-  async function openFullCalendar() {
+  // Calendar tab: the whole school year, loaded the first time the tab opens
+  useEffect(() => {
+    if (tab !== "calendar" || allEvents !== null || configMissing) return;
     track("open_calendar");
-    setCalModalOpen(true);
-    if (allEvents === null && !configMissing) {
-      const { data } = await supabase
-        .from("calendar_events")
-        .select("id, title, event_type, start_date, end_date, location, rsvp_enabled")
-        .order("start_date");
-      setAllEvents((data as Ev[]) ?? []);
-    }
-  }
+    supabase.from("calendar_events")
+      .select("id, title, event_type, start_date, end_date, location, rsvp_enabled")
+      .order("start_date")
+      .then(({ data }) => setAllEvents((data as Ev[]) ?? []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, allEvents]);
 
   // Family-wide amount due: for every child's plan, each month since the plan
   // started (through the current month) with no recorded payment adds one
@@ -234,8 +249,8 @@ export default function ParentHome() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bellOpen]);
-  // A tap on a notification: a receipt opens its PDF and the page goes to that child's Fees;
-  // anything else goes to the Feed, where announcements, class updates and notices are listed.
+  // A tap on a notification: a receipt opens its PDF and the Fees tab for that child; other fee
+  // notices open Fees; anything else opens Home, where the Feed lists announcements and notices.
   function openNotif(n: Notif) {
     setBellOpen(false);
     const rno = receiptNo(n.title);
@@ -246,12 +261,13 @@ export default function ParentHome() {
       setPastOpen(true);                      // the receipt may be for an earlier month
       if (r?.path) openReceipt(r.path);
       track("open_notification", "receipt");
-      window.setTimeout(() => document.getElementById("fees")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+      goTab("fees");
       return;
     }
     track("open_notification", n.title.slice(0, 40));
-    const target = isFeeNotif(n) ? "fees" : "feed";    // "Payment received" and other fee notices go to Fees
-    window.setTimeout(() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    if (isFeeNotif(n)) { goTab("fees"); return; }   // "Payment received" and other fee notices
+    goTab("home");
+    window.setTimeout(() => document.getElementById("feed")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   }
   function isFeeNotif(n: Notif) { return /payment|tuition|fees?/i.test(n.title); }
 
@@ -349,7 +365,6 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
 
   async function openMyInfo() {
     track("open_family_info");
-    setMyOpen(true);
     setMyState("idle");
     if (!session || configMissing) return;
     // address ships ahead of the phase-10 column in some environments —
@@ -430,14 +445,6 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     setPrimaryDraft(primaryOrig);
     setNamesDraft(JSON.parse(JSON.stringify(namesOrig)));
   }
-  function closeFamily() {
-    setMyOpen(false); setFamEdit(false); setConfirmDiscard(null);
-    resetFamDrafts();
-  }
-  function requestCloseFamily() {
-    if (famDirty) setConfirmDiscard(() => closeFamily);
-    else closeFamily();
-  }
   function switchFamTab(t: "students" | "parents" | "contacts" | "forms" | "documents") {
     if (t === famTab) return;
     const go = () => {
@@ -452,6 +459,20 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     resetFamDrafts();
     setFamEdit(false); setMyState("idle");
   }
+
+  // Switch tab; leaving Profile with unsaved edits asks first.
+  function goTab(t: Tab) {
+    if (t === tab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const go = () => { nav(t === "home" ? "/parent" : `/parent/${t}`); window.scrollTo(0, 0); track("open_tab", t); };
+    if (tab === "profile" && famDirty) { setConfirmDiscard(() => () => { cancelFamEdit(); go(); }); return; }
+    if (tab === "profile" && famEdit) cancelFamEdit();
+    go();
+  }
+  // Profile tab: load the family information each time it opens
+  useEffect(() => {
+    if (tab === "profile" && children.length) openMyInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, children.length]);
 
   async function saveFamily() {
     if (!session || myState === "saving") return;
@@ -549,18 +570,17 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     setFbMessage("");
   }
 
-  // Escape closes whichever popup is on top; Family Information asks before
-  // dropping unsaved edits. Re-registered every render so closures stay fresh.
+  // Escape closes whichever popup is on top, then cancels a Profile edit (asking
+  // before dropping unsaved changes). Re-registered every render so closures stay fresh.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (formOpen) { setFormOpen(null); return; }
       if (confirmDiscard) { setConfirmDiscard(null); return; }
-      if (myOpen) { requestCloseFamily(); return; }
       if (fbOpen) { setFbOpen(false); return; }
       if (payOpen) { setPayOpen(false); return; }
-      if (calModalOpen) { setCalModalOpen(false); return; }
-      if (bellOpen) setBellOpen(false);
+      if (bellOpen) { setBellOpen(false); return; }
+      if (famEdit) { if (famDirty) setConfirmDiscard(() => cancelFamEdit); else cancelFamEdit(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -730,6 +750,10 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
     return opts.reverse();
   }, []);
 
+  // a dot on a tab: fees owed (red), a form still to fill in (amber)
+  const tabDot = (t: Tab) => t === "fees" ? (feeSummary && feeSummary.due > 0 ? "bg-red-500" : "")
+    : t === "profile" ? (formsTodo.length > 0 ? "bg-amber-400" : "") : "";
+
   return (
     <div className="min-h-screen bg-silver">
       <header className="bg-navy px-4 py-3 text-white">
@@ -775,70 +799,55 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                 </div>
               )}
             </div>
-            <button onClick={openMyInfo} className="hidden text-white/70 underline hover:text-white sm:inline">{profile?.full_name}</button>
-            <button onClick={openMyInfo} className="text-white/70 underline hover:text-white sm:hidden">My Info</button>
-            <button onClick={signOut} className="text-white/70 underline hover:text-white">Sign out</button>
+            {/* on a phone, the name and Sign out live in the Profile tab */}
+            <button onClick={() => goTab("profile")} className="hidden text-white/70 underline hover:text-white sm:inline">{profile?.full_name}</button>
+            <button onClick={signOut} className="hidden text-white/70 underline hover:text-white sm:inline">Sign out</button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl space-y-5 p-4 lg:p-6">
+      {/* computer: the same tabs as a row under the header */}
+      <nav className="sticky top-0 z-20 hidden border-b border-gray-200 bg-white shadow-sm sm:block" aria-label="Portal sections">
+        <div className="mx-auto flex max-w-5xl gap-1 px-4">
+          {TABS.map((t) => {
+            const on = tab === t.key;
+            return (
+              <button key={t.key} onClick={() => goTab(t.key)} aria-current={on ? "page" : undefined}
+                className={`relative flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition ${on ? "border-navy text-navy" : "border-transparent text-gray-500 hover:text-navy"}`}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={on ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={t.icon} /></svg>
+                {t.label}
+                {tabDot(t.key) && <span className={`h-2 w-2 rounded-full ${tabDot(t.key)}`} />}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      <main className="mx-auto max-w-5xl space-y-5 p-4 pb-28 sm:pb-6 lg:p-6">
         {configMissing && <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Platform is not connected to a database yet.</div>}
         <NotifyPrompt />
 
-        {/* Child switcher */}
-        {children.length > 0 && (
-          <div id="child-bar" className="flex flex-wrap items-center gap-2">
+        {/* Child switcher: every tab but Calendar follows the child picked here */}
+        {children.length > 0 && tab !== "calendar" && (
+          // one row; with several children it scrolls sideways instead of stacking
+          <div id="child-bar" className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
             {children.map((c) => (
               <button key={c.student_id} onClick={() => { setActive(c); if (c.student_id !== active?.student_id) track("view_child", c.students.first_name); }}
-                className={`flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-5 text-base font-semibold transition ${
+                className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full py-1 pl-1 pr-4 text-sm font-semibold transition ${
                   active?.student_id === c.student_id ? "bg-navy text-white shadow-md" : "border border-gray-300 bg-white text-gray-600 hover:bg-white/60"}`}>
                 {c.students.profile_photo_url ? (
                   <SecureImg src={c.students.profile_photo_url} alt=""
-                    className={`h-12 w-12 rounded-full object-cover ${active?.student_id === c.student_id ? "border-2 border-gold" : "border border-gray-200"}`} />
+                    className={`h-9 w-9 rounded-full object-cover ${active?.student_id === c.student_id ? "border-2 border-gold" : "border border-gray-200"}`} />
                 ) : (
-                  <span className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-full text-base font-bold ${
                     active?.student_id === c.student_id ? "bg-white/20 text-white" : "bg-navy/10 text-navy"}`}>
                     {c.students.first_name[0]}
                   </span>
                 )}
                 {c.students.first_name}
-                {c.students.enrollments[0] && <span className="text-sm opacity-70">· {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0].grade_name}</span>}
+                {c.students.enrollments[0] && <span className="text-xs opacity-70">· {c.students.enrollments.find((e) => e.status === "active")?.grade_name ?? c.students.enrollments[0].grade_name}</span>}
               </button>
             ))}
-            {active && (
-              active.students.photo_pending_url ? (
-                <span className="rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-800">⏳ Photo pending approval</span>
-              ) : (
-                <label className="cursor-pointer rounded-full border-2 border-royal bg-white px-4 py-2 text-sm font-semibold text-royal transition hover:bg-royal hover:text-white">
-                  📷 {active.students.profile_photo_url ? `Change ${active.students.first_name}'s photo` : `Add ${active.students.first_name}'s photo`}
-                  <input type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
-                </label>
-              )
-            )}
-            {/* profile completeness ring + Feedback (President 2026-11-22); the ring's panel opens under this group */}
-            <div className="relative ml-auto flex items-center gap-2">
-              <ProfileCompleteness userId={profile?.id} refresh={myOpen} formRows={formRows}
-                kids={children.map((c) => ({ id: c.students.id, first_name: c.students.first_name,
-                  hasPhoto: !!(c.students.profile_photo_url || c.students.photo_pending_url) }))}
-                onFamily={(tab) => { setFamTab(tab); openMyInfo(); }}
-                onForm={(kind, kidId) => {
-                  const child = children.find((c) => c.students.id === kidId);
-                  if (!child) return;
-                  track("open_form", `${kind}:${child.students.first_name}`);
-                  setFormOpen({ kind, child });
-                }}
-                onPhoto={(kidId) => {
-                  const child = children.find((c) => c.students.id === kidId);
-                  if (child) setActive(child);
-                  document.getElementById("child-bar")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                }} />
-              <button onClick={() => { track("open_feedback"); setFbOpen(true); setFbState("idle"); }}
-                className="rounded-full border-2 border-emerald-brand bg-white px-4 py-2 text-sm font-semibold text-emerald-deep transition hover:bg-emerald-brand hover:text-white">
-                💬 Feedback
-              </button>
-            </div>
           </div>
         )}
         {!configMissing && !children.length && (
@@ -847,63 +856,421 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
           </div>
         )}
 
-        {/* Family fees banner: shown ONLY when something is due */}
+        {/* HOME: fees due (only when something is owed), the parent-teacher meeting, the Feed */}
+        {tab === "home" && (
+          <>
         {feeSummary && feeSummary.due > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-3">
             <span className="text-sm font-semibold text-red-700">
               Fees due: <span className="font-display text-lg">${feeSummary.due.toFixed(0)}</span>
             </span>
             <span className="text-xs text-red-600">Due by the 5th of the month.</span>
-            <button onClick={() => { track("open_how_to_pay"); setPayOpen(true); }}
-              className="ml-auto rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700">
-              How to pay
-            </button>
-          </div>
-        )}
-
-        {/* How-to-pay dialog */}
-        {payOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPayOpen(false)}>
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-display text-lg font-semibold text-navy">How to pay</h3>
-                <button onClick={() => setPayOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
-              </div>
-              <div className="space-y-4 text-sm">
-                <div className="rounded-xl bg-silver p-4">
-                  <div className="mb-1 font-bold text-navy">Zelle (preferred)</div>
-                  <div className="text-gray-700">Recipient: {PAY_INFO.zelle.name}</div>
-                  <div className="text-gray-700">Send to: <span className="font-semibold">{PAY_INFO.zelle.contact}</span></div>
-                </div>
-                <div className="rounded-xl bg-silver p-4">
-                  <div className="mb-1 font-bold text-navy">Bank transfer</div>
-                  <div className="text-gray-700">Contact the school office for account-transfer details.</div>
-                </div>
-                <p className="text-xs text-gray-500">{PAY_INFO.note} Cash and check are also accepted at the school office. Your payment appears here once the office records it.</p>
-              </div>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => goTab("fees")}
+                className="rounded-full border border-red-300 bg-white px-4 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                See fees
+              </button>
+              <button onClick={() => { track("open_how_to_pay"); setPayOpen(true); }}
+                className="rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700">
+                How to pay
+              </button>
             </div>
           </div>
         )}
+        {/* Parent-teacher meeting: booked time, then the teachers' remarks (phase 33) */}
+        <MeetingCard studentId={active?.student_id} firstName={active?.students.first_name} />
+        {/* Feed (phase 46): announcements, class updates and notices — newest first, with search */}
+        <div id="feed" className="scroll-mt-4">
+        <ParentFeed items={feedItems} title={`Feed${active ? ` — ${active.students.first_name}` : ""}`}
+          empty={configMissing ? "" : "No announcements or class updates yet."} />
+        </div>
+          </>
+        )}
 
-        {/* Family Information dialog: side tabs, read-only until ✏️ Edit */}
-        {myOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={requestCloseFamily}>
-            <div className="flex max-h-[85vh] min-h-[26rem] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              {/* Side tabs */}
-              <div className="flex w-28 shrink-0 flex-col gap-1 border-r bg-silver/60 p-2 sm:w-44 sm:p-3">
-                <div className="hidden px-2 pb-3 pt-1 font-display text-sm font-semibold leading-tight text-navy sm:block">Family Information</div>
+        {/* PROGRESS: attendance, teachers' notes, assignments */}
+        {tab === "progress" && (
+          <>
+        {/* Attendance — one-line summary bar; calendar expands only on demand */}
+        <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h2 className="font-display text-lg font-semibold text-navy">
+              Attendance{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-sm font-semibold text-green-700">{counts.present} present</span>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-semibold text-amber-800">{counts.late} late</span>
+            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-sm font-semibold text-red-700">{counts.absent} absent</span>
+            <div className="ml-auto flex items-center gap-3">
+              <select value={month} onChange={(e) => setMonth(e.target.value)}
+                className="rounded border border-gray-300 px-2 py-1 text-sm">
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {new Date(m + "-15").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => setCalOpen(!calOpen)}
+                className="whitespace-nowrap text-sm font-semibold text-royal hover:underline">
+                {calOpen ? "▴ Hide calendar" : "▾ Calendar"}
+              </button>
+            </div>
+          </div>
+            {calOpen && (
+              <>
+                <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs">
+                  {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                    <div key={i} className="py-1 font-bold text-gray-400">{d}</div>
+                  ))}
+                  {monthGrid.map((c, i) => (
+                    <div key={i} className={`flex h-9 items-center justify-center rounded ${
+                      c.day == null ? "" :
+                      c.status === "present" ? "bg-green-100 font-semibold text-green-700" :
+                      c.status === "late" ? "bg-amber-100 font-semibold text-amber-800" :
+                      c.status === "absent" ? "bg-red-100 font-semibold text-red-700" :
+                      "bg-silver text-gray-400"}`}>
+                      {c.day ?? ""}
+                    </div>
+                  ))}
+                </div>
+                {activeEnrollment && (
+                  <p className="mt-3 text-xs text-gray-400">
+                    {activeEnrollment.grade_name} · {activeEnrollment.school_year}. Green = present, amber = late, red = absent.
+                  </p>
+                )}
+              </>
+            )}
+        </section>
+
+        {/* Teachers' notes (President 2026-11-26): Qur'an and the latest note per subject. No Red Comet pages for parents. */}
+        {active && (
+          <ProgressCard firstName={active.students.first_name} counts={counts} updates={updates} showAttendance={false}
+            monthLabel={new Date(month + "-15").toLocaleDateString("en-US", { month: "long" })}
+            onSeeFeed={() => { goTab("home"); window.setTimeout(() => document.getElementById("feed")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }} />
+        )}
+
+        {/* Assignments */}
+        {asgs.length > 0 && (
+          <section className="rounded-xl bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
+              Assignments{active ? ` — ${active.students.first_name}` : ""}
+            </h2>
+            <div className="space-y-2">
+              {asgs.map((a) => {
+                const overdue = a.due_date && a.due_date < todayStr();
+                return (
+                  <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy">{a.subject}</span>
+                    <span className="font-semibold text-gray-800">{a.title}</span>
+                    {a.due_date && (
+                      <span className={`text-xs font-semibold ${overdue ? "text-red-600" : "text-gray-500"}`}>
+                        due {a.due_date}
+                      </span>
+                    )}
+                    {a.instructions && <span className="text-xs text-gray-500">{a.instructions}</span>}
+                    {a.file_url && (
+                      <a href={a.file_url} target="_blank" rel="noreferrer"
+                        className="ml-auto text-xs font-semibold text-royal hover:underline">Open ↗</a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+          </>
+        )}
+
+        {/* FEES */}
+        {tab === "fees" && (
+          <>
+        {feeSummary && feeSummary.due > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-3">
+            <span className="text-sm font-semibold text-red-700">
+              Fees due: <span className="font-display text-lg">${feeSummary.due.toFixed(0)}</span>
+            </span>
+            <span className="text-xs text-red-600">Due by the 5th of the month.</span>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => { track("open_how_to_pay"); setPayOpen(true); }}
+                className="rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700">
+                How to pay
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Fees tab: this month, anything due, earlier months with their receipts */}
+        <div className="grid scroll-mt-4 gap-5" id="fees">
+          {/* compact (President 2026-11-22): title, amount, this month's status and Print on one line, like Attendance */}
+          <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
+            {fee ? (
+              Number(fee.total_amount) === 0 ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
+                  <span className="text-sm text-gray-500">No fees apply for this enrollment.</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
+                    <span className="text-sm font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}<span className="font-normal text-gray-500"> per {fee.billing_frequency.replace("ly", "")}</span></span>
+                    {fee.start_date && fee.start_date > todayStr() ? (
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                        Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr()) && p.payment_method !== "waived") ? (
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
+                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr())) ? (
+                      <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">Waived this month</span>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
+                    )}
+                    <span className="ml-auto flex gap-3">
+                      <button onClick={() => { track("open_how_to_pay"); setPayOpen(true); }} className="text-xs font-semibold text-royal hover:underline">How to pay</button>
+                      <button onClick={() => printStatement()} className="text-xs font-semibold text-royal hover:underline">Print statement</button>
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-sm">
+                    {(() => {
+                      const today = new Date();
+                      const curKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+                      const start = fee.start_date ? new Date(fee.start_date + "T12:00:00") : today;
+                      const months: { key: string; label: string; payment?: FeePayment }[] = [];
+                      const d = new Date(start.getFullYear(), start.getMonth(), 1);
+                      while (true) {
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                        if (key > curKey) break;
+                        months.push({
+                          key,
+                          label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+                          // a real payment wins over a waiver when both exist for the month
+                          payment: fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key) && p.payment_method !== "waived")
+                            ?? fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key)),
+                        });
+                        d.setMonth(d.getMonth() + 1);
+                      }
+                      if (!months.length) return <p className="text-xs text-gray-400">First month begins {fee.start_date ? new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "soon"}.</p>;
+                      const list = months.reverse();
+                      const shown = list.filter((m) => m.key === curKey || !m.payment);   // this month + anything still due
+                      const folded = list.filter((m) => m.key !== curKey && !!m.payment); // paid or waived earlier months
+                      const row = (m: (typeof list)[number]) => (
+                        <div key={m.key} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-gray-200 py-2 last:border-0">
+                          <span className="font-semibold text-gray-700">{m.label}</span>
+                          {m.payment?.payment_method === "waived" ? (
+                            <span className="ml-auto rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700" title="Waived by the school — nothing is due for this month">
+                              Waived <span className="font-normal text-gray-500">(nothing due)</span>
+                            </span>
+                          ) : m.payment ? (
+                            <span className="ml-auto rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                              Paid ✓ <span className="font-normal text-green-600">${Number(m.payment.amount).toFixed(0)} · {new Date(m.payment.payment_date.slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                            </span>
+                          ) : (
+                            <span className="ml-auto rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Fees Due</span>
+                          )}
+                          {m.payment && m.payment.payment_method !== "waived" && m.payment.receipt_no && (
+                            m.payment.receipt_path
+                              ? <button onClick={() => openReceipt(m.payment!.receipt_path!)} className="basis-full text-left text-xs font-semibold text-royal hover:underline">⬇ Download receipt {m.payment.receipt_no}</button>
+                              : <span className="basis-full text-xs text-gray-400">Receipt {m.payment.receipt_no} is being prepared</span>
+                          )}
+                        </div>
+                      );
+                      return (
+                        <>
+                          {shown.map(row)}
+                          {folded.length > 0 && (
+                            <button type="button" onClick={() => setPastOpen(!pastOpen)}
+                              className="flex w-full items-center gap-1 pt-1.5 text-left text-xs font-semibold text-royal hover:underline">
+                              {pastOpen ? "▾ Hide earlier months" : `▸ Earlier months (${folded.length})`}
+                            </button>
+                          )}
+                          {pastOpen && folded.map(row)}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </>
+              )
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
+                <span className="text-sm text-gray-400">No fee plan set for this enrollment yet.</span>
+              </div>
+            )}
+          </section>
+        </div>
+          </>
+        )}
+
+        {/* CALENDAR */}
+        {tab === "calendar" && (
+          <>
+        {/* Upcoming events */}
+        <section className="min-w-0 rounded-xl bg-white p-5 shadow-sm lg:col-span-5">
+          <h2 className="mb-4 font-display text-lg font-semibold text-navy">Coming up</h2>
+          <div className="space-y-3">
+            {events.map((e) => (
+              <div key={e.id} className="flex gap-3">
+                <div className="w-14 shrink-0 rounded-lg bg-silver py-1 text-center">
+                  <div className="text-[10px] font-bold uppercase text-gray-400">
+                    {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short" })}
+                  </div>
+                  <div className="font-display text-lg font-semibold text-navy">
+                    {new Date(e.start_date + "T12:00:00").getDate()}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-gray-800">{e.title}</div>
+                  <div className="text-xs text-gray-400">
+                    {e.end_date && e.end_date !== e.start_date && (
+                      <span className="mr-1.5 font-semibold text-navy">
+                        {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" – "}
+                        {new Date(e.end_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" ·"}
+                      </span>
+                    )}
+                    {e.event_type}{e.location ? ` · ${e.location}` : ""}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!events.length && !configMissing && <p className="text-sm text-gray-400">No upcoming events.</p>}
+          </div>
+        </section>
+
+            <section className="min-w-0 overflow-hidden rounded-xl bg-white shadow-sm">
+              <h2 className="px-5 pb-2 pt-5 font-display text-lg font-semibold text-navy">Academic Calendar 2026–2027</h2>
+              <div className="flex flex-wrap gap-2 border-y border-gray-200 bg-silver/50 px-5 py-3">
+                <a href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(ICS_URL.replace("https://", "webcal://"))}`}
+                  target="_blank" rel="noreferrer"
+                  className="rounded-full bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-royal">
+                  Add to Google Calendar
+                </a>
+                <a href={ICS_URL.replace("https://", "webcal://")}
+                  className="rounded-full border border-navy px-3 py-1.5 text-xs font-semibold text-navy hover:bg-navy hover:text-white">
+                  Apple / Outlook
+                </a>
+                <a href={ICS_URL} download
+                  className="rounded-full border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
+                  Download .ics
+                </a>
+              </div>
+              <div className="p-5">
+                {allEvents === null && <p className="text-sm text-gray-400">Loading…</p>}
+                {allEvents && (() => {
+                  const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+                    new Date(iso + "T12:00:00").toLocaleDateString("en-US", opts);
+                  const groups = new Map<string, Ev[]>();
+                  allEvents.forEach((e) => {
+                    const key = e.start_date.slice(0, 7);
+                    groups.set(key, [...(groups.get(key) ?? []), e]);
+                  });
+                  const chip: Record<string, string> = {
+                    academic: "bg-blue-100 text-blue-700", event: "bg-purple-100 text-purple-700",
+                    holiday: "bg-amber-100 text-amber-800", exam: "bg-red-100 text-red-700",
+                  };
+                  const today = todayStr();
+                  const all = [...groups.entries()];
+                  const past = all.filter(([, evs]) => evs.every((e) => (e.end_date ?? e.start_date) < today));
+                  const block = ([m, evs]: [string, Ev[]]) => (
+                    <div key={m} className="mb-4">
+                      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">
+                        {fmt(m + "-15", { month: "long", year: "numeric" })}
+                      </h3>
+                      {evs.map((e) => (
+                        <div key={e.id} className={`mb-1.5 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                          (e.end_date ?? e.start_date) < today ? "bg-silver/40 opacity-60" : "bg-silver/70"}`}>
+                          <span className="w-24 shrink-0 text-xs font-semibold text-navy">
+                            {fmt(e.start_date, { month: "short", day: "numeric" })}
+                            {e.end_date && e.end_date !== e.start_date && <> – {fmt(e.end_date, { month: "short", day: "numeric" })}</>}
+                          </span>
+                          <span className="min-w-0 font-semibold text-gray-800">{e.title}</span>
+                          <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip[e.event_type] ?? "bg-gray-100 text-gray-600"}`}>
+                            {e.event_type}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                  return (
+                    <>
+                      {past.length > 0 && (
+                        <button type="button" onClick={() => setCalPast(!calPast)}
+                          className="mb-3 text-xs font-semibold text-royal hover:underline">
+                          {calPast ? "▾ Hide months already over" : `▸ Months already over (${past.length})`}
+                        </button>
+                      )}
+                      {all.filter((g) => calPast || !past.includes(g)).map(block)}
+                    </>
+                  );
+                })()}
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* PROFILE: the child, the family information and forms, the parent's account */}
+        {tab === "profile" && (
+          <>
+            {active && (
+              // relative: the completeness panel opens under this card
+              <section id="profile-photo" className="relative scroll-mt-4 rounded-xl bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-4">
+                  {active.students.profile_photo_url ? (
+                    <SecureImg src={active.students.profile_photo_url} alt=""
+                      className="h-20 w-20 shrink-0 rounded-full border-2 border-gold object-cover" />
+                  ) : (
+                    <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-navy/10 font-display text-3xl font-semibold text-navy">
+                      {active.students.first_name[0]}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-display text-lg font-semibold leading-tight text-navy">{active.students.first_name} {active.students.last_name}</h2>
+                    {activeEnrollment && <div className="text-sm text-gray-500">{activeEnrollment.grade_name} · {activeEnrollment.school_year}</div>}
+                    {active.students.photo_pending_url ? (
+                      <span className="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">⏳ Photo pending approval</span>
+                    ) : (
+                      <label className="mt-2 inline-block cursor-pointer rounded-full border-2 border-royal bg-white px-3 py-1 text-xs font-semibold text-royal transition hover:bg-royal hover:text-white">
+                        📷 {active.students.profile_photo_url ? "Change photo" : "Add a photo"}
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
+                      </label>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-center gap-1">
+                    <ProfileCompleteness userId={profile?.id} refresh={myState} formRows={formRows}
+                      kids={children.map((c) => ({ id: c.students.id, first_name: c.students.first_name,
+                        hasPhoto: !!(c.students.profile_photo_url || c.students.photo_pending_url) }))}
+                      onFamily={(t) => { switchFamTab(t); document.getElementById("family")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                      onForm={(kind, kidId) => {
+                        const child = children.find((c) => c.students.id === kidId);
+                        if (!child) return;
+                        track("open_form", `${kind}:${child.students.first_name}`);
+                        setFormOpen({ kind, child });
+                      }}
+                      onPhoto={(kidId) => {
+                        const child = children.find((c) => c.students.id === kidId);
+                        if (child) setActive(child);
+                        document.getElementById("profile-photo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }} />
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Profile</span>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Family Information: tabs across the top, read-only until ✏️ Edit */}
+            <section id="family" className="scroll-mt-4 overflow-hidden rounded-xl bg-white shadow-sm">
+              {/* five equal buttons, so all fit on a phone: icon above the word there, side by side on a computer */}
+              <div className="grid grid-cols-5 gap-1 border-b border-gray-200 bg-silver/60 p-1.5">
                 {([["students", "🎓", "Students"], ["parents", "👤", "Parents"], ["contacts", "🚑", "Emergency"], ["forms", "📝", "Forms"], ["documents", "📄", "Documents"]] as const).map(([key, icon, label]) => (
                   <button key={key} onClick={() => switchFamTab(key)}
-                    className={`rounded-lg px-2 py-2 text-left text-xs font-semibold transition sm:px-3 sm:text-sm ${
+                    className={`relative flex min-w-0 flex-col items-center gap-0.5 rounded-lg px-0.5 py-1.5 text-[10px] font-semibold transition sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
                       famTab === key ? "bg-navy text-white shadow" : "text-gray-600 hover:bg-white"}`}>
-                    {icon} {label}
-                    {key === "forms" && formsTodo.length > 0 && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-amber-400 align-middle" />}
+                    <span className="text-base leading-none sm:text-sm">{icon}</span>
+                    <span className="max-w-full truncate">{label}</span>
+                    {key === "forms" && formsTodo.length > 0 && <span className="absolute right-1.5 top-1 h-2 w-2 rounded-full bg-amber-400 sm:static" />}
                   </button>
                 ))}
               </div>
-
-              {/* Tab content */}
-              <div className="relative flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="p-4 sm:p-5">
                 <div className="mb-4 flex items-center justify-between gap-2">
                   <h3 className="font-display text-lg font-semibold text-navy">
                     {famTab === "students" ? "Student Information" : famTab === "parents" ? "Parents"
@@ -916,7 +1283,6 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                         ✏️ Edit
                       </button>
                     )}
-                    <button onClick={requestCloseFamily} className="px-1 text-gray-400 hover:text-navy">✕</button>
                   </div>
                 </div>
 
@@ -1167,9 +1533,54 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                   <p className="mt-3 text-xs text-red-600">Could not save — please try again, or contact the school office.</p>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* Unsaved-changes confirmation */}
+            {/* The parent's own account: notifications, install, feedback, sign out */}
+            <section className="rounded-xl bg-white p-5 shadow-sm">
+              <h2 className="font-display text-lg font-semibold text-navy">Your account</h2>
+              <div className="mt-1 text-sm text-gray-700">{profile?.full_name}</div>
+              <div className="text-xs text-gray-500">{session?.user.email}</div>
+              <PushStatusRow className="mt-3 !text-xs" />
+              <InstallHint />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={() => { track("open_feedback"); setFbOpen(true); setFbState("idle"); }}
+                  className="rounded-full border-2 border-emerald-brand bg-white px-4 py-2 text-sm font-semibold text-emerald-deep transition hover:bg-emerald-brand hover:text-white">
+                  💬 Feedback
+                </button>
+                <button onClick={signOut}
+                  className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-silver">
+                  Sign out
+                </button>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* How-to-pay dialog */}
+        {payOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPayOpen(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-display text-lg font-semibold text-navy">How to pay</h3>
+                <button onClick={() => setPayOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
+              </div>
+              <div className="space-y-4 text-sm">
+                <div className="rounded-xl bg-silver p-4">
+                  <div className="mb-1 font-bold text-navy">Zelle (preferred)</div>
+                  <div className="text-gray-700">Recipient: {PAY_INFO.zelle.name}</div>
+                  <div className="text-gray-700">Send to: <span className="font-semibold">{PAY_INFO.zelle.contact}</span></div>
+                </div>
+                <div className="rounded-xl bg-silver p-4">
+                  <div className="mb-1 font-bold text-navy">Bank transfer</div>
+                  <div className="text-gray-700">Contact the school office for account-transfer details.</div>
+                </div>
+                <p className="text-xs text-gray-500">{PAY_INFO.note} Cash and check are also accepted at the school office. Your payment appears here once the office records it.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unsaved-changes confirmation (Profile edits) */}
             {confirmDiscard && (
               <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={(e) => e.stopPropagation()}>
                 <div className="w-full max-w-xs rounded-2xl bg-white p-5 text-center shadow-2xl">
@@ -1183,8 +1594,6 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
                 </div>
               </div>
             )}
-          </div>
-        )}
 
         {/* Digital form dialog (allergy / medical / consent) */}
         {formOpen && (
@@ -1234,301 +1643,22 @@ td{padding:6px 8px;border-bottom:1px solid #e3e6ee;vertical-align:top}td.r,th.r{
             </div>
           </div>
         )}
-
-        {/* Full academic calendar dialog */}
-        {calModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setCalModalOpen(false)}>
-            <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between border-b p-5 pb-3">
-                <h3 className="font-display text-lg font-semibold text-navy">Academic Calendar 2026–2027</h3>
-                <button onClick={() => setCalModalOpen(false)} className="text-gray-400 hover:text-navy">✕</button>
-              </div>
-              <div className="flex flex-wrap gap-2 border-b bg-silver/50 px-5 py-3">
-                <a href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(ICS_URL.replace("https://", "webcal://"))}`}
-                  target="_blank" rel="noreferrer"
-                  className="rounded-full bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-royal">
-                  Add to Google Calendar
-                </a>
-                <a href={ICS_URL.replace("https://", "webcal://")}
-                  className="rounded-full border border-navy px-3 py-1.5 text-xs font-semibold text-navy hover:bg-navy hover:text-white">
-                  Apple / Outlook
-                </a>
-                <a href={ICS_URL} download
-                  className="rounded-full border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-silver">
-                  Download .ics
-                </a>
-              </div>
-              <div className="flex-1 overflow-y-auto p-5">
-                {allEvents === null && <p className="text-sm text-gray-400">Loading…</p>}
-                {allEvents && (() => {
-                  const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
-                    new Date(iso + "T12:00:00").toLocaleDateString("en-US", opts);
-                  const groups = new Map<string, Ev[]>();
-                  allEvents.forEach((e) => {
-                    const key = e.start_date.slice(0, 7);
-                    groups.set(key, [...(groups.get(key) ?? []), e]);
-                  });
-                  const chip: Record<string, string> = {
-                    academic: "bg-blue-100 text-blue-700", event: "bg-purple-100 text-purple-700",
-                    holiday: "bg-amber-100 text-amber-800", exam: "bg-red-100 text-red-700",
-                  };
-                  const today = todayStr();
-                  return [...groups.entries()].map(([month, evs]) => (
-                    <div key={month} className="mb-4">
-                      <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">
-                        {fmt(month + "-15", { month: "long", year: "numeric" })}
-                      </h4>
-                      {evs.map((e) => (
-                        <div key={e.id} className={`mb-1.5 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                          (e.end_date ?? e.start_date) < today ? "bg-silver/40 opacity-60" : "bg-silver/70"}`}>
-                          <span className="w-24 shrink-0 text-xs font-semibold text-navy">
-                            {fmt(e.start_date, { month: "short", day: "numeric" })}
-                            {e.end_date && e.end_date !== e.start_date && <> – {fmt(e.end_date, { month: "short", day: "numeric" })}</>}
-                          </span>
-                          <span className="font-semibold text-gray-800">{e.title}</span>
-                          <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip[e.event_type] ?? "bg-gray-100 text-gray-600"}`}>
-                            {e.event_type}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ));
-                })()}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Parent-teacher meeting: booked time, then the teachers' remarks (phase 33) */}
-        <MeetingCard studentId={active?.student_id} firstName={active?.students.first_name} />
-
-        {/* Attendance — one-line summary bar; calendar expands only on demand */}
-        <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h2 className="font-display text-lg font-semibold text-navy">
-              Attendance{active ? ` — ${active.students.first_name}` : ""}
-            </h2>
-            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-sm font-semibold text-green-700">{counts.present} present</span>
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-semibold text-amber-800">{counts.late} late</span>
-            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-sm font-semibold text-red-700">{counts.absent} absent</span>
-            <div className="ml-auto flex items-center gap-3">
-              <select value={month} onChange={(e) => setMonth(e.target.value)}
-                className="rounded border border-gray-300 px-2 py-1 text-sm">
-                {monthOptions.map((m) => (
-                  <option key={m} value={m}>
-                    {new Date(m + "-15").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-                  </option>
-                ))}
-              </select>
-              <button onClick={() => setCalOpen(!calOpen)}
-                className="whitespace-nowrap text-sm font-semibold text-royal hover:underline">
-                {calOpen ? "▴ Hide calendar" : "▾ Calendar"}
-              </button>
-            </div>
-          </div>
-            {calOpen && (
-              <>
-                <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs">
-                  {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                    <div key={i} className="py-1 font-bold text-gray-400">{d}</div>
-                  ))}
-                  {monthGrid.map((c, i) => (
-                    <div key={i} className={`flex h-9 items-center justify-center rounded ${
-                      c.day == null ? "" :
-                      c.status === "present" ? "bg-green-100 font-semibold text-green-700" :
-                      c.status === "late" ? "bg-amber-100 font-semibold text-amber-800" :
-                      c.status === "absent" ? "bg-red-100 font-semibold text-red-700" :
-                      "bg-silver text-gray-400"}`}>
-                      {c.day ?? ""}
-                    </div>
-                  ))}
-                </div>
-                {activeEnrollment && (
-                  <p className="mt-3 text-xs text-gray-400">
-                    {activeEnrollment.grade_name} · {activeEnrollment.school_year}. Green = present, amber = late, red = absent.
-                  </p>
-                )}
-              </>
-            )}
-        </section>
-
-        {/* Fees: above the feed, so the family sees what is due before the news (President 2026-11-22) */}
-        <div className="grid scroll-mt-4 gap-5" id="fees">
-          {/* compact (President 2026-11-22): title, amount, this month's status and Print on one line, like Attendance */}
-          <section className="rounded-xl bg-white px-5 py-3.5 shadow-sm">
-            {fee ? (
-              Number(fee.total_amount) === 0 ? (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
-                  <span className="text-sm text-gray-500">No fees apply for this enrollment.</span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
-                    <span className="text-sm font-semibold text-navy">${Number(fee.total_amount).toFixed(0)}<span className="font-normal text-gray-500"> per {fee.billing_frequency.replace("ly", "")}</span></span>
-                    {fee.start_date && fee.start_date > todayStr() ? (
-                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                        Starts {new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </span>
-                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr()) && p.payment_method !== "waived") ? (
-                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Paid this month ✓</span>
-                    ) : fee.payments.some((p) => (p.period_month ?? p.payment_date).startsWith(monthStr())) ? (
-                      <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">Waived this month</span>
-                    ) : (
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Due by the 5th</span>
-                    )}
-                    <button onClick={() => printStatement()} className="ml-auto text-xs font-semibold text-royal hover:underline">Print statement</button>
-                  </div>
-                  <div className="mt-1.5 text-sm">
-                    {(() => {
-                      const today = new Date();
-                      const curKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-                      const start = fee.start_date ? new Date(fee.start_date + "T12:00:00") : today;
-                      const months: { key: string; label: string; payment?: FeePayment }[] = [];
-                      const d = new Date(start.getFullYear(), start.getMonth(), 1);
-                      while (true) {
-                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                        if (key > curKey) break;
-                        months.push({
-                          key,
-                          label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-                          // a real payment wins over a waiver when both exist for the month
-                          payment: fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key) && p.payment_method !== "waived")
-                            ?? fee.payments.find((p) => (p.period_month ?? p.payment_date).startsWith(key)),
-                        });
-                        d.setMonth(d.getMonth() + 1);
-                      }
-                      if (!months.length) return <p className="text-xs text-gray-400">First month begins {fee.start_date ? new Date(fee.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "soon"}.</p>;
-                      const list = months.reverse();
-                      const shown = list.filter((m) => m.key === curKey || !m.payment);   // this month + anything still due
-                      const folded = list.filter((m) => m.key !== curKey && !!m.payment); // paid or waived earlier months
-                      const row = (m: (typeof list)[number]) => (
-                        <div key={m.key} className="flex items-center justify-between border-b py-1 last:border-0">
-                          <span className="text-gray-600">{m.label}</span>
-                          {m.payment?.payment_method === "waived" ? (
-                            <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700" title="Waived by the school — nothing is due for this month">
-                              Waived <span className="font-normal text-gray-500">(nothing due)</span>
-                            </span>
-                          ) : m.payment ? (
-                            <span className="flex items-center gap-2">
-                              {m.payment.receipt_no && (
-                                m.payment.receipt_path
-                                  ? <button onClick={() => openReceipt(m.payment!.receipt_path!)} className="text-xs font-semibold text-royal hover:underline" title="Download the PDF receipt">{m.payment.receipt_no} ⬇</button>
-                                  : <span className="text-xs text-gray-400" title="The PDF is being prepared">{m.payment.receipt_no}</span>
-                              )}
-                              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                                Fees Paid ✓ <span className="font-normal text-green-600">(${Number(m.payment.amount).toFixed(0)} · {m.payment.payment_date.slice(5)})</span>
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">Fees Due</span>
-                          )}
-                        </div>
-                      );
-                      return (
-                        <>
-                          {shown.map(row)}
-                          {folded.length > 0 && (
-                            <button type="button" onClick={() => setPastOpen(!pastOpen)}
-                              className="flex w-full items-center gap-1 pt-1.5 text-left text-xs font-semibold text-royal hover:underline">
-                              {pastOpen ? "▾ Hide earlier months" : `▸ Earlier months (${folded.length})`}
-                            </button>
-                          )}
-                          {pastOpen && folded.map(row)}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </>
-              )
-            ) : (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h2 className="font-display text-lg font-semibold text-navy">Fees</h2>
-                <span className="text-sm text-gray-400">No fee plan set for this enrollment yet.</span>
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* Feed (phase 46): announcements, class updates and notices — newest first, with search */}
-        <div id="feed" className="scroll-mt-4">
-        <ParentFeed items={feedItems} title={`Feed${active ? ` — ${active.students.first_name}` : ""}`}
-          empty={configMissing ? "" : "No announcements or class updates yet."} />
-        </div>
-
-        {/* Assignments */}
-        {asgs.length > 0 && (
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-display text-lg font-semibold text-navy">
-              Assignments{active ? ` — ${active.students.first_name}` : ""}
-            </h2>
-            <div className="space-y-2">
-              {asgs.map((a) => {
-                const overdue = a.due_date && a.due_date < todayStr();
-                return (
-                  <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-silver/60 px-3 py-2 text-sm">
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy">{a.subject}</span>
-                    <span className="font-semibold text-gray-800">{a.title}</span>
-                    {a.due_date && (
-                      <span className={`text-xs font-semibold ${overdue ? "text-red-600" : "text-gray-500"}`}>
-                        due {a.due_date}
-                      </span>
-                    )}
-                    {a.instructions && <span className="text-xs text-gray-500">{a.instructions}</span>}
-                    {a.file_url && (
-                      <a href={a.file_url} target="_blank" rel="noreferrer"
-                        className="ml-auto text-xs font-semibold text-royal hover:underline">Open ↗</a>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        <div className="grid gap-5 lg:grid-cols-5">
-        {/* Upcoming events */}
-        <section className="rounded-xl bg-white p-5 shadow-sm lg:col-span-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-display text-lg font-semibold text-navy">Upcoming</h2>
-            <button onClick={openFullCalendar}
-              className="rounded-full border border-royal px-3 py-1 text-xs font-semibold text-royal hover:bg-royal hover:text-white">
-              📅 Full Academic Calendar
-            </button>
-          </div>
-          <div className="space-y-3">
-            {events.map((e) => (
-              <div key={e.id} className="flex gap-3">
-                <div className="w-14 shrink-0 rounded-lg bg-silver py-1 text-center">
-                  <div className="text-[10px] font-bold uppercase text-gray-400">
-                    {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short" })}
-                  </div>
-                  <div className="font-display text-lg font-semibold text-navy">
-                    {new Date(e.start_date + "T12:00:00").getDate()}
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-gray-800">{e.title}</div>
-                  <div className="text-xs text-gray-400">
-                    {e.end_date && e.end_date !== e.start_date && (
-                      <span className="mr-1.5 font-semibold text-navy">
-                        {new Date(e.start_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        {" – "}
-                        {new Date(e.end_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        {" ·"}
-                      </span>
-                    )}
-                    {e.event_type}{e.location ? ` · ${e.location}` : ""}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!events.length && !configMissing && <p className="text-sm text-gray-400">No upcoming events.</p>}
-          </div>
-        </section>
-        </div>
       </main>
+
+      {/* phone: bottom tabs, like the teacher app */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] sm:hidden" aria-label="Portal sections">
+        {TABS.map((t) => {
+          const on = tab === t.key;
+          return (
+            <button key={t.key} onClick={() => goTab(t.key)} aria-current={on ? "page" : undefined}
+              className={`relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold ${on ? "text-navy" : "text-gray-400"}`}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={on ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={t.icon} /></svg>
+              {t.label}
+              {tabDot(t.key) && <span className={`absolute left-1/2 top-1.5 ml-2 h-2 w-2 rounded-full ${tabDot(t.key)}`} />}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

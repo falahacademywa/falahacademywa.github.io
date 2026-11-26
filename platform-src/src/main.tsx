@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initInstall } from './lib/install'
+
+// Catch the browser's install prompt before React mounts, so the Install button can use it.
+initInstall()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

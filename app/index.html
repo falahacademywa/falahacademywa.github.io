@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Falah Academy app — install on your phone</title>
+  <meta name="description" content="Put the Falah Academy Family Portal on your phone: school alerts, your child's profile and health forms, progress, the academic calendar, fees and receipts. Free." />
+  <meta name="theme-color" content="#1a2f5e" />
+  <link rel="icon" href="../favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+  <link rel="canonical" href="https://falahacademywa.org/app/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <!-- Short link for the QR code and WhatsApp (President 2026-11-26): falahacademywa.org/app.
+       Same file in the dev and prod repos; every link is relative, so dev opens the dev portal. -->
+  <style>
+    :root { --navy: #1a2f5e; --royal: #2b5cb8; --gold: #c9a227; --emerald: #0e7a5f; --silver: #f0f2f5; --ink: #1f2937; --muted: #5b6474; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Source Sans 3', system-ui, sans-serif; color: var(--ink); background: var(--navy); }
+    main { max-width: 480px; margin: 0 auto; padding: 24px 16px 40px; }
+    .card { background: #fff; border-radius: 18px; padding: 24px 20px; box-shadow: 0 12px 32px rgba(0,0,0,.25); }
+    header { text-align: center; }
+    header img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+    h1 { font-family: 'Playfair Display', serif; font-weight: 600; color: var(--navy); font-size: 26px; margin: 10px 0 4px; }
+    .sub { color: var(--muted); margin: 0; font-size: 15px; }
+    .free { display: inline-block; margin-top: 10px; background: #e7f5ef; color: var(--emerald); font-weight: 700; font-size: 13px; border-radius: 999px; padding: 3px 12px; }
+    ul.feat { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; }
+    ul.feat li { display: flex; gap: 12px; align-items: flex-start; background: var(--silver); border-radius: 12px; padding: 10px 12px; font-size: 15px; line-height: 1.35; }
+    ul.feat li span.i { font-size: 22px; line-height: 1; }
+    ul.feat b { color: var(--navy); }
+    h2 { font-family: 'Playfair Display', serif; font-weight: 600; color: var(--navy); font-size: 19px; margin: 24px 0 8px; }
+    ol.steps { margin: 0; padding-left: 22px; font-size: 15px; line-height: 1.5; }
+    ol.steps li { margin: 4px 0; }
+    .how { display: none; }
+    .how.show { display: block; }
+    .btn { display: block; width: 100%; text-align: center; text-decoration: none; background: var(--navy); color: #fff; font-weight: 700; font-size: 17px; border-radius: 12px; padding: 14px; margin-top: 22px; }
+    .btn:active { background: var(--royal); }
+    .note { font-size: 13px; color: var(--muted); text-align: center; margin: 12px 0 0; line-height: 1.4; }
+    .tabs { display: flex; gap: 8px; margin-top: 4px; }
+    .tabs button { flex: 1; font: inherit; font-weight: 600; font-size: 14px; border: 2px solid var(--silver); background: #fff; color: var(--muted); border-radius: 10px; padding: 7px; cursor: pointer; }
+    .tabs button.on { border-color: var(--royal); color: var(--royal); }
+    footer { text-align: center; color: #c8d0e0; font-size: 13px; margin-top: 18px; line-height: 1.5; }
+    footer a { color: #fff; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <header>
+      <img src="../images/logo.jpg" alt="Falah Academy logo" />
+      <h1>The Falah Academy app</h1>
+      <p class="sub">Your Family Portal, on your phone's Home Screen</p>
+      <span class="free">Free · nothing to buy, no app store</span>
+    </header>
+
+    <ul class="feat">
+      <li><span class="i">🔔</span><span><b>School alerts on your phone</b> — announcements, class updates and fee receipts arrive as notifications.</span></li>
+      <li><span class="i">🩺</span><span><b>Your child's profile</b> — see and update contact details, medical information and allergies.</span></li>
+      <li><span class="i">📈</span><span><b>Progress</b> — attendance, Qur'an notes and the teachers' class updates.</span></li>
+      <li><span class="i">📅</span><span><b>Academic calendar</b> — holidays, breaks and school events, and add them to your phone's calendar.</span></li>
+      <li><span class="i">💳</span><span><b>Fees and receipts</b> — what is paid, what is due, and receipts to download.</span></li>
+    </ul>
+
+    <h2>Install in 1 minute</h2>
+    <div class="tabs" role="tablist">
+      <button type="button" data-os="ios">iPhone</button>
+      <button type="button" data-os="android">Android</button>
+    </div>
+    <div class="how" id="how-ios">
+      <ol class="steps">
+        <li>Open this page in <b>Safari</b>.</li>
+        <li>Tap <b>Open the Family Portal</b> below.</li>
+        <li>Tap the <b>Share</b> button (the square with an arrow ⬆), then <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+        <li>Open <b>Falah</b> from your Home Screen, sign in, and tap <b>Turn on</b> for notifications.</li>
+      </ol>
+    </div>
+    <div class="how" id="how-android">
+      <ol class="steps">
+        <li>Open this page in <b>Chrome</b>.</li>
+        <li>Tap <b>Open the Family Portal</b> below.</li>
+        <li>Tap <b>Install</b> on the blue banner (or in Chrome's ⋮ menu, <b>Add to Home screen</b> → <b>Install</b>).</li>
+        <li>Open <b>Falah</b> from your Home Screen, sign in, and tap <b>Turn on</b> for notifications.</li>
+      </ol>
+    </div>
+
+    <a class="btn" href="../platform/">Open the Family Portal</a>
+    <p class="note">Sign in with the e-mail and password the school gave you. Forgot it? Tap “Forgot password?” on the sign-in page or contact the office.</p>
+  </div>
+  <footer>
+    Falah Academy · Al Huda Islamic Center, Kent, WA<br />
+    <a href="tel:+13019190106">(301) 919-0106</a> · <a href="mailto:falahacademywa@gmail.com">falahacademywa@gmail.com</a>
+  </footer>
+</main>
+<script>
+  (function () {
+    var ua = navigator.userAgent || "";
+    var ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    var pick = function (os) {
+      document.querySelectorAll(".tabs button").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-os") === os); });
+      document.getElementById("how-ios").classList.toggle("show", os === "ios");
+      document.getElementById("how-android").classList.toggle("show", os === "android");
+    };
+    document.querySelectorAll(".tabs button").forEach(function (b) { b.addEventListener("click", function () { pick(b.getAttribute("data-os")); }); });
+    pick(ios ? "ios" : "android");
+  })();
+</script>
+</body>
+</html>

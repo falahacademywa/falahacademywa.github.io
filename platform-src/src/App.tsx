@@ -113,7 +113,7 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
           </Route>
 
-          <Route path="/parent" element={<RequireRole roles={["parent"]}><ParentHome /></RequireRole>} />
+          <Route path="/parent/*" element={<RequireRole roles={["parent"]}><ParentHome /></RequireRole>} />
 
           {/* Teacher app (phase 26): mobile-first, installable */}
           <Route path="/teacher" element={<RequireRole roles={["teacher"]}><TeacherLayout /></RequireRole>}>

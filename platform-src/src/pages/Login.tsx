@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase, configMissing } from "../lib/supabase";
 import { homeFor, useAuth, Splash } from "../lib/auth";
 import type { Role } from "../lib/auth";
+import { InstallHint } from "../components/InstallApp";
 
 export default function Login() {
   const nav = useNavigate();
@@ -110,6 +111,7 @@ export default function Login() {
         <button onClick={forgot} className="mt-3 w-full text-center text-sm text-royal hover:underline">
           Forgot password?
         </button>
+        <InstallHint />
 
         <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
           <span className="h-px flex-1 bg-gray-200" />Teachers<span className="h-px flex-1 bg-gray-200" />

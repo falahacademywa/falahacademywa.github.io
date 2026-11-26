@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import { supabase, configMissing } from "../lib/supabase";
 import { enablePush, isIOS, isStandalone, pushKey, pushSupported, syncSubscription } from "../lib/push";
+import { InstallBanner, installSnoozed, useInstallable } from "./InstallApp";
 
 type State = "none" | "install" | "ask" | "busy" | "done" | "blocked" | "failed";
 const WEEK = 7 * 86400000;
@@ -49,6 +50,10 @@ const HOW_UNBLOCK = "Notifications are blocked for this site on this device. All
 export default function NotifyPrompt({ className = "" }: { className?: string }) {
   const { state, setState, turnOn } = usePushState(false);
   const [closed, setClosed] = useState(false);
+  const installable = useInstallable();
+  const [installClosed, setInstallClosed] = useState(false);
+  // Android / Chrome: offer the one-tap install first; the notifications banner follows once installed or dismissed.
+  if (installable && !installClosed && !installSnoozed()) return <InstallBanner className={className} onClose={() => setInstallClosed(true)} />;
   if (closed || state === "none" || state === "blocked") return null;
   if (state === "done") return null;
   const box = `rounded-xl border px-3 py-2.5 text-sm shadow-sm ${className}`;
